@@ -21,7 +21,7 @@ class InformationWindow(QDialog):
         self.setMinimumSize(1440, 685)
 
         self.input_fields = {}
-        self.required_fields = ["Name", "Last Name", "Age", "Weight", "Size"]
+        self.required_fields = ["Name", "Last Name", "Age", "Weight (kg)", "Size (cm)"]
 
         self._setup_ui()
 
@@ -33,21 +33,28 @@ class InformationWindow(QDialog):
             ("Name", 200, 100),
             ("Last Name", 200, 155),
             ("Age", 200, 210),
-            ("Weight", 200, 265),
-            ("Size", 200, 320),
+            ("Weight (kg)", 200, 265),
+            ("Size (cm)", 200, 320),
         ]
 
         right_fields = [
-            ("Thigh length (cm)", 850, 100),
-            ("Shank length (cm)", 850, 155),
-            ("Upperarm length (cm)", 850, 210),
-            ("Forearm length (cm)", 850, 265),
+            ("Thigh length (cm)", 900, 100),
+            ("Shank length (cm)", 900, 155),
+            ("Upperarm length (cm)", 900, 210),
+            ("Forearm length (cm)", 900, 265),
         ]
 
         for placeholder, x, y in left_fields + right_fields:
             label = QLabel(f"{placeholder}{'*' if placeholder in self.required_fields else ''}", self)
-            label.setGeometry(x - 115, y, 150, 30)
             label.setStyleSheet("font-size: 16px;")
+
+            if x == 200:  # Left column (Name, Last Name, etc.)
+                label.setGeometry(x - 115, y, 150, 30)  # Original geometry
+            else:  # Right column (Thigh length, etc. where x is 850)
+                label_width = 175  # Increased width for the label
+                label_x_pos = x - label_width - 2  # Position x of the label
+                label.setGeometry(label_x_pos, y, label_width, 30)
+
             field = QLineEdit(self)
             field.setPlaceholderText(placeholder)
             field.setGeometry(x, y, 400, 40)
@@ -61,7 +68,7 @@ class InformationWindow(QDialog):
             # Set appropriate validators
             if placeholder == "Age":
                 field.setValidator(QIntValidator(0, 150, self))
-            elif placeholder in ["Weight", "Size", "Thigh length (cm)", "Shank length (cm)",
+            elif placeholder in ["Weight (kg)", "Size (cm)", "Thigh length (cm)", "Shank length (cm)",
                                  "Upperarm length (cm)", "Forearm length (cm)"]:
                 validator = QDoubleValidator(0.0, 500.0, 2, self)
                 validator.setNotation(QDoubleValidator.StandardNotation)
