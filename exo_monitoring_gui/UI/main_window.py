@@ -343,6 +343,11 @@ class MainApp(QMainWindow):
                         if 'trials' in f:
                             # Logic to load and display trials would go here
                             pass
+                        
+                        # Display information window with loaded data
+                        self.info_window = InformationWindow(self, self.current_subject_file)
+                        self.info_window.info_submitted.connect(self.update_subject_metadata)
+                        self.info_window.show()
                             
                     else:
                         self._show_error("Not a valid subject file. Missing required attributes.")
