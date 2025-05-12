@@ -8,7 +8,7 @@ def launch():
         app = QApplication(sys.argv)
         
         print("Importing MainApp...")
-        from ui.main_window import MainApp
+        from UI.main_window import MainApp
         
         print("Creating MainApp instance...")
         window = MainApp()

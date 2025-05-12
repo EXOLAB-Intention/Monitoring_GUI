@@ -1,14 +1,14 @@
 from PyQt5.QtWidgets import (
     QDialog, QLabel, QLineEdit, QTextEdit, QPushButton, QMessageBox, QFileDialog
 )
-from PyQt5.QtGui import QPixmap, QIntValidator, QDoubleValidator
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import  QIntValidator, QDoubleValidator
+from PyQt5.QtCore import  pyqtSignal
 from datetime import datetime
-from ui.widgets.image_drop_area import ImageDropArea
+from UI.widgets.image_drop_area import ImageDropArea
 from utils.hdf5_utils import load_metadata, save_metadata
 import os
 from plots.dashboard_app import DashboardApp
-from ui.experimenter_dialogue import ExperimenterDialog
+from UI.experimenter_dialogue import ExperimenterDialog
 
 
 class InformationWindow(QDialog):

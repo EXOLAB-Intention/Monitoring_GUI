@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QWidget, QFileDialog, QMessageBox, QSizePolicy
-from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QWidget, QMessageBox
+from PyQt5.QtCore import pyqtSignal
+
 
 class ExperimenterDialog(QDialog):
     """

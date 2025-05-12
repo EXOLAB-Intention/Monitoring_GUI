@@ -1,14 +1,12 @@
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QAction, QFileDialog,
-                         QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTabWidget, QTreeWidget, QTreeWidgetItem, QTextEdit, QHBoxLayout)
+                         QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout)
 from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtGui import QPixmap
 import h5py
 import os
-import numpy as np
-import matplotlib.pyplot as plt
 from datetime import datetime
 import traceback
-from ui.informations import InformationWindow
+from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata  # Correction de l'importation
 
 

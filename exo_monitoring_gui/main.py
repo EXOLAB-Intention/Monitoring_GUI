@@ -1,5 +1,5 @@
 import traceback
-import sys
+
 
 def main():
     try:
