@@ -28,6 +28,13 @@ class InformationWindow(QDialog):
         if self.subject_file:
             self._load_existing_data()
 
+    def closeEvent(self, event):
+            # Appeler la méthode closeEvent du parent si elle existe
+            if hasattr(self.parent(), 'closeEvent'):
+                self.parent().closeEvent(event)
+            else:
+                event.accept()
+                
     def _setup_ui(self):
         left_fields = [
             ("Name", 200, 100),
@@ -178,6 +185,32 @@ class InformationWindow(QDialog):
             else:
                 # ExperimenterDialog was cancelled or closed without submitting
                 self.close() # Close InformationWindow if experimenter input is cancelled
+        else:
+            QMessageBox.critical(self, "Error", "Failed to save the information.")
+
+    def _collect_data_notsave(self):
+        for name in self.required_fields:
+            if not self.input_fields[name].text().strip():
+                QMessageBox.warning(self, "Missing Field", f"Please fill in '{name}'")
+                return
+
+        data = {}
+        for key, widget in self.input_fields.items():
+            data[key] = widget.text() if isinstance(widget, QLineEdit) else widget.toPlainText()
+
+        image_path = self.image_area.get_image_path()
+        if image_path:
+            data["image_path"] = image_path
+
+        data["collection_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        success = True
+        if self.subject_file:
+            success = save_metadata(self.subject_file, data)
+
+        if success:
+            QMessageBox.information(self, "Saved", "Information saved successfully.")
+            self.info_submitted.emit(data)
         else:
             QMessageBox.critical(self, "Error", "Failed to save the information.")
 
