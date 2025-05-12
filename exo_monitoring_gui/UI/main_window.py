@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 import traceback
-from UI.informations import InformationWindow
+from ui.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata  # Correction de l'importation
 
 
@@ -296,6 +296,15 @@ class MainApp(QMainWindow):
                 # Correction de la variable
                 self.info_window = InformationWindow(self, self.current_subject_file)
                 self.info_window.info_submitted.connect(self.update_subject_metadata)
+
+
+                def closeEvent(event):
+                    self.save_subject_action.setEnabled(False)
+                    self.save_subject_as_action.setEnabled(False)
+                    self.show_metadata_action.setEnabled(False)
+                    event.accept()
+
+                self.info_window.closeEvent = closeEvent                          
                 self.info_window.show()
                 
             except Exception as e:
@@ -348,6 +357,8 @@ class MainApp(QMainWindow):
                         self.info_window = InformationWindow(self, self.current_subject_file)
                         self.info_window.info_submitted.connect(self.update_subject_metadata)
                         self.info_window.show()
+
+
                             
                     else:
                         self._show_error("Not a valid subject file. Missing required attributes.")
@@ -360,9 +371,9 @@ class MainApp(QMainWindow):
     def save_subject(self):
         """Save the current subject file"""
         if not self.current_subject_file:
-            # If no file is currently open, use save_as
             return self.save_subject_as()
-        
+        else:
+            self.info_window._collect_data()
         try:
             # Logic to save data to current file
             # This is a placeholder - your actual save logic might be more complex
@@ -419,19 +430,15 @@ class MainApp(QMainWindow):
                     metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{field}</b></td>"
                     metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data[field]}</td></tr>"
             
-            # Measurements section
             metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Anthropometric Measurements</th></tr>"
             
-            # Add measurement fields if they exist
             for field in ["Thigh length (cm)", "Shank length (cm)", "Upperarm length (cm)", "Forearm length (cm)"]:
                 if field in data:
                     metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{field}</b></td>"
                     metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data[field]}</td></tr>"
             
-            # Collection info
             metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Collection Information</th></tr>"
-            
-            # Add collection date if it exists
+
             if "collection_date" in data:
                 metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>Collection Date</b></td>"
                 metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data['collection_date']}</td></tr>"

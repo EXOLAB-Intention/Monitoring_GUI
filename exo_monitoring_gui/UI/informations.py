@@ -4,11 +4,11 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QPixmap, QIntValidator, QDoubleValidator
 from PyQt5.QtCore import Qt, pyqtSignal
 from datetime import datetime
-from UI.widgets.image_drop_area import ImageDropArea
+from ui.widgets.image_drop_area import ImageDropArea
 from utils.hdf5_utils import load_metadata, save_metadata
 import os
 from plots.dashboard_app import DashboardApp
-from UI.experimenter_dialogue import ExperimenterDialog
+from ui.experimenter_dialogue import ExperimenterDialog
 
 
 class InformationWindow(QDialog):

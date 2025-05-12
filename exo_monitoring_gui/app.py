@@ -1,7 +1,6 @@
 import sys
 import traceback
 from PyQt5.QtWidgets import QApplication
-
 def launch():
     """Launch the application"""
     try:
@@ -9,7 +8,7 @@ def launch():
         app = QApplication(sys.argv)
         
         print("Importing MainApp...")
-        from UI.main_window import MainApp
+        from ui.main_window import MainApp
         
         print("Creating MainApp instance...")
         window = MainApp()
