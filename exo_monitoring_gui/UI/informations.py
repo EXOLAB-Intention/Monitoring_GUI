@@ -1,14 +1,14 @@
 from PyQt5.QtWidgets import (
-    QDialog, QLabel, QLineEdit, QTextEdit, QPushButton, QMessageBox, QFileDialog
+    QDialog, QLabel, QLineEdit, QTextEdit, QPushButton, QMessageBox, QFileDialog, QApplication
 )
-from PyQt5.QtGui import QPixmap, QIntValidator, QDoubleValidator
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import  QIntValidator, QDoubleValidator
+from PyQt5.QtCore import  pyqtSignal
 from datetime import datetime
-from ui.widgets.image_drop_area import ImageDropArea
+from UI.widgets.image_drop_area import ImageDropArea
 from utils.hdf5_utils import load_metadata, save_metadata
 import os
 from plots.dashboard_app import DashboardApp
-from ui.experimenter_dialogue import ExperimenterDialog
+from UI.experimenter_dialogue import ExperimenterDialog
 
 
 class InformationWindow(QDialog):
@@ -21,7 +21,7 @@ class InformationWindow(QDialog):
         self.setMinimumSize(1440, 685)
 
         self.input_fields = {}
-        self.required_fields = ["Name", "Last Name", "Age", "Weight (kg)", "Size (cm)"]
+        self.required_fields = ["Name", "Last Name", "Age", "Weight (kg)", "Height (cm)"]
 
         self._setup_ui()
 
@@ -41,7 +41,7 @@ class InformationWindow(QDialog):
             ("Last Name", 200, 155),
             ("Age", 200, 210),
             ("Weight (kg)", 200, 265),
-            ("Size (cm)", 200, 320),
+            ("Height (cm)", 200, 320),
         ]
 
         right_fields = [
@@ -75,7 +75,7 @@ class InformationWindow(QDialog):
             # Set appropriate validators
             if placeholder == "Age":
                 field.setValidator(QIntValidator(0, 150, self))
-            elif placeholder in ["Weight (kg)", "Size (cm)", "Thigh length (cm)", "Shank length (cm)",
+            elif placeholder in ["Weight (kg)", "Height (cm)", "Thigh length (cm)", "Shank length (cm)",
                                  "Upperarm length (cm)", "Forearm length (cm)"]:
                 validator = QDoubleValidator(0.0, 500.0, 2, self)
                 validator.setNotation(QDoubleValidator.StandardNotation)
@@ -215,16 +215,23 @@ class InformationWindow(QDialog):
             QMessageBox.critical(self, "Error", "Failed to save the information.")
 
     def _launch_dashboard_after_experimenter_input(self, experimenter_name):
-        """Lauches the DashboardApp after experimenter name is submitted."""
+        """Launches the DashboardApp after experimenter name is submitted."""
         # experimenter_name is available here if needed for the dashboard
         # For now, we just launch the dashboard.
-        
+
         # Store the dashboard instance on self to prevent garbage collection if it's not a top-level window by default
         # QMainWindow instances usually manage their own lifecycle when shown.
         self.dashboard_instance = DashboardApp()
-        self.dashboard_instance.show()
-        
-        self.accept() # Close the InformationWindow now that the flow is complete
+        self.dashboard_instance.showMaximized()
+
+        # Close each top-level widget except the dashboard instance
+        top_level_widgets = QApplication.topLevelWidgets()
+        for widget in top_level_widgets:
+            if widget != self.dashboard_instance:
+                widget.close()
+
+        # Optionally, you can bring the dashboard to the front
+        self.dashboard_instance.activateWindow()
 
 def createInformationWindow(parent=None, subject_file=None):
     return InformationWindow(parent, subject_file)
