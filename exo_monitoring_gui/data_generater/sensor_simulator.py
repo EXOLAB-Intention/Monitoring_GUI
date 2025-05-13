@@ -1,8 +1,7 @@
-from .pmmg_generator import PMMGGenerator
-from .imu_generator import IMUGenerator
-from .emg_generator import EMGGenerator
-from .controller_generator import ControllerState
-
+from pmmg_generator import PMMGGenerator
+from imu_generator import IMUGenerator
+from emg_generator import EMGGenerator
+from controller_generator import ControllerState
 import time
 
 class SensorSimulator:
