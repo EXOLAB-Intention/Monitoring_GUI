@@ -150,9 +150,9 @@ class MainApp(QMainWindow):
                                                   tip="Create a new subject file")
         load_subject_action = self._create_action("&Load existing subject", self.load_existing_subject, "Ctrl+O",
                                                 tip="Load an existing subject file")
-        self.save_subject_action = self._create_action("&Save subject", self.save_subject, "Ctrl+S",
+        self.save_subject_action = self._create_action("&Save subject", self.save_subject_notsave, "Ctrl+S",
                                                     tip="Save the current subject")
-        self.save_subject_as_action = self._create_action("Save subject &as...", self.save_subject_as, "Ctrl+Shift+S",
+        self.save_subject_as_action = self._create_action("Save subject &as...", self.save_subject_as_notsave, "Ctrl+Shift+S",
                                                         tip="Save the subject with a new name")
         self.show_metadata_action = self._create_action("&Show metadata", self.show_metadata, "Ctrl+M",
                                                      tip="Display subject metadata")
@@ -425,6 +425,25 @@ class MainApp(QMainWindow):
                 
             self.current_subject_file = filename
             return self.save_subject()
+        return False
+    
+    def save_subject_as_notsave(self):
+        """Save the subject file with a new name"""
+        options = QFileDialog.Options()
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Subject As",
+            "",
+            "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
+            options=options
+        )
+
+        if filename:
+            if not filename.endswith(".h5") and not filename.endswith(".hdf5"):
+                filename += ".h5"
+                
+            self.current_subject_file = filename
+            return self.save_subject_notsave()
         return False
 
     def show_metadata(self):
