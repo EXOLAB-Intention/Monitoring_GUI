@@ -13,7 +13,10 @@ import pyqtgraph as pg
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from data_generator.sensor_simulator import SensorSimulator
+try:
+    from data_generator.sensor_simulator import SensorSimulator
+except ImportError:
+    from data_generator.sensor_simulator import SensorSimulator
 
 class DashboardApp(QMainWindow):
     def __init__(self):
