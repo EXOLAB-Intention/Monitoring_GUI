@@ -22,10 +22,8 @@ class DashboardApp(QMainWindow):
         self.resize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
 
-        # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
-        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
         self.simulator = SensorSimulator()
+
         self.init_ui()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_data)
@@ -65,6 +63,9 @@ class DashboardApp(QMainWindow):
                 border: 1px solid #ccc;
                 font-size: 14px;
             }
+            QTreeWidget::item:selected {
+                background-color: lightblue;
+            }
         """)
         self.connected_systems.setVisible(True)
         self.connected_systems.itemClicked.connect(self.on_sensor_clicked)
@@ -74,11 +75,16 @@ class DashboardApp(QMainWindow):
         for sensor_group in sensors:
             group_item = QTreeWidgetItem([sensor_group])
             self.connected_systems.addTopLevelItem(group_item)
-            for i in range(1, 9):
+            if sensor_group == "IMU Data":
+                num_sensors = 6
+            else:
+                num_sensors = 8
+            for i in range(1, num_sensors + 1):
                 sensor_item = QTreeWidgetItem([f"{sensor_group[:-5]}{i}"])
                 sensor_item.setForeground(0, QBrush(QColor("gray")))  # Gris pour déconnecté
-                sensor_item.setHidden(True)  # Masqué au départ
+                sensor_item.setHidden(False)  # Affiché par défaut
                 group_item.addChild(sensor_item)
+            group_item.setExpanded(True)  # Ouvrir la liste déroulante par défaut
 
         left_panel = QVBoxLayout()
         left_panel.addWidget(self.connected_systems)
@@ -154,6 +160,7 @@ class DashboardApp(QMainWindow):
         # Initialiser les graphiques
         self.plots = {}
         self.plot_data = {}
+        self.highlighted_sensors = set()
 
     def show_sensors(self):
         # Afficher les capteurs et les connecter
@@ -168,18 +175,18 @@ class DashboardApp(QMainWindow):
         # Mettre à jour les options de Matched Part en fonction de la sélection de Kinematic Model
         self.matched_part_combo.clear()
         if text == "Upper body w/o head":
-            self.matched_part_combo.addItems(["Pectoraux", "Deltoide", "Biceps", "Avant Bras", "Trapeze", "Grand Dorsal"])
+            self.matched_part_combo.addItems(["pectorals_L", "Deltoid_L", "Biceps_L", "forearm_L", "dorsalis major_L", "pectorals_R", "Deltoid_R", "Biceps_R", "forearm_R",  "dorsalis major_R"])
         elif text == "Upper body w/ head":
-            self.matched_part_combo.addItems(["Head", "Pectoraux", "Deltoide", "Biceps", "Avant Bras", "Trapeze", "Grand Dorsal"])
+            self.matched_part_combo.addItems(["pectorals_L", "Deltoid_L", "Biceps_L", "forearm_L", "dorsalis major_L", "pectorals_R", "Deltoid_R", "Biceps_R", "forearm_R",  "dorsalis major_R"])
         elif text == "Lower body":
-            self.matched_part_combo.addItems(["Quadriceps", "Ischio-jambiers", "Mollets", "Fessiers"])
+            self.matched_part_combo.addItems(["Quadriceps_L", "ishcio-hamstrings_L", "calves_L", "glutes_L", "Quadriceps_R", "ishcio-hamstrings_R", "calves_R", "glutes_R"])
 
     def update_matched_sensors(self, text):
         # Mettre à jour les options de Matched Sensors en fonction de la sélection de Matched Part
         if text:
             self.matched_sensors_combo.clear()
             sensors = ["EMG1", "EMG2", "EMG3", "EMG4", "EMG5", "EMG6", "EMG7", "EMG8",
-                       "IMU1", "IMU2", "IMU3", "IMU4", "IMU5", "IMU6", "IMU7", "IMU8",
+                       "IMU1", "IMU2", "IMU3", "IMU4", "IMU5", "IMU6",
                        "pMMG1", "pMMG2", "pMMG3", "pMMG4", "pMMG5", "pMMG6", "pMMG7", "pMMG8"]
             self.matched_sensors_combo.addItems(sensors)
 
@@ -205,7 +212,11 @@ class DashboardApp(QMainWindow):
             return
 
         sensor_name = item.text(0).split()[0]  # Extraire le nom du capteur
-        self.plot_sensor_data(sensor_name)
+        if sensor_name in self.plots:
+            # Désélectionner le capteur
+            self.remove_sensor_plot(sensor_name)
+        else:
+            self.plot_sensor_data(item.text(0))
 
     def plot_sensor_data(self, sensor_name):
         # Créer un nouveau graphique pour le capteur sélectionné
@@ -220,8 +231,41 @@ class DashboardApp(QMainWindow):
         self.middle_layout.addWidget(plot_widget)
 
         # Stocker le graphique et les données
-        self.plots[sensor_name] = plot_widget
-        self.plot_data[sensor_name] = np.zeros(100)
+        self.plots[sensor_name.split()[0]] = plot_widget
+        self.plot_data[sensor_name.split()[0]] = np.zeros(100)
+
+        # Mettre en surbrillance le capteur sélectionné
+        self.highlight_sensor(sensor_name.split()[0])
+
+    def remove_sensor_plot(self, sensor_name):
+        # Supprimer le graphique du capteur de la section "2D Plots"
+        if sensor_name in self.plots:
+            plot_widget = self.plots.pop(sensor_name)
+            plot_widget.setParent(None)
+            plot_widget.deleteLater()
+
+            # Retirer la surbrillance du capteur
+            self.unhighlight_sensor(sensor_name)
+
+    def highlight_sensor(self, sensor_name):
+        # Mettre en surbrillance le capteur sélectionné
+        for i in range(self.connected_systems.topLevelItemCount()):
+            group_item = self.connected_systems.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                sensor_item = group_item.child(j)
+                if sensor_item.text(0).startswith(sensor_name):
+                    sensor_item.setBackground(0, QBrush(QColor("lightblue")))
+                    self.highlighted_sensors.add(sensor_name)
+
+    def unhighlight_sensor(self, sensor_name):
+        # Retirer la surbrillance du capteur
+        for i in range(self.connected_systems.topLevelItemCount()):
+            group_item = self.connected_systems.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                sensor_item = group_item.child(j)
+                if sensor_item.text(0).startswith(sensor_name):
+                    sensor_item.setBackground(0, QBrush(QColor("white")))
+                    self.highlighted_sensors.discard(sensor_name)
 
     def update_data(self):
         # Mettre à jour les données des graphiques en temps réel
@@ -231,16 +275,22 @@ class DashboardApp(QMainWindow):
                 index = int(sensor_name[3]) - 1
                 self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
                 self.plot_data[sensor_name][-1] = packet["EMG"][index]
+                plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
             elif sensor_name.startswith("pMMG"):
                 index = int(sensor_name[4]) - 1
                 self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
                 self.plot_data[sensor_name][-1] = packet["pMMG"][index]
+                plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
             elif sensor_name.startswith("IMU"):
                 index = int(sensor_name[3]) - 1
-                self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
-                self.plot_data[sensor_name][-1] = packet["IMU"][index][0]  # Prendre le premier élément du quaternion
+                quaternion = packet["IMU"][index]
+                plot_widget.clear()
+                for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                    self.plot_data[f"{sensor_name}_{axis}"] = np.roll(self.plot_data.get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
+                    self.plot_data[f"{sensor_name}_{axis}"][-1] = quaternion[i]
+                    plot_widget.plot(self.plot_data[f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
 
-            plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
+                plot_widget.addLegend()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
