@@ -4,18 +4,10 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
 import h5py
 import os
-import sys
 from datetime import datetime
 import traceback
-
-# Ensure relative imports work correctly
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
 from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, save_metadata
+from utils.hdf5_utils import load_metadata, save_metadata  # Correction de l'importation
 
 
 class MainApp(QMainWindow):

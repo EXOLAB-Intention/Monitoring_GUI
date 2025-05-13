@@ -10,15 +10,13 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QBrush
 import pyqtgraph as pg
 
-# Add parent directory to path
+# Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import with error handling
 try:
     from data_generator.sensor_simulator import SensorSimulator
 except ImportError:
-    print("ERROR: Could not import SensorSimulator from data_generator")
-    raise
+    from data_generator.sensor_simulator import SensorSimulator
 
 class DashboardApp(QMainWindow):
     def __init__(self):
@@ -26,6 +24,9 @@ class DashboardApp(QMainWindow):
         self.setWindowTitle("Data Monitoring Software")
         self.resize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
+
+        # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
         self.simulator = SensorSimulator()
         self.init_ui()
@@ -244,3 +245,8 @@ class DashboardApp(QMainWindow):
 
             plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
 
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    dashboard = DashboardApp()
+    dashboard.show()
+    sys.exit(app.exec_())
