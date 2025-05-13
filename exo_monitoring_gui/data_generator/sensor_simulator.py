@@ -1,12 +1,3 @@
-try:
-    from data_generator.sensor_simulator import SensorSimulator
-except ImportError:
-    try:
-        from data_generator.sensor_simulator import SensorSimulator
-    except ImportError:
-        print("ERROR: Could not import SensorSimulator from either data_generator or data_generater.")
-        raise
-
 from .pmmg_generator import PMMGGenerator
 from .imu_generator import IMUGenerator
 from .emg_generator import EMGGenerator

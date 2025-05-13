@@ -1,4 +1,5 @@
 import sys
+import os
 import numpy as np
 from collections import deque
 from PyQt5.QtWidgets import (
@@ -7,7 +8,10 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import QTimer
 import pyqtgraph as pg
-from data_generater.sensor_simulator import SensorSimulator
+
+# Fix import path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from data_generator.sensor_simulator import SensorSimulator  # Changed from data_generater to data_generator
 
 class RealtimePlot(QMainWindow):
     def __init__(self):
@@ -130,8 +134,3 @@ class RealtimePlot(QMainWindow):
 
         self.value_display.setText(" | ".join(current_values))
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    main = RealtimePlot()
-    main.show()
-    sys.exit(app.exec_())
