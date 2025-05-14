@@ -1,4 +1,9 @@
 import traceback
+import sys
+import os
+from plots.model_3d_viewer import Model3DViewer
+
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 
 def main():
