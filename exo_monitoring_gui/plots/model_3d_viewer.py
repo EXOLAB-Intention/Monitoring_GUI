@@ -36,6 +36,7 @@ class Model3DViewer(QGLWidget):
         except Exception as e:
             print(f"Erreur lors du chargement du fichier .obj : {e}")
 
+<<<<<<< Updated upstream
     def calculate_model_center(self):
         """Calcule le centre géométrique du modèle."""
         if not self.vertices:
@@ -51,6 +52,8 @@ class Model3DViewer(QGLWidget):
 
         return [center_x, center_y, center_z]
 
+=======
+>>>>>>> Stashed changes
     def mousePressEvent(self, event):
         self.last_pos = event.pos()
 
@@ -68,16 +71,23 @@ class Model3DViewer(QGLWidget):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
 
+<<<<<<< Updated upstream
+=======
+        # Ajustez la position de la caméra (z définit la distance par rapport au modèle)
+>>>>>>> Stashed changes
         gluLookAt(0, 0, 10, 0, 0, 0, 0, 1, 0)
 
         glRotatef(self.rotation_x, 1, 0, 0)
         glRotatef(self.rotation_y, 0, 1, 0)
         glRotatef(self.rotation_z, 0, 0, 1)
 
+<<<<<<< Updated upstream
         # Recentre le modèle
         center = self.calculate_model_center()
         glTranslatef(-center[0], -center[1], -center[2])
 
+=======
+>>>>>>> Stashed changes
         if hasattr(self, 'vertices') and hasattr(self, 'faces'):
             self.draw_model()
         else:
