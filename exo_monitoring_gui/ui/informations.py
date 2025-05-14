@@ -5,6 +5,7 @@ from PyQt5.QtGui import  QIntValidator, QDoubleValidator
 from PyQt5.QtCore import  pyqtSignal
 from datetime import datetime
 from UI.widgets.image_drop_area import ImageDropArea
+from UI.review import Review
 from utils.hdf5_utils import load_metadata, save_metadata
 import os
 from plots.dashboard_app import DashboardApp
@@ -14,7 +15,7 @@ from UI.experimenter_dialogue import ExperimenterDialog
 class InformationWindow(QDialog):
     info_submitted = pyqtSignal(dict)
 
-    def __init__(self, parent=None, subject_file=None):
+    def __init__(self, parent=None, subject_file=None, review_mode=False):
         super().__init__(parent)
         self.subject_file = subject_file
         self.setWindowTitle("Subject Information")
@@ -22,7 +23,7 @@ class InformationWindow(QDialog):
 
         self.input_fields = {}
         self.required_fields = ["Name", "Last Name", "Age", "Weight (kg)", "Height (cm)"]
-
+        self.review_mode = review_mode
         self._setup_ui()
 
         if self.subject_file:
@@ -168,23 +169,30 @@ class InformationWindow(QDialog):
         if success:
             QMessageBox.information(self, "Saved", "Information saved successfully.")
             self.info_submitted.emit(data)
-
-            # Hide InformationWindow temporarily
-            self.hide()
-
-            # Create and execute ExperimenterDialog
-            # Pass self.parent() which could be the main window or None
-            self.exp_dialog = ExperimenterDialog(self.parent())
-            self.exp_dialog.experimenter_name_submitted.connect(self._launch_dashboard_after_experimenter_input)
-            
-            # exec_() will show the dialog and block until it's closed
-            if self.exp_dialog.exec_() == QDialog.Accepted:
-                # If accepted, _launch_dashboard_after_experimenter_input has been called
-                # and it will handle closing InformationWindow (self.accept())
-                pass
-            else:
-                # ExperimenterDialog was cancelled or closed without submitting
+            if self.review_mode:
+                for widget in QApplication.topLevelWidgets():
+                        if widget is not self:
+                            widget.close()
                 self.close() # Close InformationWindow if experimenter input is cancelled
+
+                review = Review(self, self.subject_file)
+                review.show()
+                return
+            else:
+                self.hide()
+                # Create and execute ExperimenterDialog
+                # Pass self.parent() which could be the main window or None
+                self.exp_dialog = ExperimenterDialog(self.parent())
+                self.exp_dialog.experimenter_name_submitted.connect(self._launch_dashboard_after_experimenter_input)
+                
+                # exec_() will show the dialog and block until it's closed
+                if self.exp_dialog.exec_() == QDialog.Accepted:
+                    # If accepted, _launch_dashboard_after_experimenter_input has been called
+                    # and it will handle closing InformationWindow (self.accept())
+                    pass
+                else:
+                    # ExperimenterDialog was cancelled or closed without submitting
+                    self.close() # Close InformationWindow if experimenter input is cancelled
         else:
             QMessageBox.critical(self, "Error", "Failed to save the information.")
 

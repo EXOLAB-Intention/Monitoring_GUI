@@ -335,7 +335,6 @@ class MainApp(QMainWindow):
 
         if filename:
             try:
-                # Verify it's a valid subject file
                 with h5py.File(filename, 'r') as f:
                     if 'subject_created' in f.attrs:
                         # Load metadata
@@ -351,14 +350,12 @@ class MainApp(QMainWindow):
                         # Update the status bar
                         self.statusBar().showMessage(f"Loaded subject file: {os.path.basename(filename)}")
                         
-                        # If the file contains trial data, load it
                         if 'trials' in f:
-                            # Logic to load and display trials would go here
                             pass
                         
-                        # Display information window with loaded data
-                        self.info_window = InformationWindow(self, self.current_subject_file)
+                        self.info_window = InformationWindow(self, self.current_subject_file, True)
                         self.info_window.info_submitted.connect(self.update_subject_metadata)
+
                         def closeEvent(event):
                             self.save_subject_action.setEnabled(False)
                             self.save_subject_as_action.setEnabled(False)
