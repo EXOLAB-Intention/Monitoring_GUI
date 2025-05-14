@@ -4,11 +4,14 @@ import time
 import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox, QRadioButton, QButtonGroup
+    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox, QRadioButton, QButtonGroup, QGroupBox, QTableWidget, QTableWidgetItem, QMenu, QAction
 )
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QColor, QBrush
+from PyQt5.QtGui import QColor, QBrush, QCursor  # QCursor doit être importé depuis QtGui
 import pyqtgraph as pg
+
+# Ajouter l'import du model_3d_viewer
+from plots.model_3d_viewer import Model3DWidget
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -112,47 +115,56 @@ class DashboardApp(QMainWindow):
 
         # 3D Perspective (droite)
         right_panel = QVBoxLayout()
-        label_3d = QLabel("3D Perspective")
-        label_3d.setAlignment(Qt.AlignCenter)
-        label_3d.setStyleSheet("background-color: #f0f0f0; padding: 30px; border: 1px solid #ccc;")
-        right_panel.addWidget(label_3d)
 
-        # Kinematic Model ComboBox
-        self.kinematic_model_combo = QComboBox()
-        self.kinematic_model_combo.addItem("")  # Vide par défaut
-        self.kinematic_model_combo.addItems(["Upper body w/o head", "Upper body w/ head", "Lower body"])
-        self.kinematic_model_combo.currentTextChanged.connect(self.update_matched_part)
+        # Titre de la section 3D
+        label_3d_title = QLabel("3D Perspective")
+        label_3d_title.setAlignment(Qt.AlignCenter)
+        label_3d_title.setStyleSheet("font-size: 14px; font-weight: bold;")
+        right_panel.addWidget(label_3d_title)
 
-        # Label Kinematic Model
-        kinematic_model_layout = QHBoxLayout()
-        kinematic_model_layout.addWidget(QLabel("Kinematic Model:"))
-        kinematic_model_layout.addWidget(self.kinematic_model_combo)
-        right_panel.addLayout(kinematic_model_layout)
+        # Remplacer le label statique par le widget 3D
+        self.model_3d_widget = Model3DWidget()
+        right_panel.addWidget(self.model_3d_widget, stretch=3)
 
-        # Matched Part ComboBox
-        self.matched_part_combo = QComboBox()
-        self.matched_part_combo.currentTextChanged.connect(self.update_matched_sensors)
+        # Ajouter un bouton pour contrôler l'animation
+        self.animate_button = QPushButton("Start Animation")
+        self.animate_button.clicked.connect(self.toggle_animation)
+        right_panel.addWidget(self.animate_button)
 
-        # Label Matched Part
-        matched_part_layout = QHBoxLayout()
-        matched_part_layout.addWidget(QLabel("Matched Part:"))
-        matched_part_layout.addWidget(self.matched_part_combo)
-        right_panel.addLayout(matched_part_layout)
-
-        # Matched Sensors ComboBox
-        self.matched_sensors_combo = QComboBox()
-        self.matched_sensors_combo.currentTextChanged.connect(self.update_sensor_label)
-
-        # Label Matched Sensors
-        matched_sensors_layout = QHBoxLayout()
-        matched_sensors_layout.addWidget(QLabel("Matched Sensors:"))
-        matched_sensors_layout.addWidget(self.matched_sensors_combo)
-        right_panel.addLayout(matched_sensors_layout)
-
-        # Bouton de Confirmation
-        self.confirm_button = QPushButton("Confirm")
-        self.confirm_button.clicked.connect(self.confirm_selection)
-        right_panel.addWidget(self.confirm_button)
+        # NOUVEAU: Panneau d'association des capteurs
+        sensor_mapping_group = QGroupBox("IMU Sensor Mapping")
+        sensor_mapping_layout = QVBoxLayout()
+        sensor_mapping_group.setLayout(sensor_mapping_layout)
+        
+        # Ajouter une étiquette d'instruction
+        instruction_label = QLabel("Click on a joint in the model and select a sensor to map:")
+        instruction_label.setWordWrap(True)
+        sensor_mapping_layout.addWidget(instruction_label)
+        
+        # Table d'association des capteurs aux articulations
+        self.mapping_table = QTableWidget(6, 2)  # 6 IMUs, 2 colonnes
+        self.mapping_table.setHorizontalHeaderLabels(["IMU Sensor", "Body Joint"])
+        self.mapping_table.verticalHeader().setVisible(False)
+        self.mapping_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.mapping_table.setSelectionBehavior(QTableWidget.SelectRows)
+        
+        # Remplir la table avec les mappings par défaut
+        default_mappings = self.model_3d_widget.get_current_mappings()
+        for imu_id, joint in default_mappings.items():
+            self.mapping_table.setItem(imu_id-1, 0, QTableWidgetItem(f"IMU{imu_id}"))
+            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
+        
+        self.mapping_table.setColumnWidth(0, 80)
+        self.mapping_table.setColumnWidth(1, 120)
+        self.mapping_table.itemClicked.connect(self.on_mapping_clicked)
+        sensor_mapping_layout.addWidget(self.mapping_table)
+        
+        # Bouton pour réinitialiser les mappings
+        reset_mappings_button = QPushButton("Reset Default Mappings")
+        reset_mappings_button.clicked.connect(self.reset_sensor_mappings)
+        sensor_mapping_layout.addWidget(reset_mappings_button)
+        
+        right_panel.addWidget(sensor_mapping_group)
 
         # Ajout des panneaux gauche / centre / droite
         content_layout.addLayout(left_panel, stretch=1)
@@ -208,20 +220,23 @@ class DashboardApp(QMainWindow):
         # Mettre à jour les options de Matched Part en fonction de la sélection de Kinematic Model
         self.matched_part_combo.clear()
         if text == "Upper body w/o head":
-            self.matched_part_combo.addItems(["pectorals_L", "Deltoid_L", "Biceps_L", "forearm_L", "dorsalis major_L", "pectorals_R", "Deltoid_R", "Biceps_R", "forearm_R",  "dorsalis major_R"])
+            self.matched_part_combo.addItems(["Pectoraux", "Deltoide", "Biceps", "Avant Bras", "Trapeze", "Grand Dorsal"])
         elif text == "Upper body w/ head":
-            self.matched_part_combo.addItems(["pectorals_L", "Deltoid_L", "Biceps_L", "forearm_L", "dorsalis major_L", "pectorals_R", "Deltoid_R", "Biceps_R", "forearm_R",  "dorsalis major_R"])
+            self.matched_part_combo.addItems(["Head", "Pectoraux", "Deltoide", "Biceps", "Avant Bras", "Trapeze", "Grand Dorsal"])
         elif text == "Lower body":
-            self.matched_part_combo.addItems(["Quadriceps_L", "ishcio-hamstrings_L", "calves_L", "glutes_L", "Quadriceps_R", "ishcio-hamstrings_R", "calves_R", "glutes_R"])
+            self.matched_part_combo.addItems(["Quadriceps", "Ischio-jambiers", "Mollets", "Fessiers"])
 
     def update_matched_sensors(self, text):
-        # Mettre à jour les options de Matched Sensors en fonction de la sélection de Matched Part
-        if text:
-            self.matched_sensors_combo.clear()
-            sensors = ["EMG1", "EMG2", "EMG3", "EMG4", "EMG5", "EMG6", "EMG7", "EMG8",
-                       "IMU1", "IMU2", "IMU3", "IMU4", "IMU5", "IMU6",
-                       "pMMG1", "pMMG2", "pMMG3", "pMMG4", "pMMG5", "pMMG6", "pMMG7", "pMMG8"]
-            self.matched_sensors_combo.addItems(sensors)
+        if not text:
+            print("No matched part selected.")
+            return
+
+        self.matched_sensors_combo.clear()
+        sensors = ["EMG1", "EMG2", "EMG3", "EMG4", "EMG5", "EMG6", "EMG7", "EMG8",
+                   "IMU1", "IMU2", "IMU3", "IMU4", "IMU5", "IMU6", "IMU7", "IMU8",
+                   "pMMG1", "pMMG2", "pMMG3", "pMMG4", "pMMG5", "pMMG6", "pMMG7", "pMMG8"]
+        self.matched_sensors_combo.addItems(sensors)
+        print(f"Matched sensors updated for part: {text}")
 
     def update_sensor_label(self, text):
         # Mettre à jour le label du capteur avec le Matched Part sélectionné
@@ -237,6 +252,77 @@ class DashboardApp(QMainWindow):
                     if sensor_item.text(0).startswith(self.selected_sensor):
                         matched_part = self.matched_part_combo.currentText()
                         sensor_item.setText(0, f"{self.selected_sensor} ({matched_part})")
+
+    def reset_sensor_mappings(self):
+        """Réinitialiser les associations capteur-articulation par défaut."""
+        default_mappings = {
+            1: 'torso',
+            2: 'left_elbow',
+            3: 'right_elbow',
+            4: 'left_knee',
+            5: 'right_knee',
+            6: 'head'
+        }
+        
+        # Appliquer les mappings par défaut
+        for imu_id, joint in default_mappings.items():
+            self.model_3d_widget.map_imu_to_body_part(imu_id, joint)
+            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
+        
+        print("Associations capteur-articulation réinitialisées")
+
+    def on_mapping_clicked(self, item):
+        """Gestion du clic sur un élément de la table de mapping."""
+        row = item.row()
+        imu_id = row + 1  # IMU IDs commencent à 1
+        
+        # Obtenir la liste des articulations disponibles
+        available_joints = self.model_3d_widget.get_available_body_parts()
+        
+        # Créer un menu contextuel avec la liste des articulations
+        menu = QMenu(self)
+        
+        for joint in available_joints:
+            # Convertir le nom technique en nom lisible
+            ui_joint_name = self._convert_model_part_to_ui(joint)
+            action = QAction(ui_joint_name, self)
+            # Stocker les données nécessaires pour le mapping
+            action.setData({'imu_id': imu_id, 'joint': joint})
+            menu.addAction(action)
+        
+        # Connecter le signal triggered à la méthode de mapping
+        menu.triggered.connect(self.map_sensor_to_joint)
+        
+        # Afficher le menu à la position du curseur
+        menu.exec_(QCursor.pos())
+
+    def map_sensor_to_joint(self, action):
+        """Associer un capteur IMU à une articulation."""
+        data = action.data()
+        imu_id = data['imu_id']
+        joint = data['joint']
+        
+        success = self.model_3d_widget.map_imu_to_body_part(imu_id, joint)
+        if success:
+            # Mettre à jour l'élément dans la table
+            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
+            print(f"IMU{imu_id} a été associé à {joint}")
+        else:
+            print(f"Échec de l'association de IMU{imu_id} à {joint}")
+
+    def on_joint_clicked(self, joint_name):
+        """Gérer le clic sur une articulation dans le modèle 3D."""
+        # Créer un menu contextuel pour sélectionner le capteur IMU à associer
+        menu = QMenu(self)
+        menu.setWindowTitle(f"Map sensor to {self._convert_model_part_to_ui(joint_name)}")
+        
+        for i in range(1, 7):  # 6 IMUs
+            action = QAction(f"IMU{i}", self)
+            action.setData({'imu_id': i, 'joint': joint_name})
+            menu.addAction(action)
+        
+        menu.triggered.connect(self.map_sensor_to_joint)
+        menu.exec_(QCursor.pos())
 
     def on_sensor_clicked(self, item, column):
         # Vérifier si le capteur est connecté
@@ -327,6 +413,14 @@ class DashboardApp(QMainWindow):
     def update_data(self):
         # Mettre à jour les données des graphiques en temps réel
         packet = self.simulator.generate_packet()
+        
+        # Mettre à jour le modèle 3D avec les données IMU
+        if "IMU" in packet:
+            for i, quaternion in enumerate(packet["IMU"]):
+                imu_id = i + 1  # IMU IDs start at 1
+                if imu_id <= 6:  # Nous n'utilisons que 6 IMUs dans notre mapping
+                    self.model_3d_widget.apply_imu_data(imu_id, quaternion)
+        
         for sensor_name, plot_widget in self.plots.items():
             if sensor_name.startswith("EMG"):
                 index = int(sensor_name[3]) - 1
@@ -372,6 +466,38 @@ class DashboardApp(QMainWindow):
                     plot_widget.plot(self.group_plot_data[sensor_group][sensor_name], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][int(sensor_name[-1]) - 1], width=2), name=sensor_name)
 
             plot_widget.addLegend()
+
+    def update_3d_model(self, rotation_x, rotation_y, rotation_z):
+        """Updates the 3D model rotation."""
+        try:
+            self.model_3d_widget.update_rotation(rotation_x, rotation_y, rotation_z)
+        except Exception as e:
+            print(f"Error updating 3D model: {e}")
+
+    def toggle_animation(self):
+        """Toggle stickman walking animation."""
+        is_walking = self.model_3d_widget.toggle_animation()
+        self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
+
+    def _convert_model_part_to_ui(self, model_part):
+        """Convertit les noms des parties du modèle 3D vers des noms plus lisibles pour l'UI."""
+        mapping = {
+            'head': 'Head',
+            'neck': 'Neck',
+            'torso': 'Torso',
+            'left_shoulder': 'Left Shoulder',
+            'right_shoulder': 'Right Shoulder',
+            'left_elbow': 'Left Elbow',
+            'right_elbow': 'Right Elbow',
+            'left_hand': 'Left Hand',
+            'right_hand': 'Right Hand',
+            'hip': 'Hip',
+            'left_knee': 'Left Knee',
+            'right_knee': 'Right Knee',
+            'left_foot': 'Left Foot',
+            'right_foot': 'Right Foot'
+        }
+        return mapping.get(model_part, model_part)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
