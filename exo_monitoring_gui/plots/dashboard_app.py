@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QBrush
 import pyqtgraph as pg
-
+from .model_3d_viewer import Model3DWidget
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -89,10 +89,10 @@ class DashboardApp(QMainWindow):
 
         # 3D Perspective (droite)
         right_panel = QVBoxLayout()
-        label_3d = QLabel("3D Perspective")
-        label_3d.setAlignment(Qt.AlignCenter)
-        label_3d.setStyleSheet("background-color: #f0f0f0; padding: 30px; border: 1px solid #ccc;")
-        right_panel.addWidget(label_3d)
+
+        # Remplacer le label statique par le widget 3D
+        self.model_3d_widget = Model3DWidget()
+        right_panel.addWidget(self.model_3d_widget)
 
         # Kinematic Model ComboBox
         self.kinematic_model_combo = QComboBox()
@@ -285,7 +285,18 @@ class DashboardApp(QMainWindow):
         # Mettre à jour les données des graphiques en temps réel
         packet = self.simulator.generate_packet()
         for sensor_name, plot_widget in self.plots.items():
-            if sensor_name.startswith("EMG"):
+            if sensor_name.startswith("IMU"):
+                index = int(sensor_name[3]) - 1
+                quaternion = packet["IMU"][index]
+
+                # Convertir les quaternions en angles de rotation (exemple simplifié)
+                rotation_x = quaternion[1] * 90  # Exemple de conversion
+                rotation_y = quaternion[2] * 90
+                rotation_z = quaternion[3] * 90
+
+                # Mettre à jour le modèle 3D
+                self.update_3d_model(rotation_x, rotation_y, rotation_z)
+            elif sensor_name.startswith("EMG"):
                 index = int(sensor_name[3]) - 1
                 self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
                 self.plot_data[sensor_name][-1] = packet["EMG"][index]
@@ -293,12 +304,14 @@ class DashboardApp(QMainWindow):
                 index = int(sensor_name[4]) - 1
                 self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
                 self.plot_data[sensor_name][-1] = packet["pMMG"][index]
-            elif sensor_name.startswith("IMU"):
-                index = int(sensor_name[3]) - 1
-                self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
-                self.plot_data[sensor_name][-1] = packet["IMU"][index][0]  # Prendre le premier élément du quaternion
+                plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
 
-            plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
+    def update_3d_model(self, rotation_x, rotation_y, rotation_z):
+        """Met à jour la rotation du modèle 3D."""
+        self.model_3d_widget.model_viewer.rotation_x = rotation_x
+        self.model_3d_widget.model_viewer.rotation_y = rotation_y
+        self.model_3d_widget.model_viewer.rotation_z = rotation_z
+        self.model_3d_widget.model_viewer.updateGL()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
