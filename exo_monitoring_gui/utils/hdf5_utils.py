@@ -150,3 +150,36 @@ def save_to_default(data: dict, custom_filename: str = None):
     except Exception as e:
         print(f"Error saving to default file: {e}")
         return None
+
+
+def extract_group_data(file_path, group_name):
+    """
+    Retourne un dictionnaire avec les données du sous-groupe spécifié (par exemple : 'EMG', 'Time', etc.)
+    Exclut les datasets vides.
+    """
+    def read_group(group):
+        result = {}
+        for key, item in group.items():
+            if isinstance(item, h5py.Dataset):
+                if 0 in item.shape:
+                    continue  # Ignorer les datasets vides
+                try:
+                    result[key] = item[()]
+                except Exception as e:
+                    result[key] = f"Erreur de lecture : {e}"
+            elif isinstance(item, h5py.Group):
+                child_data = read_group(item)
+                if child_data:  # Ignorer les groupes vides
+                    result[key] = child_data
+        return result
+
+    with h5py.File(file_path, "r") as f:
+        sensor_group = f.get("Sensor")
+        if sensor_group is None:
+            raise ValueError("Le groupe 'Sensor' est introuvable dans le fichier.")
+
+        target_group = sensor_group.get(group_name)
+        if target_group is None:
+            raise ValueError(f"Le groupe '{group_name}' est introuvable dans 'Sensor'.")
+
+        return read_group(target_group)
