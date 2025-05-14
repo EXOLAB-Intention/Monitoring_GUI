@@ -4,12 +4,15 @@ import time
 import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox, QAction
+    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox, QRadioButton, QButtonGroup, QGroupBox, QTableWidget, QTableWidgetItem, QMenu, QAction
 )
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QColor, QBrush
+from PyQt5.QtGui import QColor, QBrush, QCursor  # QCursor doit être importé depuis QtGui
 import pyqtgraph as pg
-from .model_3d_viewer import Model3DWidget
+
+# Ajouter l'import du model_3d_viewer
+from plots.model_3d_viewer import Model3DWidget
+
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -21,11 +24,9 @@ class DashboardApp(QMainWindow):
         self.setWindowTitle("Data Monitoring Software")
         self.resize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
-        self._create_menubar()
-        # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
-        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
         self.simulator = SensorSimulator()
+
         self.init_ui()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_data)
@@ -35,6 +36,9 @@ class DashboardApp(QMainWindow):
         # Menu bar
         menubar = self.menuBar()
         menubar.setStyleSheet("background-color: white; color: black;")
+        file_menu = menubar.addMenu('File')
+        edit_menu = menubar.addMenu('Edit')
+        options_menu = menubar.addMenu('Options')
 
         # Central widget
         central_widget = QWidget()
@@ -62,6 +66,9 @@ class DashboardApp(QMainWindow):
                 border: 1px solid #ccc;
                 font-size: 14px;
             }
+            QTreeWidget::item:selected {
+                background-color: lightblue;
+            }
         """)
         self.connected_systems.setVisible(True)
         self.connected_systems.itemClicked.connect(self.on_sensor_clicked)
@@ -71,14 +78,33 @@ class DashboardApp(QMainWindow):
         for sensor_group in sensors:
             group_item = QTreeWidgetItem([sensor_group])
             self.connected_systems.addTopLevelItem(group_item)
-            for i in range(1, 9):
+            if sensor_group == "IMU Data":
+                num_sensors = 6
+            else:
+                num_sensors = 8
+            for i in range(1, num_sensors + 1):
                 sensor_item = QTreeWidgetItem([f"{sensor_group[:-5]}{i}"])
                 sensor_item.setForeground(0, QBrush(QColor("gray")))  # Gris pour déconnecté
-                sensor_item.setHidden(True)  # Masqué au départ
+                sensor_item.setHidden(False)  # Affiché par défaut
                 group_item.addChild(sensor_item)
+            group_item.setExpanded(True)  # Ouvrir la liste déroulante par défaut
 
         left_panel = QVBoxLayout()
         left_panel.addWidget(self.connected_systems)
+
+        # Choix du mode d'affichage
+        self.display_mode_group = QButtonGroup()
+        self.display_mode_layout = QHBoxLayout()
+
+        self.single_sensor_mode = QRadioButton("1 sensor per plot")
+        self.group_sensor_mode = QRadioButton("Plots by sensor groups")
+        self.display_mode_group.addButton(self.single_sensor_mode)
+        self.display_mode_group.addButton(self.group_sensor_mode)
+        self.single_sensor_mode.setChecked(True)
+
+        self.display_mode_layout.addWidget(self.single_sensor_mode)
+        self.display_mode_layout.addWidget(self.group_sensor_mode)
+        left_panel.addLayout(self.display_mode_layout)
 
         # Graphics / Visual Zone (centre)
         self.middle_placeholder = QWidget()
@@ -90,46 +116,55 @@ class DashboardApp(QMainWindow):
         # 3D Perspective (droite)
         right_panel = QVBoxLayout()
 
+        # Titre de la section 3D
+        label_3d_title = QLabel("3D Perspective")
+        label_3d_title.setAlignment(Qt.AlignCenter)
+        label_3d_title.setStyleSheet("font-size: 14px; font-weight: bold;")
+        right_panel.addWidget(label_3d_title)
+
         # Remplacer le label statique par le widget 3D
         self.model_3d_widget = Model3DWidget()
-        right_panel.addWidget(self.model_3d_widget)
+        right_panel.addWidget(self.model_3d_widget, stretch=3)
 
-        # Kinematic Model ComboBox
-        self.kinematic_model_combo = QComboBox()
-        self.kinematic_model_combo.addItem("")  # Vide par défaut
-        self.kinematic_model_combo.addItems(["Upper body w/o head", "Upper body w/ head", "Lower body"])
-        self.kinematic_model_combo.currentTextChanged.connect(self.update_matched_part)
+        # Ajouter un bouton pour contrôler l'animation
+        self.animate_button = QPushButton("Start Animation")
+        self.animate_button.clicked.connect(self.toggle_animation)
+        right_panel.addWidget(self.animate_button)
 
-        # Label Kinematic Model
-        kinematic_model_layout = QHBoxLayout()
-        kinematic_model_layout.addWidget(QLabel("Kinematic Model:"))
-        kinematic_model_layout.addWidget(self.kinematic_model_combo)
-        right_panel.addLayout(kinematic_model_layout)
-
-        # Matched Part ComboBox
-        self.matched_part_combo = QComboBox()
-        self.matched_part_combo.currentTextChanged.connect(self.update_matched_sensors)
-
-        # Label Matched Part
-        matched_part_layout = QHBoxLayout()
-        matched_part_layout.addWidget(QLabel("Matched Part:"))
-        matched_part_layout.addWidget(self.matched_part_combo)
-        right_panel.addLayout(matched_part_layout)
-
-        # Matched Sensors ComboBox
-        self.matched_sensors_combo = QComboBox()
-        self.matched_sensors_combo.currentTextChanged.connect(self.update_sensor_label)
-
-        # Label Matched Sensors
-        matched_sensors_layout = QHBoxLayout()
-        matched_sensors_layout.addWidget(QLabel("Matched Sensors:"))
-        matched_sensors_layout.addWidget(self.matched_sensors_combo)
-        right_panel.addLayout(matched_sensors_layout)
-
-        # Bouton de Confirmation
-        self.confirm_button = QPushButton("Confirm")
-        self.confirm_button.clicked.connect(self.confirm_selection)
-        right_panel.addWidget(self.confirm_button)
+        # NOUVEAU: Panneau d'association des capteurs
+        sensor_mapping_group = QGroupBox("IMU Sensor Mapping")
+        sensor_mapping_layout = QVBoxLayout()
+        sensor_mapping_group.setLayout(sensor_mapping_layout)
+        
+        # Ajouter une étiquette d'instruction
+        instruction_label = QLabel("Click on a joint in the model and select a sensor to map:")
+        instruction_label.setWordWrap(True)
+        sensor_mapping_layout.addWidget(instruction_label)
+        
+        # Table d'association des capteurs aux articulations
+        self.mapping_table = QTableWidget(6, 2)  # 6 IMUs, 2 colonnes
+        self.mapping_table.setHorizontalHeaderLabels(["IMU Sensor", "Body Joint"])
+        self.mapping_table.verticalHeader().setVisible(False)
+        self.mapping_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.mapping_table.setSelectionBehavior(QTableWidget.SelectRows)
+        
+        # Remplir la table avec les mappings par défaut
+        default_mappings = self.model_3d_widget.get_current_mappings()
+        for imu_id, joint in default_mappings.items():
+            self.mapping_table.setItem(imu_id-1, 0, QTableWidgetItem(f"IMU{imu_id}"))
+            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
+        
+        self.mapping_table.setColumnWidth(0, 80)
+        self.mapping_table.setColumnWidth(1, 120)
+        self.mapping_table.itemClicked.connect(self.on_mapping_clicked)
+        sensor_mapping_layout.addWidget(self.mapping_table)
+        
+        # Bouton pour réinitialiser les mappings
+        reset_mappings_button = QPushButton("Reset Default Mappings")
+        reset_mappings_button.clicked.connect(self.reset_sensor_mappings)
+        sensor_mapping_layout.addWidget(reset_mappings_button)
+        
+        right_panel.addWidget(sensor_mapping_group)
 
         # Ajout des panneaux gauche / centre / droite
         content_layout.addLayout(left_panel, stretch=1)
@@ -151,68 +186,10 @@ class DashboardApp(QMainWindow):
         # Initialiser les graphiques
         self.plots = {}
         self.plot_data = {}
+        self.highlighted_sensors = set()
+        self.group_plots = {}
+        self.group_plot_data = {}
 
-    def _create_action(self, text, slot=None, shortcut=None, icon=None, tip=None, checkable=False):
-        """Create a QAction with the given properties"""
-        action = QAction(text, self)
-        if icon:
-            action.setIcon(icon)
-        if shortcut:
-            action.setShortcut(shortcut)
-        if tip:
-            action.setToolTip(tip)
-            action.setStatusTip(tip)
-        if slot:
-            action.triggered.connect(slot)
-        if checkable:
-            action.setCheckable(True)
-        return action
-    
-    def exit(self):
-        QApplication.quit()
-
-    def show_about_dialog(self):
-        """Show information about the software"""
-        about_text = """
-        <h1>Data Monitoring Software</h1>
-        <p>Version 2.5.0</p>
-        <p>An advanced monitoring tool for exoskeleton data.</p>
-        <p>© 2025 Advanced Exoskeleton Research Laboratory</p>
-        <p>For help and documentation, please visit our website or contact support.</p>
-        """
-        
-        QMessageBox.about(self, "About Data Monitoring Software", about_text)
-
-    def return_to_main(self):
-        """Return to the main window"""
-        self.close()
-        from UI.main_window import MainApp
-        self.main_app = MainApp()
-        self.main_app.show()
-
-    def _create_menubar(self):
-        """Create the application menu bar"""
-        menubar = self.menuBar()
-        
-        # File menu
-        file_menu = menubar.addMenu('&File')
-        
-        # File menu actions
-        return_main_page = self._create_action("&Return to main page", self.return_to_main, "Ctrl+P",
-                                                  tip="Exit without saving")
-        exit_button = self._create_action("&Exit", self.exit, "Ctrl+Shift+Q",
-                                                  tip="Exit without saving")
-
-        file_menu.addAction(return_main_page)
-        file_menu.addAction(exit_button)
-        
-        # Help menu
-        help_menu = menubar.addMenu('&Help')
-        # Help menu actions
-        about_action = self._create_action("&About", self.show_about_dialog,
-                                         tip="About the application")
-        
-        help_menu.addAction(about_action)
     def show_sensors(self):
         # Afficher les capteurs et les connecter
         for i in range(self.connected_systems.topLevelItemCount()):
@@ -221,6 +198,23 @@ class DashboardApp(QMainWindow):
                 sensor_item = group_item.child(j)
                 sensor_item.setHidden(False)
                 sensor_item.setForeground(0, QBrush(QColor("green")))  # Vert pour connecté
+
+        # Créer les graphiques de groupe si le mode est "Graphiques par groupe de capteurs"
+        if self.group_sensor_mode.isChecked():
+            self.create_group_plots()
+
+    def create_group_plots(self):
+        # Créer les graphiques de groupe pour EMG, IMU, pMMG
+        for group in ["EMG", "IMU", "pMMG"]:
+            plot_widget = pg.PlotWidget(title=group)
+            plot_widget.setBackground('#1e1e1e')
+            plot_widget.getAxis('left').setTextPen('white')
+            plot_widget.getAxis('bottom').setTextPen('white')
+            plot_widget.showGrid(x=True, y=True, alpha=0.3)
+            plot_widget.setTitle(group, color='white', size='14pt')
+            self.middle_layout.addWidget(plot_widget)
+            self.group_plots[group] = plot_widget
+            self.group_plot_data[group] = {}
 
     def update_matched_part(self, text):
         # Mettre à jour les options de Matched Part en fonction de la sélection de Kinematic Model
@@ -233,13 +227,16 @@ class DashboardApp(QMainWindow):
             self.matched_part_combo.addItems(["Quadriceps", "Ischio-jambiers", "Mollets", "Fessiers"])
 
     def update_matched_sensors(self, text):
-        # Mettre à jour les options de Matched Sensors en fonction de la sélection de Matched Part
-        if text:
-            self.matched_sensors_combo.clear()
-            sensors = ["EMG1", "EMG2", "EMG3", "EMG4", "EMG5", "EMG6", "EMG7", "EMG8",
-                       "IMU1", "IMU2", "IMU3", "IMU4", "IMU5", "IMU6", "IMU7", "IMU8",
-                       "pMMG1", "pMMG2", "pMMG3", "pMMG4", "pMMG5", "pMMG6", "pMMG7", "pMMG8"]
-            self.matched_sensors_combo.addItems(sensors)
+        if not text:
+            print("No matched part selected.")
+            return
+
+        self.matched_sensors_combo.clear()
+        sensors = ["EMG1", "EMG2", "EMG3", "EMG4", "EMG5", "EMG6", "EMG7", "EMG8",
+                   "IMU1", "IMU2", "IMU3", "IMU4", "IMU5", "IMU6", "IMU7", "IMU8",
+                   "pMMG1", "pMMG2", "pMMG3", "pMMG4", "pMMG5", "pMMG6", "pMMG7", "pMMG8"]
+        self.matched_sensors_combo.addItems(sensors)
+        print(f"Matched sensors updated for part: {text}")
 
     def update_sensor_label(self, text):
         # Mettre à jour le label du capteur avec le Matched Part sélectionné
@@ -256,6 +253,77 @@ class DashboardApp(QMainWindow):
                         matched_part = self.matched_part_combo.currentText()
                         sensor_item.setText(0, f"{self.selected_sensor} ({matched_part})")
 
+    def reset_sensor_mappings(self):
+        """Réinitialiser les associations capteur-articulation par défaut."""
+        default_mappings = {
+            1: 'torso',
+            2: 'left_elbow',
+            3: 'right_elbow',
+            4: 'left_knee',
+            5: 'right_knee',
+            6: 'head'
+        }
+        
+        # Appliquer les mappings par défaut
+        for imu_id, joint in default_mappings.items():
+            self.model_3d_widget.map_imu_to_body_part(imu_id, joint)
+            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
+        
+        print("Associations capteur-articulation réinitialisées")
+
+    def on_mapping_clicked(self, item):
+        """Gestion du clic sur un élément de la table de mapping."""
+        row = item.row()
+        imu_id = row + 1  # IMU IDs commencent à 1
+        
+        # Obtenir la liste des articulations disponibles
+        available_joints = self.model_3d_widget.get_available_body_parts()
+        
+        # Créer un menu contextuel avec la liste des articulations
+        menu = QMenu(self)
+        
+        for joint in available_joints:
+            # Convertir le nom technique en nom lisible
+            ui_joint_name = self._convert_model_part_to_ui(joint)
+            action = QAction(ui_joint_name, self)
+            # Stocker les données nécessaires pour le mapping
+            action.setData({'imu_id': imu_id, 'joint': joint})
+            menu.addAction(action)
+        
+        # Connecter le signal triggered à la méthode de mapping
+        menu.triggered.connect(self.map_sensor_to_joint)
+        
+        # Afficher le menu à la position du curseur
+        menu.exec_(QCursor.pos())
+
+    def map_sensor_to_joint(self, action):
+        """Associer un capteur IMU à une articulation."""
+        data = action.data()
+        imu_id = data['imu_id']
+        joint = data['joint']
+        
+        success = self.model_3d_widget.map_imu_to_body_part(imu_id, joint)
+        if success:
+            # Mettre à jour l'élément dans la table
+            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
+            print(f"IMU{imu_id} a été associé à {joint}")
+        else:
+            print(f"Échec de l'association de IMU{imu_id} à {joint}")
+
+    def on_joint_clicked(self, joint_name):
+        """Gérer le clic sur une articulation dans le modèle 3D."""
+        # Créer un menu contextuel pour sélectionner le capteur IMU à associer
+        menu = QMenu(self)
+        menu.setWindowTitle(f"Map sensor to {self._convert_model_part_to_ui(joint_name)}")
+        
+        for i in range(1, 7):  # 6 IMUs
+            action = QAction(f"IMU{i}", self)
+            action.setData({'imu_id': i, 'joint': joint_name})
+            menu.addAction(action)
+        
+        menu.triggered.connect(self.map_sensor_to_joint)
+        menu.exec_(QCursor.pos())
+
     def on_sensor_clicked(self, item, column):
         # Vérifier si le capteur est connecté
         if item.foreground(0).color() != QColor("green"):
@@ -263,55 +331,173 @@ class DashboardApp(QMainWindow):
             return
 
         sensor_name = item.text(0).split()[0]  # Extraire le nom du capteur
-        self.plot_sensor_data(sensor_name)
+        if sensor_name in self.plots or sensor_name in self.highlighted_sensors:
+            # Désélectionner le capteur
+            self.remove_sensor_plot(sensor_name)
+        else:
+            self.plot_sensor_data(item.text(0))
 
     def plot_sensor_data(self, sensor_name):
-        # Créer un nouveau graphique pour le capteur sélectionné
-        plot_widget = pg.PlotWidget(title=sensor_name)
-        plot_widget.setBackground('#1e1e1e')
-        plot_widget.getAxis('left').setTextPen('white')
-        plot_widget.getAxis('bottom').setTextPen('white')
-        plot_widget.showGrid(x=True, y=True, alpha=0.3)
-        plot_widget.setTitle(sensor_name, color='white', size='14pt')
+        # Ajouter la courbe du capteur au graphique de groupe correspondant
+        if self.group_sensor_mode.isChecked():
+            sensor_group = sensor_name.split()[0][:-1]
+            if sensor_group in self.group_plots:
+                if sensor_name not in self.group_plot_data[sensor_group]:
+                    self.group_plot_data[sensor_group][sensor_name] = np.zeros(100)
+                    if sensor_name.startswith("IMU"):
+                        for axis in ['w', 'x', 'y', 'z']:
+                            self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"] = np.zeros(100)
 
-        # Ajouter le graphique à la section "2D Plots"
-        self.middle_layout.addWidget(plot_widget)
+                # Mettre en surbrillance le capteur sélectionné
+                self.highlight_sensor(sensor_name.split()[0])
+        else:
+            # Créer un nouveau graphique pour le capteur sélectionné
+            plot_widget = pg.PlotWidget(title=sensor_name)
+            plot_widget.setBackground('#1e1e1e')
+            plot_widget.getAxis('left').setTextPen('white')
+            plot_widget.getAxis('bottom').setTextPen('white')
+            plot_widget.showGrid(x=True, y=True, alpha=0.3)
+            plot_widget.setTitle(sensor_name, color='white', size='14pt')
 
-        # Stocker le graphique et les données
-        self.plots[sensor_name] = plot_widget
-        self.plot_data[sensor_name] = np.zeros(100)
+            # Ajouter le graphique à la section "2D Plots"
+            self.middle_layout.addWidget(plot_widget)
+
+            # Stocker le graphique et les données
+            self.plots[sensor_name.split()[0]] = plot_widget
+            self.plot_data[sensor_name.split()[0]] = np.zeros(100)
+
+            # Mettre en surbrillance le capteur sélectionné
+            self.highlight_sensor(sensor_name.split()[0])
+
+    def remove_sensor_plot(self, sensor_name):
+        # Supprimer le graphique du capteur de la section "2D Plots"
+        if sensor_name in self.plots:
+            plot_widget = self.plots.pop(sensor_name)
+            plot_widget.setParent(None)
+            plot_widget.deleteLater()
+
+            # Retirer la surbrillance du capteur
+            self.unhighlight_sensor(sensor_name)
+        else:
+            sensor_group = sensor_name.split()[0][:-1]
+            if sensor_group in self.group_plots:
+                if sensor_name in self.group_plot_data[sensor_group]:
+                    self.group_plot_data[sensor_group].pop(sensor_name, None)
+                    if sensor_name.startswith("IMU"):
+                        for axis in ['w', 'x', 'y', 'z']:
+                            self.group_plot_data[sensor_group].pop(f"{sensor_name}_{axis}", None)
+
+            # Retirer la surbrillance du capteur
+            self.unhighlight_sensor(sensor_name)
+
+    def highlight_sensor(self, sensor_name):
+        # Mettre en surbrillance le capteur sélectionné
+        for i in range(self.connected_systems.topLevelItemCount()):
+            group_item = self.connected_systems.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                sensor_item = group_item.child(j)
+                if sensor_item.text(0).startswith(sensor_name):
+                    sensor_item.setBackground(0, QBrush(QColor("lightblue")))
+                    self.highlighted_sensors.add(sensor_name)
+
+    def unhighlight_sensor(self, sensor_name):
+        # Retirer la surbrillance du capteur
+        for i in range(self.connected_systems.topLevelItemCount()):
+            group_item = self.connected_systems.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                sensor_item = group_item.child(j)
+                if sensor_item.text(0).startswith(sensor_name):
+                    sensor_item.setBackground(0, QBrush(QColor("white")))
+                    self.highlighted_sensors.discard(sensor_name)
 
     def update_data(self):
         # Mettre à jour les données des graphiques en temps réel
         packet = self.simulator.generate_packet()
+        
+        # Mettre à jour le modèle 3D avec les données IMU
+        if "IMU" in packet:
+            for i, quaternion in enumerate(packet["IMU"]):
+                imu_id = i + 1  # IMU IDs start at 1
+                if imu_id <= 6:  # Nous n'utilisons que 6 IMUs dans notre mapping
+                    self.model_3d_widget.apply_imu_data(imu_id, quaternion)
+        
         for sensor_name, plot_widget in self.plots.items():
-            if sensor_name.startswith("IMU"):
-                index = int(sensor_name[3]) - 1
-                quaternion = packet["IMU"][index]
-
-                # Convertir les quaternions en angles de rotation (exemple simplifié)
-                rotation_x = quaternion[1] * 90  # Exemple de conversion
-                rotation_y = quaternion[2] * 90
-                rotation_z = quaternion[3] * 90
-
-                # Mettre à jour le modèle 3D
-                self.update_3d_model(rotation_x, rotation_y, rotation_z)
-            elif sensor_name.startswith("EMG"):
+            if sensor_name.startswith("EMG"):
                 index = int(sensor_name[3]) - 1
                 self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
                 self.plot_data[sensor_name][-1] = packet["EMG"][index]
+                plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
             elif sensor_name.startswith("pMMG"):
                 index = int(sensor_name[4]) - 1
                 self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
                 self.plot_data[sensor_name][-1] = packet["pMMG"][index]
                 plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
+            elif sensor_name.startswith("IMU"):
+                index = int(sensor_name[3]) - 1
+                quaternion = packet["IMU"][index]
+                plot_widget.clear()
+                for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                    self.plot_data[f"{sensor_name}_{axis}"] = np.roll(self.plot_data.get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
+                    self.plot_data[f"{sensor_name}_{axis}"][-1] = quaternion[i]
+                    plot_widget.plot(self.plot_data[f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
+
+                plot_widget.addLegend()
+
+        for sensor_group, plot_widget in self.group_plots.items():
+            plot_widget.clear()
+            for sensor_name, data in self.group_plot_data[sensor_group].items():
+                if sensor_name.startswith("IMU"):
+                    index = int(sensor_name[3]) - 1
+                    quaternion = packet["IMU"][index]
+                    for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                        self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"] = np.roll(self.group_plot_data[sensor_group].get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
+                        self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"][-1] = quaternion[i]
+                        plot_widget.plot(self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
+                else:
+                    if sensor_name.startswith("EMG"):
+                        index = int(sensor_name[3]) - 1
+                        self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
+                        self.group_plot_data[sensor_group][sensor_name][-1] = packet["EMG"][index]
+                    elif sensor_name.startswith("pMMG"):
+                        index = int(sensor_name[4]) - 1
+                        self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
+                        self.group_plot_data[sensor_group][sensor_name][-1] = packet["pMMG"][index]
+
+                    plot_widget.plot(self.group_plot_data[sensor_group][sensor_name], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][int(sensor_name[-1]) - 1], width=2), name=sensor_name)
+
+            plot_widget.addLegend()
 
     def update_3d_model(self, rotation_x, rotation_y, rotation_z):
-        """Met à jour la rotation du modèle 3D."""
-        self.model_3d_widget.model_viewer.rotation_x = rotation_x
-        self.model_3d_widget.model_viewer.rotation_y = rotation_y
-        self.model_3d_widget.model_viewer.rotation_z = rotation_z
-        self.model_3d_widget.model_viewer.updateGL()
+        """Updates the 3D model rotation."""
+        try:
+            self.model_3d_widget.update_rotation(rotation_x, rotation_y, rotation_z)
+        except Exception as e:
+            print(f"Error updating 3D model: {e}")
+
+    def toggle_animation(self):
+        """Toggle stickman walking animation."""
+        is_walking = self.model_3d_widget.toggle_animation()
+        self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
+
+    def _convert_model_part_to_ui(self, model_part):
+        """Convertit les noms des parties du modèle 3D vers des noms plus lisibles pour l'UI."""
+        mapping = {
+            'head': 'Head',
+            'neck': 'Neck',
+            'torso': 'Torso',
+            'left_shoulder': 'Left Shoulder',
+            'right_shoulder': 'Right Shoulder',
+            'left_elbow': 'Left Elbow',
+            'right_elbow': 'Right Elbow',
+            'left_hand': 'Left Hand',
+            'right_hand': 'Right Hand',
+            'hip': 'Hip',
+            'left_knee': 'Left Knee',
+            'right_knee': 'Right Knee',
+            'left_foot': 'Left Foot',
+            'right_foot': 'Right Foot'
+        }
+        return mapping.get(model_part, model_part)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
