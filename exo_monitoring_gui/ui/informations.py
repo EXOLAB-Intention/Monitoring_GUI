@@ -146,11 +146,12 @@ class InformationWindow(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error loading data: {str(e)}")
 
-    def _collect_data(self):
+    def _get_form_data(self):
+        """Helper method to collect and validate form data."""
         for name in self.required_fields:
             if not self.input_fields[name].text().strip():
                 QMessageBox.warning(self, "Missing Field", f"Please fill in '{name}'")
-                return
+                return None, False
 
         data = {}
         for key, widget in self.input_fields.items():
@@ -161,6 +162,12 @@ class InformationWindow(QDialog):
             data["image_path"] = image_path
 
         data["collection_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return data, True
+
+    def _collect_data(self):
+        data, is_valid = self._get_form_data()
+        if not is_valid:
+            return
 
         success = True
         if self.subject_file:
@@ -197,27 +204,21 @@ class InformationWindow(QDialog):
             QMessageBox.critical(self, "Error", "Failed to save the information.")
 
     def _collect_data_notsave(self):
-        for name in self.required_fields:
-            if not self.input_fields[name].text().strip():
-                QMessageBox.warning(self, "Missing Field", f"Please fill in '{name}'")
-                return
+        data, is_valid = self._get_form_data()
+        if not is_valid:
+            return
 
-        data = {}
-        for key, widget in self.input_fields.items():
-            data[key] = widget.text() if isinstance(widget, QLineEdit) else widget.toPlainText()
-
-        image_path = self.image_area.get_image_path()
-        if image_path:
-            data["image_path"] = image_path
-
-        data["collection_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
+        # The original _collect_data_notsave also saved metadata if subject_file exists.
+        # We keep this behavior. If it's truly "notsave", this part should be removed.
         success = True
         if self.subject_file:
             success = save_metadata(self.subject_file, data)
 
         if success:
             QMessageBox.information(self, "Saved", "Information saved successfully.")
+            # Original _collect_data_notsave also emitted info_submitted.
+            # If this method is just for saving without triggering the full workflow,
+            # this emission might need reconsideration based on its usage in main_window.py
             self.info_submitted.emit(data)
         else:
             QMessageBox.critical(self, "Error", "Failed to save the information.")
