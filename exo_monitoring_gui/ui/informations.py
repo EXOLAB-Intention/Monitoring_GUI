@@ -131,19 +131,41 @@ class InformationWindow(QDialog):
     def _load_existing_data(self):
         try:
             data, image_path = load_metadata(self.subject_file)
-            for key, widget in self.input_fields.items():
-                if key in data:
-                    if isinstance(widget, QLineEdit):
-                        widget.setText(str(data[key]))
-                    elif isinstance(widget, QTextEdit):
-                        widget.setPlainText(str(data[key]))
+            if not data: # Si data est vide, rien à charger
+                print(f"No metadata loaded for {self.subject_file}")
+                self._check_required_fields() # S'assurer que le bouton submit est dans l'état correct
+                return
 
+            for key_widget, widget in self.input_fields.items():
+                # Clé non préfixée (utilisée dans input_fields)
+                plain_key = key_widget 
+                # Clé potentiellement préfixée (telle que retournée par load_metadata pour la nouvelle structure)
+                prefixed_key = f"participant_{plain_key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
+                
+                value_to_set = None
+                if prefixed_key in data:
+                    value_to_set = data[prefixed_key]
+                elif plain_key in data: # Pour la rétrocompatibilité avec l'ancienne structure
+                    value_to_set = data[plain_key]
+                
+                if value_to_set is not None:
+                    if isinstance(widget, QLineEdit):
+                        widget.setText(str(value_to_set))
+                    elif isinstance(widget, QTextEdit):
+                        widget.setPlainText(str(value_to_set))
+            
+            # Gestion de image_path (qui est retourné séparément par load_metadata)
             if image_path and os.path.exists(image_path):
                 self.image_area.load_image(image_path)
+            elif "image_path" in data and os.path.exists(data["image_path"]):
+                 self.image_area.load_image(data["image_path"]) # Au cas où il serait dans data et non retourné séparément
+            elif "participant_image_path" in data and os.path.exists(data["participant_image_path"]):
+                 self.image_area.load_image(data["participant_image_path"])
+
 
             self._check_required_fields()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error loading data: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Error loading data into InformationWindow: {str(e)}")
 
     def _collect_data(self):
         for name in self.required_fields:

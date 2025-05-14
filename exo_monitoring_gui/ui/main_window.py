@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 import traceback
 from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, save_metadata  # Correction de l'importation
+from utils.hdf5_utils import load_metadata, save_metadata, save_to_default  # Correction de l'importation
 
 
 class MainApp(QMainWindow):
@@ -254,21 +254,21 @@ class MainApp(QMainWindow):
 
 
     def create_new_subject(self):
-        """Creates a new subject file and opens information window"""
+        """Opens information window to collect data for a new subject file."""
         if self.modified:
             reply = QMessageBox.question(self, 'Unsaved Changes',
                                         'There are unsaved changes. Save before creating new subject?',
                                         QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
             if reply == QMessageBox.Save:
-                self.save_subject_notsave()
+                self.save_subject_notsave() # ou self.save_subject() selon la logique voulue
             elif reply == QMessageBox.Cancel:
                 return
         
         options = QFileDialog.Options()
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Create New Subject File",
-            "",
+            "Choose Filename for New Subject",
+            os.path.join(os.path.expanduser("~"), "Documents", "Monitoring-Data"), # Default directory
             "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
             options=options
         )
@@ -277,39 +277,34 @@ class MainApp(QMainWindow):
             if not filename.endswith(".h5") and not filename.endswith(".hdf5"):
                 filename += ".h5"
 
-            try:
-                # Initialize basic file structure
-                with h5py.File(filename, 'w') as f:
-                    f.attrs['subject_created'] = True
-                    f.attrs['creation_date'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    f.create_group('metadata')
-                    f.create_group('trials')
-
-                self.current_subject_file = filename
-                self.modified = False
-                self.save_subject_action.setEnabled(True)
-                self.save_subject_as_action.setEnabled(True)
-                self.show_metadata_action.setEnabled(True)
-                
-                self.statusBar().showMessage(f"New subject file created: {os.path.basename(filename)}")
-                
-                # Display information window to collect metadata
-                # Correction de la variable
-                self.info_window = InformationWindow(self, self.current_subject_file)
-                self.info_window.info_submitted.connect(self.update_subject_metadata)
-
-
-                def closeEvent(event):
-                    self.save_subject_action.setEnabled(False)
-                    self.save_subject_as_action.setEnabled(False)
-                    self.show_metadata_action.setEnabled(False)
-                    event.accept()
-
-                self.info_window.closeEvent = closeEvent                          
-                self.info_window.show()
-                
-            except Exception as e:
-                self._show_error(f"Error creating subject file: {str(e)}")
+            # Stocker le nom de fichier en attente, ne pas créer le fichier ici.
+            self.pending_subject_filename = filename 
+            self.current_subject_file = None # Assurer qu'aucun fichier n'est "courant" tant qu'il n'est pas créé
+            self.modified = False
+            
+            # Désactiver les actions de sauvegarde/métadonnées tant que le fichier n'est pas réellement créé
+            self.save_subject_action.setEnabled(False)
+            self.save_subject_as_action.setEnabled(False)
+            self.show_metadata_action.setEnabled(False)
+            
+            self.statusBar().showMessage(f"Ready to create new subject: {os.path.basename(filename)}")
+            
+            # Display information window to collect metadata
+            # InformationWindow sera responsable de collecter les données et de signaler via info_submitted
+            self.info_window = InformationWindow(self) # Ne plus passer current_subject_file ici
+            self.info_window.info_submitted.connect(self.update_subject_metadata) # Reste connecté
+            
+            # Gérer la fermeture de la fenêtre d'info si l'utilisateur annule
+            # Si info_window est fermée sans soumettre, pending_subject_filename pourrait être nettoyé si besoin
+            def info_window_closed(result):
+                if not self.current_subject_file: # Si aucun fichier n'a été créé (l'utilisateur a annulé avant/pendant la saisie d'infos)
+                    self.pending_subject_filename = None
+                    self.statusBar().showMessage("New subject creation cancelled.")
+            
+            self.info_window.finished.connect(info_window_closed)
+            self.info_window.show()
+        else:
+            self.statusBar().showMessage("New subject creation cancelled.")
     
     def load_existing_subject(self):
         """Load an existing subject file"""
@@ -575,32 +570,56 @@ class MainApp(QMainWindow):
             except Exception as e:
                 print(f"Error during auto-save: {str(e)}")
     
-    def update_subject_metadata(self, metadata):
-        """Update the subject metadata based on information provided"""
-        if not self.current_subject_file:
-            print("Error: No subject file is currently open")
-            return
+    def update_subject_metadata(self, metadata_dict):
+        """Creates a new subject HDF5 file if pending_subject_filename is set,
+        otherwise updates metadata for current_subject_file."""
         
-        try:
-            # Save metadata to the current file
-            save_metadata(self.current_subject_file, metadata)
-            
-            # Update UI components if needed
-            self.modified = True
-            
-            # Update status bar
-            self.statusBar().showMessage(f"Subject metadata updated for: {os.path.basename(self.current_subject_file)}")
-            
-            # Additional processing if needed
-            if 'Name' in metadata and 'Last Name' in metadata:
-                subject_name = f"{metadata['Name']} {metadata['Last Name']}"
-                print(f"Subject information updated for: {subject_name}")
-                print(self.current_subject_file)
-            
-            # The subject has been created, so we can enable relevant actions
-            self.save_subject_action.setEnabled(True)
-            self.save_subject_as_action.setEnabled(True)
-            self.show_metadata_action.setEnabled(True)
-        
-        except Exception as e:
-            self._show_error(f"Error updating subject metadata: {str(e)}")
+        if hasattr(self, 'pending_subject_filename') and self.pending_subject_filename:
+            # --- Logique de CRÉATION de nouveau sujet ---
+            target_filename = self.pending_subject_filename
+            self.pending_subject_filename = None # Nettoyer le nom en attente
+
+            try:
+                created_filepath = save_to_default(metadata_dict, custom_filename=target_filename)
+                
+                if created_filepath:
+                    self.current_subject_file = created_filepath
+                    self.modified = False # Le fichier vient d'être créé et sauvegardé
+                    self.statusBar().showMessage(f"New subject file created: {os.path.basename(self.current_subject_file)}")
+                    self.save_subject_action.setEnabled(True)
+                    self.save_subject_as_action.setEnabled(True)
+                    self.show_metadata_action.setEnabled(True)
+
+                    # Fermer la fenêtre d'informations si elle est toujours ouverte
+                    if hasattr(self, 'info_window') and self.info_window.isVisible():
+                        self.info_window.accept()
+                else:
+                    self._show_error(f"Failed to create subject file: {target_filename}. Check console.")
+                    # Garder l'UI pour permettre de réessayer ou annuler.
+                    self.pending_subject_filename = target_filename # Restaurer pour nouvelle tentative si nécessaire
+                    self.save_subject_action.setEnabled(False)
+                    self.save_subject_as_action.setEnabled(False)
+                    self.show_metadata_action.setEnabled(False)
+            except ImportError as ie:
+                self._show_error(f"Critical Error: Could not import save_to_default. {str(ie)}")
+            except Exception as e:
+                self._show_error(f"Error creating subject file with metadata: {str(e)}")
+                self.current_subject_file = None
+                self.save_subject_action.setEnabled(False)
+                self.save_subject_as_action.setEnabled(False)
+                self.show_metadata_action.setEnabled(False)
+
+        elif self.current_subject_file:
+            # --- Logique de MISE À JOUR de sujet existant ---
+            try:
+                save_metadata(self.current_subject_file, metadata_dict)
+                self.modified = True # Marquer comme modifié, même si save_metadata peut le faire
+                self.statusBar().showMessage(f"Subject metadata updated for: {os.path.basename(self.current_subject_file)}")
+                # Laisser la fenêtre d'info ouverte pour d'autres modifs ou la fermer si on le souhaite.
+                # if hasattr(self, 'info_window') and self.info_window.isVisible():
+                #     self.info_window.accept() 
+            except Exception as e:
+                self._show_error(f"Error updating subject metadata for {self.current_subject_file}: {str(e)}")
+        else:
+            # Cas d'erreur : ni pending_filename, ni current_subject_file
+            self._show_error("Error: Cannot save metadata. No target file specified (new or existing).")
