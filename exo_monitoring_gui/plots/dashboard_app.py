@@ -4,21 +4,16 @@ import time
 import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox
+    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox, QAction
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QBrush
 import pyqtgraph as pg
 
-# Add parent directory to path
+# Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import with error handling
-try:
-    from data_generator.sensor_simulator import SensorSimulator
-except ImportError:
-    print("ERROR: Could not import SensorSimulator from data_generator")
-    raise
+from data_generator.sensor_simulator import SensorSimulator
 
 class DashboardApp(QMainWindow):
     def __init__(self):
@@ -26,6 +21,9 @@ class DashboardApp(QMainWindow):
         self.setWindowTitle("Data Monitoring Software")
         self.resize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
+        self._create_menubar()
+        # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
         self.simulator = SensorSimulator()
         self.init_ui()
@@ -37,9 +35,6 @@ class DashboardApp(QMainWindow):
         # Menu bar
         menubar = self.menuBar()
         menubar.setStyleSheet("background-color: white; color: black;")
-        file_menu = menubar.addMenu('File')
-        edit_menu = menubar.addMenu('Edit')
-        options_menu = menubar.addMenu('Options')
 
         # Central widget
         central_widget = QWidget()
@@ -157,6 +152,67 @@ class DashboardApp(QMainWindow):
         self.plots = {}
         self.plot_data = {}
 
+    def _create_action(self, text, slot=None, shortcut=None, icon=None, tip=None, checkable=False):
+        """Create a QAction with the given properties"""
+        action = QAction(text, self)
+        if icon:
+            action.setIcon(icon)
+        if shortcut:
+            action.setShortcut(shortcut)
+        if tip:
+            action.setToolTip(tip)
+            action.setStatusTip(tip)
+        if slot:
+            action.triggered.connect(slot)
+        if checkable:
+            action.setCheckable(True)
+        return action
+    
+    def exit(self):
+        QApplication.quit()
+
+    def show_about_dialog(self):
+        """Show information about the software"""
+        about_text = """
+        <h1>Data Monitoring Software</h1>
+        <p>Version 2.5.0</p>
+        <p>An advanced monitoring tool for exoskeleton data.</p>
+        <p>© 2025 Advanced Exoskeleton Research Laboratory</p>
+        <p>For help and documentation, please visit our website or contact support.</p>
+        """
+        
+        QMessageBox.about(self, "About Data Monitoring Software", about_text)
+
+    def return_to_main(self):
+        """Return to the main window"""
+        self.close()
+        from UI.main_window import MainApp
+        self.main_app = MainApp()
+        self.main_app.show()
+
+    def _create_menubar(self):
+        """Create the application menu bar"""
+        menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu('&File')
+        
+        # File menu actions
+        return_main_page = self._create_action("&Return to main page", self.return_to_main, "Ctrl+P",
+                                                  tip="Exit without saving")
+        exit_button = self._create_action("&Exit", self.exit, "Ctrl+Shift+Q",
+                                                  tip="Exit without saving")
+
+        file_menu.addAction(return_main_page)
+        file_menu.addAction(exit_button)
+        
+        # Help menu
+        help_menu = menubar.addMenu('&Help')
+        # Help menu actions
+        about_action = self._create_action("&About", self.show_about_dialog,
+                                         tip="About the application")
+        
+        help_menu.addAction(about_action)
     def show_sensors(self):
         # Afficher les capteurs et les connecter
         for i in range(self.connected_systems.topLevelItemCount()):
@@ -244,3 +300,8 @@ class DashboardApp(QMainWindow):
 
             plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
 
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    dashboard = DashboardApp()
+    dashboard.show()
+    sys.exit(app.exec_())
