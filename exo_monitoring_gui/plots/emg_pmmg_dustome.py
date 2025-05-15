@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import QTimer
 import pyqtgraph as pg
-from data_generater.sensor_simulator import SensorSimulator
+from data_generator.sensor_simulator import SensorSimulator
 
 class RealtimePlot(QMainWindow):
     def __init__(self):
