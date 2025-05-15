@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QHeaderView, QMessageBox, QWidget, QSplitter, QGridLayout, QScrollArea, QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QBrush
+from PyQt5.QtGui import QColor, QBrush, QFont
 from plots.model_3d_viewer import Model3DWidget
 import re
 
@@ -29,15 +29,16 @@ class MappingBadgesWidget(QWidget):
     def _color(self, typ):
         return {"IMU": "#2196F3", "EMG": "#4CAF50", "pMMG": "#FF9800"}.get(typ, "#888")
 
-class SensorMappingDialog(QDialog):
-    mappings_updated = pyqtSignal(dict, dict, dict)  # EMG, IMU, PMMG mappings
-
+class SimplifiedMappingDialog(QDialog):
+    """Interface simplifiée avec onglets pour le mapping des capteurs"""
+    mappings_updated = pyqtSignal(dict, dict, dict)  # EMG, IMU, pMMG mappings
+    
     def __init__(self, parent=None, current_mappings=None):
         super().__init__(parent)
-        self.setWindowTitle("Sensor Mapping Configuration")
-        # Largeur et hauteur ajustées pour être un peu moins large mais toujours confortable
-        self.resize(1350, 850)
-        self.setMinimumSize(1200, 800)
+        self.setWindowTitle("Configuration des capteurs sur le modèle 3D")
+        # Augmenter significativement la taille de la fenêtre
+        self.resize(1200, 900)  # Augmenté de 1000x700 à 1200x900
+        self.setMinimumSize(1100, 800)  # Augmenté de 900x650 à 1100x800
         
         # Store current mappings
         self.current_mappings = current_mappings or {
@@ -53,399 +54,522 @@ class SensorMappingDialog(QDialog):
             'pMMG': {}
         }
         
-        # Track selected body part
-        self.selected_body_part = None
+        self.setup_ui()
         
-        # Setup UI
-        self.init_ui()
-        
-    def init_ui(self):
+    def setup_ui(self):
         main_layout = QVBoxLayout()
         
-        # Tab widget for different sensor types
+        # Title
+        title = QLabel("Sensor Mapping Configuration")
+        title.setFont(QFont("Arial", 16, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title)
+
+        # Create tab widget
         self.tab_widget = QTabWidget()
         
         # Create tabs
         self.general_tab = self.create_general_tab()
-        self.emg_tab = self.create_sensor_specific_tab("EMG", 8)
-        self.imu_tab = self.create_sensor_specific_tab("IMU", 6)
-        self.pmmg_tab = self.create_sensor_specific_tab("pMMG", 8)
+        self.emg_tab = self.create_specific_tab("EMG", 8)
+        self.imu_tab = self.create_specific_tab("IMU", 6)
+        self.pmmg_tab = self.create_specific_tab("pMMG", 8)
         
         # Add tabs
-        self.tab_widget.addTab(self.general_tab, "General")
-        self.tab_widget.addTab(self.emg_tab, "EMG Configuration")
-        self.tab_widget.addTab(self.imu_tab, "IMU Configuration")
-        self.tab_widget.addTab(self.pmmg_tab, "pMMG Configuration")
+        self.tab_widget.addTab(self.general_tab, "General View")
+        self.tab_widget.addTab(self.emg_tab, "EMG")
+        self.tab_widget.addTab(self.imu_tab, "IMU")
+        self.tab_widget.addTab(self.pmmg_tab, "pMMG")
         
         main_layout.addWidget(self.tab_widget)
-        
+
+        # Summary of mappings with badges
+        badges_group = QGroupBox("Assignment Summary")
+        badges_layout = QVBoxLayout()
+        self.scroll_badges = QScrollArea()
+        self.scroll_badges.setWidgetResizable(True)
+        self.scroll_badges.setMinimumHeight(150)  # Add this line to ensure minimum height
+        all_mappings = {}
+        for sensor_type, mappings in self.current_mappings.items():
+            for sensor_id, body_part in mappings.items():
+                all_mappings[f"{sensor_type}{sensor_id}"] = body_part
+        self.badges_widget = MappingBadgesWidget(all_mappings, self)
+        self.scroll_badges.setWidget(self.badges_widget)
+        badges_layout.addWidget(self.scroll_badges)
+        badges_group.setLayout(badges_layout)
+        main_layout.addWidget(badges_group, 1)  # Add stretch factor 1 to give more space
+
         # Control buttons
         button_layout = QHBoxLayout()
-        self.save_button = QPushButton("Save Configuration")
-        self.save_button.clicked.connect(self.save_mappings)
-        self.reset_button = QPushButton("Reset to Default")
+        
+        self.reset_button = QPushButton("Reset to Default Values")
+        self.reset_button.setStyleSheet("padding: 8px 16px;")
         self.reset_button.clicked.connect(self.reset_to_default)
+        
+        self.confirm_button = QPushButton("Confirm")
+        self.confirm_button.setStyleSheet("padding: 8px 16px; font-weight: bold; background-color: #4CAF50; color: white;")
+        self.confirm_button.clicked.connect(self.confirm_mapping)
+        
         self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setStyleSheet("padding: 8px 16px;")
         self.cancel_button.clicked.connect(self.reject)
         
-        button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.reset_button)
+        button_layout.addStretch()
         button_layout.addWidget(self.cancel_button)
-        
+        button_layout.addWidget(self.confirm_button)
+
         main_layout.addLayout(button_layout)
-        
         self.setLayout(main_layout)
         
+        # Initialize combos with current mappings
+        self.load_current_mappings()
+
     def create_general_tab(self):
+        """Create general tab with 3D model and manual assignment"""
         tab = QWidget()
-        main_layout = QVBoxLayout(tab)
-
-        # 1. Modèle 3D centré en haut
+        layout = QVBoxLayout()
+        
+        # 3D Model
+        model_group = QGroupBox("3D Model")
+        model_layout = QVBoxLayout()
         self.general_model = Model3DWidget()
-        main_layout.addWidget(self.general_model, stretch=2)
-
-        # 2. Contrôles d’assignation dans un QGroupBox
-        controls_group = QGroupBox("Assign a Sensor to a Body Part")
-        controls_layout = QGridLayout()
-        controls_group.setLayout(controls_layout)
-
-        # Sélection de la partie du corps
-        controls_layout.addWidget(QLabel("Body part:"), 0, 0)
-        self.body_part_selector = QComboBox()
-        available_parts = self.general_model.get_available_body_parts()
-        readable_parts = [self._convert_model_part_to_ui(part) for part in available_parts]
-        part_mapping = dict(zip(readable_parts, available_parts))
-        self.body_part_selector.addItems(readable_parts)
-        self.body_part_selector.currentTextChanged.connect(
-            lambda text: self.select_body_part(part_mapping.get(text))
-        )
-        controls_layout.addWidget(self.body_part_selector, 0, 1)
-
-        # Type de capteur
-        controls_layout.addWidget(QLabel("Sensor type:"), 1, 0)
+        model_layout.addWidget(self.general_model)
+        model_group.setLayout(model_layout)
+        layout.addWidget(model_group, 3)
+        
+        # Manual assignment
+        assign_group = QGroupBox("Assign a Sensor")
+        assign_layout = QGridLayout()
+        
+        # Body part selection
+        assign_layout.addWidget(QLabel("Body part:"), 0, 0)
+        self.body_part_combo = QComboBox()
+        
+        # Upper body parts
+        upper_body = [
+            "Head", "Neck", "Torso",
+            "Left Deltoid", "Left Biceps", "Left Forearm", "Left Latissimus Dorsi", "Left Pectorals", "Left Hand",
+            "Right Deltoid", "Right Biceps", "Right Forearm", "Right Latissimus Dorsi", "Right Pectorals", "Right Hand"
+        ]
+        # Lower body parts
+        lower_body = [
+            "Hip", 
+            "Left Quadriceps", "Left Hamstrings", "Left Calves", "Left Gluteus", "Left Foot",
+            "Right Quadriceps", "Right Hamstrings", "Right Calves", "Right Gluteus", "Right Foot"
+        ]
+        
+        # Add all body parts
+        body_parts = upper_body + lower_body
+        self.body_part_combo.addItems(body_parts)
+        assign_layout.addWidget(self.body_part_combo, 0, 1)
+        
+        # Sensor type
+        assign_layout.addWidget(QLabel("Sensor type:"), 1, 0)  # Changed from French
         self.sensor_type_combo = QComboBox()
         self.sensor_type_combo.addItems(["EMG", "IMU", "pMMG"])
-        self.sensor_type_combo.currentTextChanged.connect(self.update_available_sensors)
-        controls_layout.addWidget(self.sensor_type_combo, 1, 1)
-
-        # Sélection du capteur
-        controls_layout.addWidget(QLabel("Sensor:"), 2, 0)
-        self.sensor_combo = QComboBox()
-        self.update_available_sensors(self.sensor_type_combo.currentText())
-        controls_layout.addWidget(self.sensor_combo, 2, 1)
-
-        # Bouton d’assignation
-        self.assign_button = QPushButton("Assign Sensor")
-        self.assign_button.clicked.connect(self.assign_sensor)
-        self.assign_button.setEnabled(False)
-        controls_layout.addWidget(self.assign_button, 3, 0, 1, 2)
-
-        # Partie sélectionnée
-        self.selected_part_label = QLabel("No body part selected")
-        self.selected_part_label.setStyleSheet("font-weight: bold;")
-        controls_layout.addWidget(self.selected_part_label, 4, 0, 1, 2)
-
-        main_layout.addWidget(controls_group, stretch=0)
-
-        # 3. Badges des mappings en bas
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        badges = MappingBadgesWidget(self.current_mappings["IMU"], self)
-        scroll.setWidget(badges)
-        main_layout.addWidget(scroll, stretch=1)
-
+        self.sensor_type_combo.currentTextChanged.connect(self.update_sensor_list)
+        assign_layout.addWidget(self.sensor_type_combo, 1, 1)
+        
+        # Sensor number
+        assign_layout.addWidget(QLabel("Sensor:"), 2, 0)  # Changed from French
+        self.sensor_id_combo = QComboBox()
+        assign_layout.addWidget(self.sensor_id_combo, 2, 1)
+        self.update_sensor_list("IMU")
+        
+        # Assignment button
+        self.manual_assign_button = QPushButton("Assign this Sensor")  # Changed from French
+        self.manual_assign_button.clicked.connect(self.manual_assign)
+        self.manual_assign_button.setStyleSheet("font-weight: bold;")
+        assign_layout.addWidget(self.manual_assign_button, 3, 0, 1, 2)
+        
+        assign_group.setLayout(assign_layout)
+        layout.addWidget(assign_group, 1)
+        
+        tab.setLayout(layout)
         return tab
-        
-    def create_sensor_specific_tab(self, sensor_type, num_sensors):
+
+    def create_specific_tab(self, sensor_type, num_sensors):
+        """Create a specific tab for each sensor type"""
         tab = QWidget()
-        layout = QHBoxLayout()
+        layout = QVBoxLayout()
         
-        # Left side - 3D Model
+        # Header
+        header = QLabel(f"{sensor_type} Sensor Configuration")  # Changed from French
+        header.setFont(QFont("Arial", 12, QFont.Bold))
+        header.setAlignment(Qt.AlignCenter)
+        layout.addWidget(header)
+        
+        # Split view: 3D model on left, controls on right
+        splitter = QSplitter(Qt.Horizontal)
+        
+        # 3D Model
         model_widget = Model3DWidget()
+        splitter.addWidget(model_widget)
         
-        # Right side - Sensor specific controls
+        # Store model reference
+        setattr(self, f"{sensor_type.lower()}_model", model_widget)
+        
+        # Assignment controls
         control_widget = QWidget()
         control_layout = QVBoxLayout()
         
         # Instructions
-        instructions = QLabel(f"Assign {sensor_type} sensors to body parts")
+        instructions = QLabel(f"Assign {sensor_type} sensors to different body parts")  # Changed from French
         instructions.setWordWrap(True)
         control_layout.addWidget(instructions)
         
-        # Selected part info (same as general tab)
-        part_label = QLabel("No body part selected")
-        part_label.setStyleSheet("font-weight: bold;")
-        control_layout.addWidget(part_label)
+        # Create controls for each sensor
+        control_grid = QGridLayout()
         
-        # Body part selector (workaround)
-        body_part_label = QLabel("Select body part:")
-        control_layout.addWidget(body_part_label)
+        # ComboBox storage
+        self.sensor_combos = getattr(self, "sensor_combos", {})
+        self.sensor_combos[sensor_type] = {}
         
-        body_part_combo = QComboBox()
-        available_parts = model_widget.get_available_body_parts()
-        readable_parts = [self._convert_model_part_to_ui(part) for part in available_parts]
-        part_mapping = dict(zip(readable_parts, available_parts))
-        body_part_combo.addItems(readable_parts)
-        control_layout.addWidget(body_part_combo)
+        # Upper body parts
+        upper_body = [
+            "Head", "Neck", "Torso",
+            "Left Deltoid", "Left Biceps", "Left Forearm", "Left Latissimus Dorsi", "Left Pectorals", "Left Hand",
+            "Right Deltoid", "Right Biceps", "Right Forearm", "Right Latissimus Dorsi", "Right Pectorals", "Right Hand"
+        ]
+        # Lower body parts
+        lower_body = [
+            "Hip", 
+            "Left Quadriceps", "Left Hamstrings", "Left Calves", "Left Gluteus", "Left Foot",
+            "Right Quadriceps", "Right Hamstrings", "Right Calves", "Right Gluteus", "Right Foot"
+        ]
         
-        # Sensor selection
-        sensor_label = QLabel(f"Select {sensor_type} sensor:")
-        control_layout.addWidget(sensor_label)
+        body_parts = ["-- Not assigned --"] + upper_body + lower_body
         
-        sensor_combo = QComboBox()
         for i in range(1, num_sensors + 1):
-            sensor_combo.addItem(f"{sensor_type}{i}")
-        control_layout.addWidget(sensor_combo)
+            label = QLabel(f"{sensor_type} {i}")
+            label.setStyleSheet(f"color: {self._get_color_for_type(sensor_type)};")
+            
+            combo = QComboBox()
+            combo.addItems(body_parts)
+            combo.currentTextChanged.connect(lambda text, s=sensor_type, id=i: self.on_combo_changed(s, id, text))
+            
+            control_grid.addWidget(label, i-1, 0)
+            control_grid.addWidget(combo, i-1, 1)
+            
+            self.sensor_combos[sensor_type][i] = combo
         
-        # Assign button
-        assign_button = QPushButton(f"Assign {sensor_type} Sensor")
-        control_layout.addWidget(assign_button)
+        control_layout.addLayout(control_grid)
+        control_layout.addStretch()
         
-        # Current mappings table for this sensor type
-        mappings_group = QGroupBox(f"Current {sensor_type} Mappings")
-        mappings_layout = QVBoxLayout()
-        mappings_table = QTableWidget(0, 2)  # Sensor ID, Body Part
-        mappings_table.setHorizontalHeaderLabels(["Sensor", "Body Part"])
-        mappings_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        mappings_table.setMinimumHeight(200)  # Ajouter cette ligne
-        mappings_layout.addWidget(mappings_table)
-        mappings_group.setLayout(mappings_layout)
-        control_layout.addWidget(mappings_group)
-        
-        # Store references to widgets for each tab
-        setattr(self, f"{sensor_type.lower()}_model", model_widget)
-        setattr(self, f"{sensor_type.lower()}_part_label", part_label)
-        setattr(self, f"{sensor_type.lower()}_part_combo", body_part_combo)
-        setattr(self, f"{sensor_type.lower()}_sensor_combo", sensor_combo)
-        setattr(self, f"{sensor_type.lower()}_assign_button", assign_button)
-        setattr(self, f"{sensor_type.lower()}_mappings_table", mappings_table)
-        
-        # Connect signals
-        body_part_combo.currentTextChanged.connect(
-            lambda text, st=sensor_type: self.select_specific_body_part(part_mapping.get(text), st)
-        )
-        assign_button.clicked.connect(
-            lambda checked, st=sensor_type: self.assign_specific_sensor(st)
-        )
-        
-        # Update mappings table
-        self.update_specific_mappings_table(sensor_type)
+        # Reset button for this sensor type
+        reset_button = QPushButton(f"Reset {sensor_type}")  # Changed from French
+        reset_button.clicked.connect(lambda: self.reset_sensor_type(sensor_type))
+        control_layout.addWidget(reset_button)
         
         control_widget.setLayout(control_layout)
-        
-        # Create splitter
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(model_widget)
         splitter.addWidget(control_widget)
-        splitter.setSizes([650, 550])  # Augmenté de [500, 400]
+        
+        # Set initial sizes
+        splitter.setSizes([int(splitter.width() * 0.6), int(splitter.width() * 0.4)])
         
         layout.addWidget(splitter)
         tab.setLayout(layout)
-        
         return tab
-        
-    def select_body_part(self, part_name):
-        self.selected_body_part = part_name
-        self.selected_part_label.setText(f"Selected: {self._convert_model_part_to_ui(part_name)}")
-        self.assign_button.setEnabled(part_name is not None)
-        
-    def select_specific_body_part(self, part_name, sensor_type):
-        """Handle selection of a body part in a specific sensor tab"""
-        part_label = getattr(self, f"{sensor_type.lower()}_part_label")
-        part_label.setText(f"Selected: {self._convert_model_part_to_ui(part_name)}")
-        
-    def update_available_sensors(self, sensor_type=None):
-        """Update the available sensors based on the selected sensor type"""
-        if sensor_type is None:
-            sensor_type = self.sensor_type_combo.currentText()
-        self.sensor_combo.clear()
-        if sensor_type == "EMG":
-            for i in range(1, 9):  # EMG1-EMG8
-                self.sensor_combo.addItem(f"EMG{i}")
-        elif sensor_type == "IMU":
-            for i in range(1, 7):  # IMU1-IMU6
-                self.sensor_combo.addItem(f"IMU{i}")
-        elif sensor_type == "pMMG":
-            for i in range(1, 9):  # pMMG1-pMMG8
-                self.sensor_combo.addItem(f"pMMG{i}")
-                
-    def assign_sensor(self):
-        if not self.selected_body_part:
-            QMessageBox.warning(self, "Warning", "Please select a body part first")
-            return
 
+    def update_sensor_list(self, sensor_type):
+        """Mettre à jour la liste des capteurs disponibles en fonction du type sélectionné"""
+        self.sensor_id_combo.clear()
+        num_sensors = 8 if sensor_type in ["EMG", "pMMG"] else 6  # IMU a 6 capteurs, les autres 8
+        for i in range(1, num_sensors + 1):
+            self.sensor_id_combo.addItem(f"{i}")
+
+    def manual_assign(self):
+        """Manually assign a sensor from the general tab"""
+        body_part_ui = self.body_part_combo.currentText()
         sensor_type = self.sensor_type_combo.currentText()
-        sensor_id_text = self.sensor_combo.currentText()
-        # Correction extraction du numéro
-        match = re.match(rf"{sensor_type}(\d+)", sensor_id_text)
-        if not match:
-            QMessageBox.warning(self, "Warning", "Invalid sensor selection")
-            return
-        sensor_id = int(match.group(1))
-
-        # Update the mapping
-        self.current_mappings[sensor_type][sensor_id] = self.selected_body_part
-
-        # Update tables
-        self.update_general_mappings_table()
-        self.update_specific_mappings_table(sensor_type)
-
-        # Update the 3D model visualization
-        if sensor_type == "IMU":
-            self.general_model.map_imu_to_body_part(sensor_id, self.selected_body_part)
-            self.imu_model.map_imu_to_body_part(sensor_id, self.selected_body_part)
-
-        # Update badges in the general tab
-        self.update_badges()
-
-        QMessageBox.information(
-            self,
-            "Sensor Assigned",
-            f"{sensor_type}{sensor_id} has been assigned to {self._convert_model_part_to_ui(self.selected_body_part)}"
-        )
+        sensor_id = int(self.sensor_id_combo.currentText())
         
-    def assign_specific_sensor(self, sensor_type):
-        """Assign a sensor in a specific sensor tab"""
-        part_combo = getattr(self, f"{sensor_type.lower()}_part_combo")
-        sensor_combo = getattr(self, f"{sensor_type.lower()}_sensor_combo")
+        body_part = self._convert_ui_to_model_part(body_part_ui)
         
-        part_text = part_combo.currentText()
-        sensor_text = sensor_combo.currentText()
-        
-        # Get the actual body part name and sensor ID
-        available_parts = getattr(self, f"{sensor_type.lower()}_model").get_available_body_parts()
-        readable_parts = [self._convert_model_part_to_ui(part) for part in available_parts]
-        part_mapping = dict(zip(readable_parts, available_parts))
-        
-        body_part = part_mapping.get(part_text)
-        sensor_id = int(sensor_text[len(sensor_type):])
-        
-        # Update the mapping
+        # Update mapping
         self.current_mappings[sensor_type][sensor_id] = body_part
         
-        # Update tables
-        self.update_general_mappings_table()
-        self.update_specific_mappings_table(sensor_type)
+        # Update combos in specific tab
+        if sensor_type in self.sensor_combos and sensor_id in self.sensor_combos[sensor_type]:
+            combo = self.sensor_combos[sensor_type][sensor_id]
+            index = combo.findText(body_part_ui)
+            if index >= 0:
+                combo.setCurrentIndex(index)
         
-        # Update the 3D model visualization
+        # Update 3D model
         if sensor_type == "IMU":
             self.general_model.map_imu_to_body_part(sensor_id, body_part)
             self.imu_model.map_imu_to_body_part(sensor_id, body_part)
         
-        # Update badges in the general tab
+        # Update badges
         self.update_badges()
-
+        
+        # Confirmation message
         QMessageBox.information(
             self, 
             "Sensor Assigned", 
-            f"{sensor_type}{sensor_id} has been assigned to {part_text}"
+            f"{sensor_type} {sensor_id} has been assigned to {body_part_ui}"
         )
+
+    def _get_color_for_type(self, typ):
+        return {"IMU": "#2196F3", "EMG": "#4CAF50", "pMMG": "#FF9800"}.get(typ, "#888")
+
+    def load_current_mappings(self):
+        """Charge les mappings actuels dans les combos"""
+        for sensor_type, mappings in self.current_mappings.items():
+            if sensor_type not in self.sensor_combos:
+                continue
+                
+            for sensor_id, body_part in mappings.items():
+                if sensor_id in self.sensor_combos[sensor_type]:
+                    combo = self.sensor_combos[sensor_type][sensor_id]
+                    body_part_ui = self._convert_model_part_to_ui(body_part)
+                    index = combo.findText(body_part_ui)
+                    if index >= 0:
+                        combo.setCurrentIndex(index)
         
-    def update_general_mappings_table(self):
-        """Update the general mappings table with all current mappings"""
-        self.general_mappings_table.setRowCount(0)
+        # Mettre à jour tous les modèles 3D
+        for sensor_id, body_part in self.current_mappings["IMU"].items():
+            self.general_model.map_imu_to_body_part(sensor_id, body_part)
+            self.imu_model.map_imu_to_body_part(sensor_id, body_part)
+
+    def on_combo_changed(self, sensor_type, sensor_id, body_part_ui):
+        """Called when a combo is changed in a specific tab"""
+        if body_part_ui == "-- Not assigned --":
+            if sensor_id in self.current_mappings[sensor_type]:
+                del self.current_mappings[sensor_type][sensor_id]
+        else:
+            body_part = self._convert_ui_to_model_part(body_part_ui)
+            self.current_mappings[sensor_type][sensor_id] = body_part
+            
+            # Update 3D model for IMU
+            if sensor_type == "IMU":
+                self.general_model.map_imu_to_body_part(sensor_id, body_part)
+                self.imu_model.map_imu_to_body_part(sensor_id, body_part)
         
-        row = 0
+        # Update badges
+        self.update_badges()
+
+    def update_badges(self):
+        """Mettre à jour l'affichage des badges"""
+        old_badges = self.scroll_badges.widget()
+        if old_badges:
+            old_badges.deleteLater()
+        
+        all_mappings = {}
         for sensor_type, mappings in self.current_mappings.items():
             for sensor_id, body_part in mappings.items():
-                self.general_mappings_table.insertRow(row)
-                self.general_mappings_table.setItem(row, 0, QTableWidgetItem(sensor_type))
-                self.general_mappings_table.setItem(row, 1, QTableWidgetItem(str(sensor_id)))
-                self.general_mappings_table.setItem(row, 2, 
-                                                  QTableWidgetItem(self._convert_model_part_to_ui(body_part)))
-                row += 1
+                all_mappings[f"{sensor_type}{sensor_id}"] = body_part
                 
-    def update_specific_mappings_table(self, sensor_type):
-        """Update a specific sensor type mappings table"""
-        mappings_table = getattr(self, f"{sensor_type.lower()}_mappings_table")
-        mappings_table.setRowCount(0)
+        new_badges = MappingBadgesWidget(all_mappings, self)
+        self.scroll_badges.setWidget(new_badges)
+
+    def reset_sensor_type(self, sensor_type):
+        """Reset a specific sensor type"""
+        default_values = {}
+        if sensor_type == "IMU":
+            default_values = {
+                1: 'torso',
+                2: 'forearm_l',
+                3: 'forearm_r',
+                4: 'calves_l',
+                5: 'calves_r',
+                6: 'head'
+            }
+        elif sensor_type == "EMG":
+            default_values = {
+                1: 'biceps_l',
+                2: 'biceps_r',
+                3: 'quadriceps_l', 
+                4: 'quadriceps_r'
+            }
+        elif sensor_type == "pMMG":
+            default_values = {
+                1: 'deltoid_l',
+                2: 'deltoid_r'
+            }
         
-        row = 0
-        for sensor_id, body_part in self.current_mappings[sensor_type].items():
-            mappings_table.insertRow(row)
-            mappings_table.setItem(row, 0, QTableWidgetItem(f"{sensor_type}{sensor_id}"))
-            mappings_table.setItem(row, 1, 
-                                 QTableWidgetItem(self._convert_model_part_to_ui(body_part)))
-            row += 1
-            
-    def update_badges(self):
-        """Mettre à jour les badges dans l'onglet général avec tous les mappings combinés"""
-        scroll = self.general_tab.findChild(QScrollArea)
-        if scroll:
-            old_badges = scroll.widget()
-            if old_badges:
-                old_badges.deleteLater()
-            
-            # Créer de nouveaux badges avec tous les mappings combinés
-            all_mappings = {}
-            for sensor_type, mappings in self.current_mappings.items():
-                for sensor_id, body_part in mappings.items():
-                    all_mappings[f"{sensor_type}{sensor_id}"] = body_part
-                    
-            new_badges = MappingBadgesWidget(all_mappings, self)
-            scroll.setWidget(new_badges)
-            
-    def save_mappings(self):
-        """Save the mappings and close the dialog"""
+        # Update mapping
+        self.current_mappings[sensor_type] = default_values.copy()
+        
+        # Update combos
+        if sensor_type in self.sensor_combos:
+            for sensor_id, combo in self.sensor_combos[sensor_type].items():
+                if sensor_id in default_values:
+                    body_part_ui = self._convert_model_part_to_ui(default_values[sensor_id])
+                    index = combo.findText(body_part_ui)
+                    if index >= 0:
+                        combo.setCurrentIndex(index)
+                else:
+                    combo.setCurrentIndex(0)  # "-- Not assigned --"
+        
+        # Update 3D model
+        if sensor_type == "IMU":
+            for sensor_id, body_part in default_values.items():
+                self.general_model.map_imu_to_body_part(sensor_id, body_part)
+                self.imu_model.map_imu_to_body_part(sensor_id, body_part)
+        
+        # Update badges
+        self.update_badges()
+        
+        QMessageBox.information(
+            self, 
+            "Reset", 
+            f"{sensor_type} sensors have been reset."
+        )
+
+    def confirm_mapping(self):
+        """Confirm and save mappings"""
+        # Mappings are already updated in self.current_mappings
+        
+        # Emit signal with mappings
         self.mappings_updated.emit(
             self.current_mappings["EMG"],
             self.current_mappings["IMU"],
             self.current_mappings["pMMG"]
         )
-        self.accept()
         
+        # Show summary
+        summary = self.generate_mapping_summary(self.current_mappings)
+        QMessageBox.information(self, "Mapping Confirmed", summary)
+        
+        self.accept()
+
+    def generate_mapping_summary(self, mappings):
+        """Generate a textual summary of mappings"""
+        summary = ""
+        for sensor_type, sensors in mappings.items():
+            if sensors:  # If sensors are mapped for this type
+                summary += f"\n{sensor_type}:\n"
+                for sensor_id, body_part in sensors.items():
+                    summary += f"  {sensor_type}{sensor_id} → {self._convert_model_part_to_ui(body_part)}\n"
+        
+        if not summary:
+            return "No sensors have been assigned."
+        
+        return summary
+
     def reset_to_default(self):
-        """Reset mappings to default values"""
+        """Reset all mappings to default values"""
         default_mappings = {
-            'EMG': {},
+            'EMG': {
+                1: 'biceps_l',
+                2: 'biceps_r',
+                3: 'quadriceps_l', 
+                4: 'quadriceps_r'
+            },
             'IMU': {
                 1: 'torso',
-                2: 'left_elbow',
-                3: 'right_elbow',
-                4: 'left_knee',
-                5: 'right_knee',
+                2: 'forearm_l',
+                3: 'forearm_r',
+                4: 'calves_l',
+                5: 'calves_r',
                 6: 'head'
             },
-            'pMMG': {}
+            'pMMG': {
+                1: 'deltoid_l',
+                2: 'deltoid_r'
+            }
         }
         
         self.current_mappings = default_mappings
         
-        # Update all tables
-        self.update_general_mappings_table()
-        for sensor_type in ["EMG", "IMU", "pMMG"]:
-            self.update_specific_mappings_table(sensor_type)
-            
-        # Update 3D models
-        for imu_id, body_part in default_mappings["IMU"].items():
-            self.general_model.map_imu_to_body_part(imu_id, body_part)
-            self.imu_model.map_imu_to_body_part(imu_id, body_part)
-            
-        QMessageBox.information(self, "Reset Mappings", "Mappings have been reset to default values")
+        # Update combos
+        self.load_current_mappings()
         
+        # Update badges
+        self.update_badges()
+        
+        QMessageBox.information(self, "Reset", "All mappings have been reset to default values.")
+
     def _convert_model_part_to_ui(self, model_part):
-        """Convert model part names to user-friendly UI names"""
+        """Convert a model part name to a readable UI name"""
         if not model_part:
-            return "Not assigned"
+            return "-- Not assigned --"
             
         mapping = {
+            # Head/Neck
             'head': 'Head',
             'neck': 'Neck',
+            
+            # Torso
             'torso': 'Torso',
-            'left_shoulder': 'Left Shoulder',
-            'right_shoulder': 'Right Shoulder',
-            'left_elbow': 'Left Elbow',
-            'right_elbow': 'Right Elbow',
+            
+            # Upper body - Left side
+            'deltoid_l': 'Left Deltoid',
+            'biceps_l': 'Left Biceps',
+            'forearm_l': 'Left Forearm',
+            'dorsalis_major_l': 'Left Latissimus Dorsi',
+            'pectorals_l': 'Left Pectorals',
             'left_hand': 'Left Hand',
+            
+            # Upper body - Right side
+            'deltoid_r': 'Right Deltoid',
+            'biceps_r': 'Right Biceps',
+            'forearm_r': 'Right Forearm', 
+            'dorsalis_major_r': 'Right Latissimus Dorsi',
+            'pectorals_r': 'Right Pectorals',
             'right_hand': 'Right Hand',
+            
+            # Lower body
             'hip': 'Hip',
-            'left_knee': 'Left Knee',
-            'right_knee': 'Right Knee',
+            'quadriceps_l': 'Left Quadriceps',
+            'quadriceps_r': 'Right Quadriceps',
+            'ishcio_hamstrings_l': 'Left Hamstrings',
+            'ishcio_hamstrings_r': 'Right Hamstrings',
+            'calves_l': 'Left Calves',
+            'calves_r': 'Right Calves',
+            'glutes_l': 'Left Gluteus',
+            'glutes_r': 'Right Gluteus',
             'left_foot': 'Left Foot',
             'right_foot': 'Right Foot'
         }
         return mapping.get(model_part, model_part)
 
+    def _convert_ui_to_model_part(self, ui_name):
+        """Convert a UI name to a model part name"""
+        mapping = {
+            # Head/Neck
+            'Head': 'head',
+            'Neck': 'neck',
+            
+            # Torso
+            'Torso': 'torso',
+            
+            # Upper body - Left side
+            'Left Deltoid': 'deltoid_l',
+            'Left Biceps': 'biceps_l',
+            'Left Forearm': 'forearm_l',
+            'Left Latissimus Dorsi': 'dorsalis_major_l',
+            'Left Pectorals': 'pectorals_l',
+            'Left Hand': 'left_hand',
+            
+            # Upper body - Right side
+            'Right Deltoid': 'deltoid_r',
+            'Right Biceps': 'biceps_r',
+            'Right Forearm': 'forearm_r',
+            'Right Latissimus Dorsi': 'dorsalis_major_r',
+            'Right Pectorals': 'pectorals_r',
+            'Right Hand': 'right_hand',
+            
+            # Lower body
+            'Hip': 'hip',
+            'Left Quadriceps': 'quadriceps_l',
+            'Right Quadriceps': 'quadriceps_r',
+            'Left Hamstrings': 'ishcio_hamstrings_l',
+            'Right Hamstrings': 'ishcio_hamstrings_r',
+            'Left Calves': 'calves_l',
+            'Right Calves': 'calves_r',
+            'Left Gluteus': 'glutes_l',
+            'Right Gluteus': 'glutes_r',
+            'Left Foot': 'left_foot',
+            'Right Foot': 'right_foot'
+        }
+        return mapping.get(ui_name, ui_name.lower().replace(' ', '_'))
+
+
+# Renommer la classe existante pour éviter les conflits
+SensorMappingDialog = SimplifiedMappingDialog
 
 if __name__ == '__main__':
     # For testing
