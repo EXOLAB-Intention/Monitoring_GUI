@@ -282,8 +282,16 @@ class MainApp(QMainWindow):
                 with h5py.File(filename, 'w') as f:
                     f.attrs['subject_created'] = True
                     f.attrs['creation_date'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    f.create_group('metadata')
-                    f.create_group('trials')
+                    # Supprimer la création des groupes metadata et trials
+                    # f.create_group('metadata')
+                    # f.create_group('trials')
+
+                    # Créer la structure de groupes pour les données de capteurs
+                    sensor_group = f.create_group('Sensor')
+                    sensor_group.create_group('EMG')
+                    sensor_group.create_group('IMU')
+                    sensor_group.create_group('LABEL')
+                    sensor_group.create_group('Time')
 
                 self.current_subject_file = filename
                 self.modified = False
