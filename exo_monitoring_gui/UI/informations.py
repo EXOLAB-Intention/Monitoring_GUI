@@ -132,7 +132,7 @@ class InformationWindow(QDialog):
     def _load_existing_data(self):
         try:
             data, image_path = load_metadata(self.subject_file)
-            
+            print(data)
             for key, widget in self.input_fields.items():
                 if key in data:
                     if isinstance(widget, QLineEdit):

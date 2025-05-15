@@ -18,6 +18,7 @@ def load_metadata(subject_file):
         with h5py.File(subject_file, 'r') as f:
             root_attrs = dict(f.attrs)
             for key, value in root_attrs.items():
+                print(key)
                 if key.startswith("participant_"):
                     data[key] = value
                 # Recherche de image_path à la racine, préfixé ou non
@@ -26,14 +27,6 @@ def load_metadata(subject_file):
                 elif key == "participant_image_path": # Priorité à participant_image_path
                     image_path = value
             
-            # Si image_path a été trouvé via "participant_image_path", 
-            # il est déjà dans 'data'. S'il a été trouvé via "image_path",
-            # il faut s'assurer qu'il n'y a pas de conflit ou de redondance.
-            # La logique ci-dessus donne la priorité à "participant_image_path"
-            # et ensuite à "image_path".
-
-            # La variable 'data' contient maintenant tous les attributs 'participant_*'.
-            # 'image_path' contient le chemin de l'image trouvé.
 
     except Exception as e:
         print(f"Error loading metadata from {subject_file}: {e}")
@@ -41,10 +34,6 @@ def load_metadata(subject_file):
     return data, image_path
 
 def save_metadata(subject_file, data: dict):
-    """Save metadata to an HDF5 file.
-    Detects if the file uses the new structure (participant_ attributes at root)
-    or old structure (/metadata group) and saves accordingly.
-    """
     try:
         with h5py.File(subject_file, 'a') as f:
             # Écrire toujours à la racine

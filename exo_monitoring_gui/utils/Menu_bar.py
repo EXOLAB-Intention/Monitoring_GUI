@@ -55,7 +55,7 @@ class MainBar:
                 self.main_app.statusBar().showMessage(f"New subject file created: {os.path.basename(filename)}")
 
                 # Display information window to collect metadata
-                self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file)
+                self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file)                
                 self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
 
                 def closeEvent(event):
