@@ -328,13 +328,17 @@ class Model3DViewer(QGLWidget):
         return self.imu_mapping.copy()
         
     def __del__(self):
-        """Nettoyer les ressources OpenGL"""
-        if hasattr(self, 'quadric') and self.quadric:
-            gluDeleteQuadric(self.quadric)
-            self.quadric = None
-        if hasattr(self, 'display_list') and self.display_list is not None:
-            glDeleteLists(self.display_list, 1)
-            self.display_list = None
+        """Clean up OpenGL resources when object is destroyed."""
+        try:
+            # Only delete OpenGL resources if the context is valid
+            if self.isValid() and self.context().isValid():
+                self.makeCurrent()
+                if hasattr(self, 'display_list') and self.display_list:
+                    glDeleteLists(self.display_list, 1)
+                self.doneCurrent()
+        except Exception as e:
+            # Silently ignore errors during cleanup
+            pass
 
 class Model3DWidget(QWidget):
     def __init__(self, parent=None):
@@ -379,6 +383,6 @@ if __name__ == '__main__':
     sensor_id = 1
     selected_body_part = 'torso'
     window.model_viewer.map_imu_to_body_part(sensor_id, selected_body_part)
-    self.assign_button.clicked.connect(self.assign_sensor)
-    self.assign_button.setEnabled(True)
+    window.model_viewer.assign_button.clicked.connect(window.model_viewer.assign_sensor)
+
     sys.exit(app.exec_())
