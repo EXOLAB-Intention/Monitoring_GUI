@@ -131,21 +131,41 @@ class InformationWindow(QDialog):
 
     def _load_existing_data(self):
         try:
-            data, image_path = load_metadata(self.subject_file)
-            print(data)
-            for key, widget in self.input_fields.items():
-                if key in data:
+            # data_from_file contiendra les clés au format "participant_nom", "participant_age", etc.
+            # et "participant_image_path" si une image est définie.
+            # image_file_path sera la valeur de "participant_image_path" ou None.
+            data_from_file, image_file_path = load_metadata(self.subject_file)
+            
+            if not data_from_file:
+                print(f"Avertissement : Aucune métadonnée de participant n'a été chargée depuis {self.subject_file}")
+                # Optionnel: Afficher un message à l'utilisateur si aucune donnée n'est trouvée
+                # QMessageBox.warning(self, "Chargement des données", f"Aucune métadonnée de participant trouvée dans le fichier {os.path.basename(self.subject_file)}.")
+
+            for field_display_key, widget in self.input_fields.items():
+                # field_display_key est "Name", "Last Name", "Age", "Weight (kg)", etc.
+                # Construire la clé attendue dans data_from_file (ex: "participant_name")
+                normalized_participant_key = f"participant_{field_display_key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
+                
+                if normalized_participant_key in data_from_file:
+                    value_to_set = data_from_file[normalized_participant_key]
                     if isinstance(widget, QLineEdit):
-                        widget.setText(str(data[key]))
-                    elif isinstance(widget, QTextEdit):
-                        widget.setPlainText(str(data[key]))
+                        widget.setText(str(value_to_set))
+                    elif isinstance(widget, QTextEdit): # Pour le champ "Description"
+                        widget.setPlainText(str(value_to_set))
 
-            if image_path and os.path.exists(image_path):
-                self.image_area.load_image(image_path)
+            # Gérer le chemin de l'image. `image_file_path` est directement retourné par `load_metadata`
+            # et correspond à `data_from_file.get("participant_image_path")`
+            if image_file_path and os.path.exists(image_file_path):
+                self.image_area.load_image(image_file_path)
+            # else:
+                # self.image_area.clear_image() # Option pour réinitialiser si aucun chemin d'image
 
-            self._check_required_fields()
+            self._check_required_fields() # Mettre à jour l'état des boutons, etc.
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error loading data: {str(e)}")
+            import traceback
+            error_message = f"Erreur lors du chargement des données dans le formulaire : {str(e)}\n\n{traceback.format_exc()}"
+            QMessageBox.critical(self, "Erreur de chargement", error_message)
+            print(error_message)
 
     def _get_form_data(self):
         print("Collecting form data...")

@@ -20,13 +20,21 @@ def load_metadata(subject_file):
             for key, value in root_attrs.items():
                 print(key)
                 if key.startswith("participant_"):
-                    data[key] = value
-                # Recherche de image_path à la racine, préfixé ou non
-                if key == "image_path" and image_path is None: # Prend image_path s'il n'a pas déjà été pris par participant_image_path
-                    image_path = value
-                elif key == "participant_image_path": # Priorité à participant_image_path
+                    # Stocker directement la clé telle quelle, par exemple "participant_name"
+                    data[key] = value 
+                    # Si la clé est spécifiquement "participant_image_path", on la retient aussi pour image_path
+                    if key == "participant_image_path":
+                        image_path = value
+                # Gérer aussi le cas où "image_path" est à la racine et n'est pas encore défini par "participant_image_path"
+                elif key == "image_path" and image_path is None:
                     image_path = value
             
+            # Après avoir parcouru tous les attributs, si image_path a été trouvé (soit par "image_path", soit par "participant_image_path"),
+            # s'assurer qu'il est bien dans 'data' sous la clé standard "participant_image_path".
+            # Cela est utile si "image_path" a été trouvé mais pas "participant_image_path", 
+            # ou pour s'assurer que la valeur de "participant_image_path" (si présente) est prioritaire et stockée.
+            if image_path is not None:
+                data["participant_image_path"] = image_path
 
     except Exception as e:
         print(f"Error loading metadata from {subject_file}: {e}")
