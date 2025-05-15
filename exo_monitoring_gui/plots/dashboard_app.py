@@ -190,14 +190,33 @@ class DashboardApp(QMainWindow):
             self.group_plot_data[group] = {}
 
     def update_matched_part(self, text):
-        # Update Matched Part options based on Kinematic Model selection
+        """Update Matched Part options based on Kinematic Model selection"""
         self.matched_part_combo.clear()
+        
         if text == "Upper body w/o head":
-            self.matched_part_combo.addItems(["Pectorals", "Deltoid", "Biceps", "Forearm", "Trapezius", "Latissimus Dorsi"])
+            self.matched_part_combo.addItems([
+                "Left Deltoid", "Right Deltoid",
+                "Left Biceps", "Right Biceps", 
+                "Left Forearm", "Right Forearm", 
+                "Left Latissimus Dorsi", "Right Latissimus Dorsi",
+                "Left Pectorals", "Right Pectorals"
+            ])
         elif text == "Upper body w/ head":
-            self.matched_part_combo.addItems(["Head", "Pectorals", "Deltoid", "Biceps", "Forearm", "Trapezius", "Latissimus Dorsi"])
+            self.matched_part_combo.addItems([
+                "Head", "Neck", 
+                "Left Deltoid", "Right Deltoid",
+                "Left Biceps", "Right Biceps", 
+                "Left Forearm", "Right Forearm", 
+                "Left Latissimus Dorsi", "Right Latissimus Dorsi",
+                "Left Pectorals", "Right Pectorals"
+            ])
         elif text == "Lower body":
-            self.matched_part_combo.addItems(["Quadriceps", "Hamstrings", "Calves", "Gluteus"])
+            self.matched_part_combo.addItems([
+                "Left Quadriceps", "Right Quadriceps", 
+                "Left Hamstrings", "Right Hamstrings", 
+                "Left Calves", "Right Calves", 
+                "Left Gluteus", "Right Gluteus"
+            ])
 
     def update_matched_sensors(self, text):
         if not text:

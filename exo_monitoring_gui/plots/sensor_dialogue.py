@@ -130,7 +130,7 @@ class SimplifiedMappingDialog(QDialog):
         layout = QVBoxLayout()
         
         # 3D Model
-        model_group = QGroupBox("3D Model")  # Changed from French
+        model_group = QGroupBox("3D Model")
         model_layout = QVBoxLayout()
         self.general_model = Model3DWidget()
         model_layout.addWidget(self.general_model)
@@ -138,15 +138,28 @@ class SimplifiedMappingDialog(QDialog):
         layout.addWidget(model_group, 3)
         
         # Manual assignment
-        assign_group = QGroupBox("Assign a Sensor")  # Changed from French
+        assign_group = QGroupBox("Assign a Sensor")
         assign_layout = QGridLayout()
         
         # Body part selection
-        assign_layout.addWidget(QLabel("Body part:"), 0, 0)  # Changed from French
+        assign_layout.addWidget(QLabel("Body part:"), 0, 0)
         self.body_part_combo = QComboBox()
-        body_parts = ["Head", "Neck", "Torso", "Left Shoulder", "Right Shoulder", 
-                     "Left Elbow", "Right Elbow", "Left Hand", "Right Hand", 
-                     "Hip", "Left Knee", "Right Knee", "Left Foot", "Right Foot"]
+        
+        # Upper body parts
+        upper_body = [
+            "Head", "Neck", "Torso",
+            "Left Deltoid", "Left Biceps", "Left Forearm", "Left Latissimus Dorsi", "Left Pectorals", "Left Hand",
+            "Right Deltoid", "Right Biceps", "Right Forearm", "Right Latissimus Dorsi", "Right Pectorals", "Right Hand"
+        ]
+        # Lower body parts
+        lower_body = [
+            "Hip", 
+            "Left Quadriceps", "Left Hamstrings", "Left Calves", "Left Gluteus", "Left Foot",
+            "Right Quadriceps", "Right Hamstrings", "Right Calves", "Right Gluteus", "Right Foot"
+        ]
+        
+        # Add all body parts
+        body_parts = upper_body + lower_body
         self.body_part_combo.addItems(body_parts)
         assign_layout.addWidget(self.body_part_combo, 0, 1)
         
@@ -212,9 +225,20 @@ class SimplifiedMappingDialog(QDialog):
         self.sensor_combos = getattr(self, "sensor_combos", {})
         self.sensor_combos[sensor_type] = {}
         
-        body_parts = ["-- Not assigned --", "Head", "Neck", "Torso", "Left Shoulder", "Right Shoulder", 
-                     "Left Elbow", "Right Elbow", "Left Hand", "Right Hand", 
-                     "Hip", "Left Knee", "Right Knee", "Left Foot", "Right Foot"]  # Changed "Non assigné" to "Not assigned"
+        # Upper body parts
+        upper_body = [
+            "Head", "Neck", "Torso",
+            "Left Deltoid", "Left Biceps", "Left Forearm", "Left Latissimus Dorsi", "Left Pectorals", "Left Hand",
+            "Right Deltoid", "Right Biceps", "Right Forearm", "Right Latissimus Dorsi", "Right Pectorals", "Right Hand"
+        ]
+        # Lower body parts
+        lower_body = [
+            "Hip", 
+            "Left Quadriceps", "Left Hamstrings", "Left Calves", "Left Gluteus", "Left Foot",
+            "Right Quadriceps", "Right Hamstrings", "Right Calves", "Right Gluteus", "Right Foot"
+        ]
+        
+        body_parts = ["-- Not assigned --"] + upper_body + lower_body
         
         for i in range(1, num_sensors + 1):
             label = QLabel(f"{sensor_type} {i}")
@@ -346,11 +370,23 @@ class SimplifiedMappingDialog(QDialog):
         if sensor_type == "IMU":
             default_values = {
                 1: 'torso',
-                2: 'left_elbow',
-                3: 'right_elbow',
-                4: 'left_knee',
-                5: 'right_knee',
+                2: 'forearm_l',
+                3: 'forearm_r',
+                4: 'calves_l',
+                5: 'calves_r',
                 6: 'head'
+            }
+        elif sensor_type == "EMG":
+            default_values = {
+                1: 'biceps_l',
+                2: 'biceps_r',
+                3: 'quadriceps_l', 
+                4: 'quadriceps_r'
+            }
+        elif sensor_type == "pMMG":
+            default_values = {
+                1: 'deltoid_l',
+                2: 'deltoid_r'
             }
         
         # Update mapping
@@ -416,16 +452,24 @@ class SimplifiedMappingDialog(QDialog):
     def reset_to_default(self):
         """Reset all mappings to default values"""
         default_mappings = {
-            'EMG': {},
+            'EMG': {
+                1: 'biceps_l',
+                2: 'biceps_r',
+                3: 'quadriceps_l', 
+                4: 'quadriceps_r'
+            },
             'IMU': {
                 1: 'torso',
-                2: 'left_elbow',
-                3: 'right_elbow',
-                4: 'left_knee',
-                5: 'right_knee',
+                2: 'forearm_l',
+                3: 'forearm_r',
+                4: 'calves_l',
+                5: 'calves_r',
                 6: 'head'
             },
-            'pMMG': {}
+            'pMMG': {
+                1: 'deltoid_l',
+                2: 'deltoid_r'
+            }
         }
         
         self.current_mappings = default_mappings
@@ -441,41 +485,83 @@ class SimplifiedMappingDialog(QDialog):
     def _convert_model_part_to_ui(self, model_part):
         """Convert a model part name to a readable UI name"""
         if not model_part:
-            return "-- Not assigned --"  # Changed from French
-        
+            return "-- Not assigned --"
+            
         mapping = {
+            # Head/Neck
             'head': 'Head',
             'neck': 'Neck',
+            
+            # Torso
             'torso': 'Torso',
-            'left_shoulder': 'Left Shoulder',
-            'right_shoulder': 'Right Shoulder',
-            'left_elbow': 'Left Elbow',
-            'right_elbow': 'Right Elbow',
+            
+            # Upper body - Left side
+            'deltoid_l': 'Left Deltoid',
+            'biceps_l': 'Left Biceps',
+            'forearm_l': 'Left Forearm',
+            'dorsalis_major_l': 'Left Latissimus Dorsi',
+            'pectorals_l': 'Left Pectorals',
             'left_hand': 'Left Hand',
+            
+            # Upper body - Right side
+            'deltoid_r': 'Right Deltoid',
+            'biceps_r': 'Right Biceps',
+            'forearm_r': 'Right Forearm', 
+            'dorsalis_major_r': 'Right Latissimus Dorsi',
+            'pectorals_r': 'Right Pectorals',
             'right_hand': 'Right Hand',
+            
+            # Lower body
             'hip': 'Hip',
-            'left_knee': 'Left Knee',
-            'right_knee': 'Right Knee',
+            'quadriceps_l': 'Left Quadriceps',
+            'quadriceps_r': 'Right Quadriceps',
+            'ishcio_hamstrings_l': 'Left Hamstrings',
+            'ishcio_hamstrings_r': 'Right Hamstrings',
+            'calves_l': 'Left Calves',
+            'calves_r': 'Right Calves',
+            'glutes_l': 'Left Gluteus',
+            'glutes_r': 'Right Gluteus',
             'left_foot': 'Left Foot',
             'right_foot': 'Right Foot'
         }
         return mapping.get(model_part, model_part)
-        
+
     def _convert_ui_to_model_part(self, ui_name):
-        """Convertir un nom UI en nom de partie du modèle"""
+        """Convert a UI name to a model part name"""
         mapping = {
+            # Head/Neck
             'Head': 'head',
             'Neck': 'neck',
+            
+            # Torso
             'Torso': 'torso',
-            'Left Shoulder': 'left_shoulder',
-            'Right Shoulder': 'right_shoulder',
-            'Left Elbow': 'left_elbow',
-            'Right Elbow': 'right_elbow',
+            
+            # Upper body - Left side
+            'Left Deltoid': 'deltoid_l',
+            'Left Biceps': 'biceps_l',
+            'Left Forearm': 'forearm_l',
+            'Left Latissimus Dorsi': 'dorsalis_major_l',
+            'Left Pectorals': 'pectorals_l',
             'Left Hand': 'left_hand',
+            
+            # Upper body - Right side
+            'Right Deltoid': 'deltoid_r',
+            'Right Biceps': 'biceps_r',
+            'Right Forearm': 'forearm_r',
+            'Right Latissimus Dorsi': 'dorsalis_major_r',
+            'Right Pectorals': 'pectorals_r',
             'Right Hand': 'right_hand',
+            
+            # Lower body
             'Hip': 'hip',
-            'Left Knee': 'left_knee',
-            'Right Knee': 'right_knee',
+            'Left Quadriceps': 'quadriceps_l',
+            'Right Quadriceps': 'quadriceps_r',
+            'Left Hamstrings': 'ishcio_hamstrings_l',
+            'Right Hamstrings': 'ishcio_hamstrings_r',
+            'Left Calves': 'calves_l',
+            'Right Calves': 'calves_r',
+            'Left Gluteus': 'glutes_l',
+            'Right Gluteus': 'glutes_r',
             'Left Foot': 'left_foot',
             'Right Foot': 'right_foot'
         }

@@ -35,18 +35,37 @@ class Model3DViewer(QGLWidget):
         
         # Body part positions and rotations
         self.body_parts = {
+            # Head/Neck/Torso
             'head': {'pos': [0, 1.7, 0], 'rot': [0, 0, 0]},
             'neck': {'pos': [0, 1.5, 0], 'rot': [0, 0, 0]},
             'torso': {'pos': [0, 0.9, 0], 'rot': [0, 0, 0]},
-            'left_shoulder': {'pos': [-0.2, 1.5, 0], 'rot': [0, 0, 0]},
-            'right_shoulder': {'pos': [0.2, 1.5, 0], 'rot': [0, 0, 0]},
-            'left_elbow': {'pos': [-0.4, 1.2, 0], 'rot': [0, 0, 0]},
-            'right_elbow': {'pos': [0.4, 1.2, 0], 'rot': [0, 0, 0]},
+            
+            # Upper body - Left
+            'deltoid_l': {'pos': [-0.15, 1.4, 0], 'rot': [0, 0, 0]},
+            'biceps_l': {'pos': [-0.3, 1.3, 0], 'rot': [0, 0, 0]},
+            'forearm_l': {'pos': [-0.4, 1.1, 0], 'rot': [0, 0, 0]},
+            'dorsalis_major_l': {'pos': [-0.1, 1.2, 0], 'rot': [0, 0, 0]},
+            'pectorals_l': {'pos': [-0.1, 1.3, 0], 'rot': [0, 0, 0]},
             'left_hand': {'pos': [-0.5, 0.8, 0], 'rot': [0, 0, 0]},
+            
+            # Upper body - Right
+            'deltoid_r': {'pos': [0.15, 1.4, 0], 'rot': [0, 0, 0]},
+            'biceps_r': {'pos': [0.3, 1.3, 0], 'rot': [0, 0, 0]},
+            'forearm_r': {'pos': [0.4, 1.1, 0], 'rot': [0, 0, 0]},
+            'dorsalis_major_r': {'pos': [0.1, 1.2, 0], 'rot': [0, 0, 0]},
+            'pectorals_r': {'pos': [0.1, 1.3, 0], 'rot': [0, 0, 0]},
             'right_hand': {'pos': [0.5, 0.8, 0], 'rot': [0, 0, 0]},
+            
+            # Lower body
             'hip': {'pos': [0, 0.9, 0], 'rot': [0, 0, 0]},
-            'left_knee': {'pos': [-0.2, 0.5, 0], 'rot': [0, 0, 0]},
-            'right_knee': {'pos': [0.2, 0.5, 0], 'rot': [0, 0, 0]},
+            'quadriceps_l': {'pos': [-0.15, 0.7, 0], 'rot': [0, 0, 0]},
+            'quadriceps_r': {'pos': [0.15, 0.7, 0], 'rot': [0, 0, 0]},
+            'ishcio_hamstrings_l': {'pos': [-0.15, 0.6, 0], 'rot': [0, 0, 0]},
+            'ishcio_hamstrings_r': {'pos': [0.15, 0.6, 0], 'rot': [0, 0, 0]},
+            'calves_l': {'pos': [-0.2, 0.3, 0], 'rot': [0, 0, 0]},
+            'calves_r': {'pos': [0.2, 0.3, 0], 'rot': [0, 0, 0]},
+            'glutes_l': {'pos': [-0.15, 0.8, 0], 'rot': [0, 0, 0]},
+            'glutes_r': {'pos': [0.15, 0.8, 0], 'rot': [0, 0, 0]},
             'left_foot': {'pos': [-0.2, 0.0, 0], 'rot': [0, 0, 0]},
             'right_foot': {'pos': [0.2, 0.0, 0], 'rot': [0, 0, 0]}
         }
@@ -54,10 +73,10 @@ class Model3DViewer(QGLWidget):
         # IMU mapping dict - maps IMU ID to body part
         self.imu_mapping = {
             1: 'torso',
-            2: 'left_elbow',
-            3: 'right_elbow',
-            4: 'left_knee',
-            5: 'right_knee',
+            2: 'forearm_l',     # Changed from 'left_elbow' to 'forearm_l'
+            3: 'forearm_r',     # Changed from 'right_elbow' to 'forearm_r'
+            4: 'calves_l',      # Changed from 'left_knee' to 'calves_l'
+            5: 'calves_r',      # Changed from 'right_knee' to 'calves_r'
             6: 'head'
         }
         
@@ -81,7 +100,7 @@ class Model3DViewer(QGLWidget):
         self.fps_update_timer.start(1000)  # Mise à jour FPS chaque seconde
                 
     def _precalculate_animation(self, num_frames):
-        """Précalculer les positions d'animation pour une performance optimale"""
+        """Precalculate animation positions for optimal performance"""
         positions = []
         for i in range(num_frames):
             phase = (i / float(num_frames)) * 2 * math.pi
@@ -89,12 +108,12 @@ class Model3DViewer(QGLWidget):
             leg_swing = 0.2 * math.sin(phase)
             
             frame_offsets = {
-                'left_elbow_z': arm_swing,
-                'right_elbow_z': -arm_swing,
+                'forearm_l_z': arm_swing,          # Changed from 'left_elbow_z'
+                'forearm_r_z': -arm_swing,         # Changed from 'right_elbow_z'
                 'left_hand_z': arm_swing * 1.5,
                 'right_hand_z': -arm_swing * 1.5,
-                'left_knee_z': -leg_swing,
-                'right_knee_z': leg_swing,
+                'calves_l_z': -leg_swing,          # Changed from 'left_knee_z'
+                'calves_r_z': leg_swing,           # Changed from 'right_knee_z'
                 'left_foot_z': -leg_swing * 1.5,
                 'right_foot_z': leg_swing * 1.5
             }
@@ -165,30 +184,55 @@ class Model3DViewer(QGLWidget):
         self.renderText(10, self.height() - 20, f"FPS: {self.fps}")
     
     def draw_limbs(self):
-        """Dessiner les membres du corps en utilisant le mode immédiat OpenGL."""
+        """Draw the limbs of the body using immediate mode OpenGL."""
         glLineWidth(3.0)
         glBegin(GL_LINES)
         
+        # Head and neck
         glColor3f(1.0, 0.8, 0.6)
         self.draw_line_from_parts('head', 'neck')
         
+        # Torso connections
         glColor3f(0.2, 0.4, 0.8)
         self.draw_line_from_parts('neck', 'torso')
         
-        self.draw_line_from_parts('neck', 'left_shoulder')
-        self.draw_line_from_parts('left_shoulder', 'left_elbow')
-        self.draw_line_from_parts('left_elbow', 'left_hand')
+        # Left arm muscle groups
+        glColor3f(0.0, 0.5, 1.0)  # Blue for left side
+        self.draw_line_from_parts('neck', 'deltoid_l')
+        self.draw_line_from_parts('deltoid_l', 'biceps_l')
+        self.draw_line_from_parts('biceps_l', 'forearm_l')
+        self.draw_line_from_parts('forearm_l', 'left_hand')
+        self.draw_line_from_parts('torso', 'dorsalis_major_l')
+        self.draw_line_from_parts('torso', 'pectorals_l')
+        self.draw_line_from_parts('pectorals_l', 'deltoid_l')
         
-        self.draw_line_from_parts('neck', 'right_shoulder')
-        self.draw_line_from_parts('right_shoulder', 'right_elbow')
-        self.draw_line_from_parts('right_elbow', 'right_hand')
+        # Right arm muscle groups
+        glColor3f(1.0, 0.5, 0.0)  # Orange for right side
+        self.draw_line_from_parts('neck', 'deltoid_r')
+        self.draw_line_from_parts('deltoid_r', 'biceps_r')
+        self.draw_line_from_parts('biceps_r', 'forearm_r')
+        self.draw_line_from_parts('forearm_r', 'right_hand')
+        self.draw_line_from_parts('torso', 'dorsalis_major_r')
+        self.draw_line_from_parts('torso', 'pectorals_r')
+        self.draw_line_from_parts('pectorals_r', 'deltoid_r')
         
-        glColor3f(0.1, 0.1, 0.5)
-        self.draw_line_from_parts('hip', 'left_knee') 
-        self.draw_line_from_parts('left_knee', 'left_foot')
+        # Lower body - left side
+        glColor3f(0.0, 0.7, 0.3)  # Green for left leg
+        self.draw_line_from_parts('hip', 'quadriceps_l')
+        self.draw_line_from_parts('hip', 'glutes_l')
+        self.draw_line_from_parts('hip', 'ishcio_hamstrings_l')
+        self.draw_line_from_parts('quadriceps_l', 'calves_l')
+        self.draw_line_from_parts('ishcio_hamstrings_l', 'calves_l')
+        self.draw_line_from_parts('calves_l', 'left_foot')
         
-        self.draw_line_from_parts('hip', 'right_knee')
-        self.draw_line_from_parts('right_knee', 'right_foot')
+        # Lower body - right side
+        glColor3f(0.7, 0.0, 0.3)  # Red for right leg
+        self.draw_line_from_parts('hip', 'quadriceps_r')
+        self.draw_line_from_parts('hip', 'glutes_r')
+        self.draw_line_from_parts('hip', 'ishcio_hamstrings_r')
+        self.draw_line_from_parts('quadriceps_r', 'calves_r')
+        self.draw_line_from_parts('ishcio_hamstrings_r', 'calves_r')
+        self.draw_line_from_parts('calves_r', 'right_foot')
         
         glEnd()
     
@@ -218,19 +262,20 @@ class Model3DViewer(QGLWidget):
             glPopMatrix()
     
     def update_animation_frame(self):
-        """Mettre à jour l'animation de marche à chaque tick du QTimer."""
+        """Update walking animation on each QTimer tick."""
         if not self.walking:
             return
         
         self.precalc_frame = (self.precalc_frame + 1) % self.num_precalc_frames
         frame_offsets = self.precalculated_positions[self.precalc_frame]
         
-        self.body_parts['left_elbow']['pos'][2] = frame_offsets['left_elbow_z']
-        self.body_parts['right_elbow']['pos'][2] = frame_offsets['right_elbow_z']
+        # Update these references to match the new keys
+        self.body_parts['forearm_l']['pos'][2] = frame_offsets['forearm_l_z']
+        self.body_parts['forearm_r']['pos'][2] = frame_offsets['forearm_r_z']
         self.body_parts['left_hand']['pos'][2] = frame_offsets['left_hand_z']
         self.body_parts['right_hand']['pos'][2] = frame_offsets['right_hand_z']
-        self.body_parts['left_knee']['pos'][2] = frame_offsets['left_knee_z']
-        self.body_parts['right_knee']['pos'][2] = frame_offsets['right_knee_z']
+        self.body_parts['calves_l']['pos'][2] = frame_offsets['calves_l_z']
+        self.body_parts['calves_r']['pos'][2] = frame_offsets['calves_r_z']
         self.body_parts['left_foot']['pos'][2] = frame_offsets['left_foot_z']
         self.body_parts['right_foot']['pos'][2] = frame_offsets['right_foot_z']
         
@@ -269,8 +314,8 @@ class Model3DViewer(QGLWidget):
             self.animation_main_timer.start()
         else:
             self.animation_main_timer.stop()
-            for part_key in ['left_elbow', 'right_elbow', 'left_hand', 'right_hand', 
-                             'left_knee', 'right_knee', 'left_foot', 'right_foot']:
+            for part_key in ['forearm_l', 'forearm_r', 'left_hand', 'right_hand', 
+                             'calves_l', 'calves_r', 'left_foot', 'right_foot']:
                 self.body_parts[part_key]['pos'][2] = 0
             self.update()
         return self.walking
@@ -293,23 +338,23 @@ class Model3DViewer(QGLWidget):
         return False
     
     def _adjust_limb_position(self, part_name, rotation):
-        """Ajuster la position des membres en fonction des rotations"""
-        if part_name in ['left_elbow', 'right_elbow']:
+        """Adjust limb positions based on rotations"""
+        if part_name in ['forearm_l', 'forearm_r']:  # Updated from left_elbow/right_elbow
             rot_factor = rotation[0] / 90.0
-            direction = -1 if part_name == 'left_elbow' else 1
+            direction = -1 if part_name == 'forearm_l' else 1
             
             self.body_parts[part_name]['pos'][2] = direction * rot_factor * 0.3
             
-            hand = 'left_hand' if part_name == 'left_elbow' else 'right_hand'
+            hand = 'left_hand' if part_name == 'forearm_l' else 'right_hand'
             self.body_parts[hand]['pos'][2] = direction * rot_factor * 0.5
             
-        elif part_name in ['left_knee', 'right_knee']:
+        elif part_name in ['calves_l', 'calves_r']:  # Updated from left_knee/right_knee
             rot_factor = rotation[0] / 90.0
-            direction = -1 if part_name == 'left_knee' else 1
+            direction = -1 if part_name == 'calves_l' else 1
             
             self.body_parts[part_name]['pos'][2] = direction * rot_factor * 0.3
             
-            foot = 'left_foot' if part_name == 'left_knee' else 'right_foot'
+            foot = 'left_foot' if part_name == 'calves_l' else 'right_foot'
             self.body_parts[foot]['pos'][2] = direction * rot_factor * 0.5
     
     def map_imu_to_body_part(self, imu_id, body_part):
