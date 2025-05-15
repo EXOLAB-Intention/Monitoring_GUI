@@ -28,6 +28,9 @@ class DashboardApp(QMainWindow):
         self.setStyleSheet("background-color: white; color: black;")
 
         self.simulator = SensorSimulator()
+        
+        self.main_bar = self.some_method()
+        self.main_bar._create_menubar()
 
         self.init_ui()
         self.timer = QTimer(self)
@@ -38,9 +41,6 @@ class DashboardApp(QMainWindow):
         # Menu bar
         menubar = self.menuBar()
         menubar.setStyleSheet("background-color: white; color: black;")
-        file_menu = menubar.addMenu('File')
-        edit_menu = menubar.addMenu('Edit')
-        options_menu = menubar.addMenu('Options')
 
         # Central widget
         central_widget = QWidget()
@@ -175,7 +175,9 @@ class DashboardApp(QMainWindow):
         # Create group plots if mode is "Plots by sensor groups"
         if self.group_sensor_mode.isChecked():
             self.create_group_plots()
+    
 
+    
     def create_group_plots(self):
         # Create group plots for EMG, IMU, pMMG
         for group in ["EMG", "IMU", "pMMG"]:
@@ -287,7 +289,11 @@ class DashboardApp(QMainWindow):
         
         # Show menu at cursor position
         menu.exec_(QCursor.pos())
-
+    
+    def some_method(self):
+        from utils.Menu_bar import MainBar
+        return MainBar(self)
+    
     def map_sensor_to_joint(self, action):
         """Map an IMU sensor to a joint."""
         data = action.data()
