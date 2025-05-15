@@ -132,6 +132,7 @@ class InformationWindow(QDialog):
     def _load_existing_data(self):
         try:
             data, image_path = load_metadata(self.subject_file)
+            
             for key, widget in self.input_fields.items():
                 if key in data:
                     if isinstance(widget, QLineEdit):
@@ -147,6 +148,7 @@ class InformationWindow(QDialog):
             QMessageBox.critical(self, "Error", f"Error loading data: {str(e)}")
 
     def _get_form_data(self):
+        print("Collecting form data...")
         """Helper method to collect and validate form data."""
         for name in self.required_fields:
             if not self.input_fields[name].text().strip():
@@ -162,6 +164,8 @@ class InformationWindow(QDialog):
             data["image_path"] = image_path
 
         data["collection_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print("C'est bon !")
+        print(data)
         return data, True
 
     def _collect_data(self):
