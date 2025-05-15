@@ -10,8 +10,9 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QBrush, QCursor  # QCursor doit être importé depuis QtGui
 import pyqtgraph as pg
 
-# Ajouter l'import du model_3d_viewer
+# Ajouter l'import du model_3d_viewer et du dialogue de mapping
 from plots.model_3d_viewer import Model3DWidget
+from plots.sensor_dialogue import SensorMappingDialog
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -22,7 +23,8 @@ class DashboardApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Data Monitoring Software")
-        self.resize(1400, 800)
+        self.resize(1600, 900)
+        self.setMinimumSize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
 
         self.simulator = SensorSimulator()
@@ -131,40 +133,11 @@ class DashboardApp(QMainWindow):
         self.animate_button.clicked.connect(self.toggle_animation)
         right_panel.addWidget(self.animate_button)
 
-        # NOUVEAU: Panneau d'association des capteurs
-        sensor_mapping_group = QGroupBox("IMU Sensor Mapping")
-        sensor_mapping_layout = QVBoxLayout()
-        sensor_mapping_group.setLayout(sensor_mapping_layout)
-        
-        # Ajouter une étiquette d'instruction
-        instruction_label = QLabel("Click on a joint in the model and select a sensor to map:")
-        instruction_label.setWordWrap(True)
-        sensor_mapping_layout.addWidget(instruction_label)
-        
-        # Table d'association des capteurs aux articulations
-        self.mapping_table = QTableWidget(6, 2)  # 6 IMUs, 2 colonnes
-        self.mapping_table.setHorizontalHeaderLabels(["IMU Sensor", "Body Joint"])
-        self.mapping_table.verticalHeader().setVisible(False)
-        self.mapping_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.mapping_table.setSelectionBehavior(QTableWidget.SelectRows)
-        
-        # Remplir la table avec les mappings par défaut
-        default_mappings = self.model_3d_widget.get_current_mappings()
-        for imu_id, joint in default_mappings.items():
-            self.mapping_table.setItem(imu_id-1, 0, QTableWidgetItem(f"IMU{imu_id}"))
-            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
-        
-        self.mapping_table.setColumnWidth(0, 80)
-        self.mapping_table.setColumnWidth(1, 120)
-        self.mapping_table.itemClicked.connect(self.on_mapping_clicked)
-        sensor_mapping_layout.addWidget(self.mapping_table)
-        
-        # Bouton pour réinitialiser les mappings
-        reset_mappings_button = QPushButton("Reset Default Mappings")
-        reset_mappings_button.clicked.connect(self.reset_sensor_mappings)
-        sensor_mapping_layout.addWidget(reset_mappings_button)
-        
-        right_panel.addWidget(sensor_mapping_group)
+        # Ajouter le bouton "Configure Sensor Mapping" en bas à droite
+        self.config_button = QPushButton("Configure Sensor Mapping")
+        self.config_button.setStyleSheet("font-size: 14px; padding: 8px 20px;")
+        self.config_button.clicked.connect(self.open_sensor_mapping_dialog)
+        right_panel.addWidget(self.config_button)
 
         # Ajout des panneaux gauche / centre / droite
         content_layout.addLayout(left_panel, stretch=1)
@@ -478,6 +451,34 @@ class DashboardApp(QMainWindow):
         """Toggle stickman walking animation."""
         is_walking = self.model_3d_widget.toggle_animation()
         self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
+
+    def open_sensor_mapping_dialog(self):
+        """Ouvrir le dialogue de configuration des capteurs"""
+        # Récupérer les mappages actuels
+        current_mappings = {
+            'EMG': {},  # TODO: Stocker les mappages EMG
+            'IMU': self.model_3d_widget.get_current_mappings(),
+            'pMMG': {}  # TODO: Stocker les mappages pMMG
+        }
+        
+        dialog = SensorMappingDialog(None, current_mappings)
+        dialog.exec_()
+
+    def update_sensor_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
+        """Mettre à jour les mappages de capteurs après fermeture du dialogue"""
+        # Mettre à jour les mappages IMU
+        for imu_id, body_part in imu_mappings.items():
+            self.model_3d_widget.map_imu_to_body_part(imu_id, body_part)
+            
+        # Mettre à jour la table d'affichage des mappages
+        self.mapping_table.clearContents()
+        for imu_id, body_part in imu_mappings.items():
+            self.mapping_table.setItem(imu_id-1, 0, QTableWidgetItem(f"IMU{imu_id}"))
+            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(body_part)))
+            
+        print("Sensor mappings updated")
+        
+        # TODO: Gérer les mappages EMG et pMMG quand ils seront implémentés
 
     def _convert_model_part_to_ui(self, model_part):
         """Convertit les noms des parties du modèle 3D vers des noms plus lisibles pour l'UI."""

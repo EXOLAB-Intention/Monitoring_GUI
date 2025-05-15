@@ -129,8 +129,7 @@ class Model3DViewer(QGLWidget):
         
         glPushMatrix()
         glTranslatef(*self.body_parts['head']['pos'])
-        glColor3f(1.0, 0.8, 0.6)
-        gluSphere(self.quadric, 0.15, 10, 10)
+        gluSphere(self.quadric, 0.15, 12, 12)
         glPopMatrix()
         
         glEndList()
@@ -202,26 +201,20 @@ class Model3DViewer(QGLWidget):
     
     def draw_joints(self):
         """Dessiner les articulations avec une complexité réduite"""
-        slices = 6
-        stacks = 6
-        
         for part_name, data in self.body_parts.items():
-            if part_name == 'head':
-                continue
-                
             pos = data['pos']
             glPushMatrix()
             glTranslatef(pos[0], pos[1], pos[2])
-            
+
+            # Vérifie si un capteur est assigné à cette partie
             mapped = any(mapped_part == part_name for mapped_part in self.imu_mapping.values())
-            
             if mapped:
-                glColor3f(0.0, 0.8, 0.2)
+                glColor3f(0.0, 0.8, 0.2)  # Vert si capteur assigné
             else:
-                glColor3f(0.9, 0.9, 0.9)
-                
+                glColor3f(0.9, 0.9, 0.9)  # Gris sinon
+
             if self.quadric:
-                gluSphere(self.quadric, 0.05, slices, stacks)
+                gluSphere(self.quadric, 0.05, 6, 6)
             glPopMatrix()
     
     def update_animation_frame(self):
@@ -383,4 +376,9 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = Model3DWidget()
     window.show()
+    sensor_id = 1
+    selected_body_part = 'torso'
+    window.model_viewer.map_imu_to_body_part(sensor_id, selected_body_part)
+    self.assign_button.clicked.connect(self.assign_sensor)
+    self.assign_button.setEnabled(True)
     sys.exit(app.exec_())
