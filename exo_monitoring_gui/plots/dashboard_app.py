@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox, QRadioButton, QButtonGroup, QGroupBox, QTableWidget, QTableWidgetItem, QMenu, QAction
 )
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QColor, QBrush, QCursor  # QCursor doit être importé depuis QtGui
+from PyQt5.QtGui import QColor, QBrush, QCursor
 import pyqtgraph as pg
 
 # Ajouter l'import du model_3d_viewer et du dialogue de mapping
@@ -28,6 +28,8 @@ class DashboardApp(QMainWindow):
         self.setStyleSheet("background-color: white; color: black;")
 
         self.simulator = SensorSimulator()
+        self.recording = False  # Ajouter l'attribut recording
+        self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}  # Ajouter l'attribut recorded_data
 
         self.init_ui()
         self.timer = QTimer(self)
@@ -117,8 +119,6 @@ class DashboardApp(QMainWindow):
 
         # 3D Perspective (droite)
         right_panel = QVBoxLayout()
-
-        # Titre de la section 3D
         label_3d_title = QLabel("3D Perspective")
         label_3d_title.setAlignment(Qt.AlignCenter)
         label_3d_title.setStyleSheet("font-size: 14px; font-weight: bold;")
@@ -147,8 +147,9 @@ class DashboardApp(QMainWindow):
         # Footer
         footer_layout = QHBoxLayout()
         self.connect_button = QPushButton("Connect")
+        self.connect_button.clicked.connect(self.connect_sensors)
         self.record_button = QPushButton("Record Start")
-        self.record_button.clicked.connect(self.show_sensors)
+        self.record_button.clicked.connect(self.toggle_recording)
 
         for btn in (self.connect_button, self.record_button):
             btn.setStyleSheet("font-size: 14px; padding: 8px 20px;")
@@ -163,6 +164,18 @@ class DashboardApp(QMainWindow):
         self.group_plots = {}
         self.group_plot_data = {}
 
+        # Connecter le signal de changement de mode
+        self.display_mode_group.buttonClicked.connect(self.on_display_mode_changed)
+
+    def connect_sensors(self):
+        # Connecter les capteurs et les afficher en vert
+        for i in range(self.connected_systems.topLevelItemCount()):
+            group_item = self.connected_systems.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                sensor_item = group_item.child(j)
+                sensor_item.setHidden(False)
+                sensor_item.setForeground(0, QBrush(QColor("green")))  # Vert pour connecté
+
     def show_sensors(self):
         # Afficher les capteurs et les connecter
         for i in range(self.connected_systems.topLevelItemCount()):
@@ -172,44 +185,43 @@ class DashboardApp(QMainWindow):
                 sensor_item.setHidden(False)
                 sensor_item.setForeground(0, QBrush(QColor("green")))  # Vert pour connecté
 
-        # Créer les graphiques de groupe si le mode est "Graphiques par groupe de capteurs"
-        if self.group_sensor_mode.isChecked():
+        # Créer les graphiques de groupe si le mode est "Graphiques par groupe de capteurs" et qu'ils n'existent pas déjà
+        if self.group_sensor_mode.isChecked() and not self.group_plots:
             self.create_group_plots()
 
     def create_group_plots(self):
-        # Créer les graphiques de groupe pour EMG, IMU, pMMG
-        for group in ["EMG", "IMU", "pMMG"]:
-            plot_widget = pg.PlotWidget(title=group)
-            plot_widget.setBackground('#1e1e1e')
-            plot_widget.getAxis('left').setTextPen('white')
-            plot_widget.getAxis('bottom').setTextPen('white')
-            plot_widget.showGrid(x=True, y=True, alpha=0.3)
-            plot_widget.setTitle(group, color='white', size='14pt')
-            self.middle_layout.addWidget(plot_widget)
-            self.group_plots[group] = plot_widget
-            self.group_plot_data[group] = {}
+        # Vérifier si les graphiques de groupe existent déjà
+        if not self.group_plots:
+            # Créer les graphiques de groupe pour EMG et pMMG uniquement
+            for group in ["EMG", "pMMG"]:
+                plot_widget = pg.PlotWidget(title=group)
+                plot_widget.setBackground('#1e1e1e')
+                plot_widget.getAxis('left').setTextPen('white')
+                plot_widget.getAxis('bottom').setTextPen('white')
+                plot_widget.showGrid(x=True, y=True, alpha=0.3)
+                plot_widget.setTitle(group, color='white', size='14pt')
+                self.middle_layout.addWidget(plot_widget)
+                self.group_plots[group] = plot_widget
+                self.group_plot_data[group] = {}
 
     def update_matched_part(self, text):
         # Mettre à jour les options de Matched Part en fonction de la sélection de Kinematic Model
         self.matched_part_combo.clear()
         if text == "Upper body w/o head":
-            self.matched_part_combo.addItems(["Pectoraux", "Deltoide", "Biceps", "Avant Bras", "Trapeze", "Grand Dorsal"])
+            self.matched_part_combo.addItems(["pectorals_L", "Deltoid_L", "Biceps_L", "forearm_L", "dorsalis major_L", "pectorals_R", "Deltoid_R", "Biceps_R", "forearm_R",  "dorsalis major_R"])
         elif text == "Upper body w/ head":
-            self.matched_part_combo.addItems(["Head", "Pectoraux", "Deltoide", "Biceps", "Avant Bras", "Trapeze", "Grand Dorsal"])
+            self.matched_part_combo.addItems(["pectorals_L", "Deltoid_L", "Biceps_L", "forearm_L", "dorsalis major_L", "pectorals_R", "Deltoid_R", "Biceps_R", "forearm_R",  "dorsalis major_R"])
         elif text == "Lower body":
-            self.matched_part_combo.addItems(["Quadriceps", "Ischio-jambiers", "Mollets", "Fessiers"])
+            self.matched_part_combo.addItems(["Quadriceps_L", "ishcio-hamstrings_L", "calves_L", "glutes_L", "Quadriceps_R", "ishcio-hamstrings_R", "calves_R", "glutes_R"])
 
     def update_matched_sensors(self, text):
-        if not text:
-            print("No matched part selected.")
-            return
-
-        self.matched_sensors_combo.clear()
-        sensors = ["EMG1", "EMG2", "EMG3", "EMG4", "EMG5", "EMG6", "EMG7", "EMG8",
-                   "IMU1", "IMU2", "IMU3", "IMU4", "IMU5", "IMU6", "IMU7", "IMU8",
-                   "pMMG1", "pMMG2", "pMMG3", "pMMG4", "pMMG5", "pMMG6", "pMMG7", "pMMG8"]
-        self.matched_sensors_combo.addItems(sensors)
-        print(f"Matched sensors updated for part: {text}")
+        # Mettre à jour les options de Matched Sensors en fonction de la sélection de Matched Part
+        if text:
+            self.matched_sensors_combo.clear()
+            sensors = ["EMG1", "EMG2", "EMG3", "EMG4", "EMG5", "EMG6", "EMG7", "EMG8",
+                       "IMU1", "IMU2", "IMU3", "IMU4", "IMU5", "IMU6",
+                       "pMMG1", "pMMG2", "pMMG3", "pMMG4", "pMMG5", "pMMG6", "pMMG7", "pMMG8"]
+            self.matched_sensors_combo.addItems(sensors)
 
     def update_sensor_label(self, text):
         # Mettre à jour le label du capteur avec le Matched Part sélectionné
@@ -225,77 +237,12 @@ class DashboardApp(QMainWindow):
                     if sensor_item.text(0).startswith(self.selected_sensor):
                         matched_part = self.matched_part_combo.currentText()
                         sensor_item.setText(0, f"{self.selected_sensor} ({matched_part})")
+                        # Mettre à jour les données du capteur avec le "matched part"
+                        self.update_sensor_data(sensor_item.text(0), matched_part)
 
-    def reset_sensor_mappings(self):
-        """Réinitialiser les associations capteur-articulation par défaut."""
-        default_mappings = {
-            1: 'torso',
-            2: 'left_elbow',
-            3: 'right_elbow',
-            4: 'left_knee',
-            5: 'right_knee',
-            6: 'head'
-        }
-        
-        # Appliquer les mappings par défaut
-        for imu_id, joint in default_mappings.items():
-            self.model_3d_widget.map_imu_to_body_part(imu_id, joint)
-            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
-        
-        print("Associations capteur-articulation réinitialisées")
-
-    def on_mapping_clicked(self, item):
-        """Gestion du clic sur un élément de la table de mapping."""
-        row = item.row()
-        imu_id = row + 1  # IMU IDs commencent à 1
-        
-        # Obtenir la liste des articulations disponibles
-        available_joints = self.model_3d_widget.get_available_body_parts()
-        
-        # Créer un menu contextuel avec la liste des articulations
-        menu = QMenu(self)
-        
-        for joint in available_joints:
-            # Convertir le nom technique en nom lisible
-            ui_joint_name = self._convert_model_part_to_ui(joint)
-            action = QAction(ui_joint_name, self)
-            # Stocker les données nécessaires pour le mapping
-            action.setData({'imu_id': imu_id, 'joint': joint})
-            menu.addAction(action)
-        
-        # Connecter le signal triggered à la méthode de mapping
-        menu.triggered.connect(self.map_sensor_to_joint)
-        
-        # Afficher le menu à la position du curseur
-        menu.exec_(QCursor.pos())
-
-    def map_sensor_to_joint(self, action):
-        """Associer un capteur IMU à une articulation."""
-        data = action.data()
-        imu_id = data['imu_id']
-        joint = data['joint']
-        
-        success = self.model_3d_widget.map_imu_to_body_part(imu_id, joint)
-        if success:
-            # Mettre à jour l'élément dans la table
-            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(joint)))
-            print(f"IMU{imu_id} a été associé à {joint}")
-        else:
-            print(f"Échec de l'association de IMU{imu_id} à {joint}")
-
-    def on_joint_clicked(self, joint_name):
-        """Gérer le clic sur une articulation dans le modèle 3D."""
-        # Créer un menu contextuel pour sélectionner le capteur IMU à associer
-        menu = QMenu(self)
-        menu.setWindowTitle(f"Map sensor to {self._convert_model_part_to_ui(joint_name)}")
-        
-        for i in range(1, 7):  # 6 IMUs
-            action = QAction(f"IMU{i}", self)
-            action.setData({'imu_id': i, 'joint': joint_name})
-            menu.addAction(action)
-        
-        menu.triggered.connect(self.map_sensor_to_joint)
-        menu.exec_(QCursor.pos())
+    def update_sensor_data(self, sensor_name, matched_part):
+        # Mettre à jour les données du capteur avec le "matched part"
+        pass
 
     def on_sensor_clicked(self, item, column):
         # Vérifier si le capteur est connecté
@@ -313,16 +260,32 @@ class DashboardApp(QMainWindow):
     def plot_sensor_data(self, sensor_name):
         # Ajouter la courbe du capteur au graphique de groupe correspondant
         if self.group_sensor_mode.isChecked():
-            sensor_group = sensor_name.split()[0][:-1]
-            if sensor_group in self.group_plots:
-                if sensor_name not in self.group_plot_data[sensor_group]:
-                    self.group_plot_data[sensor_group][sensor_name] = np.zeros(100)
-                    if sensor_name.startswith("IMU"):
-                        for axis in ['w', 'x', 'y', 'z']:
-                            self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"] = np.zeros(100)
+            if sensor_name.startswith("IMU"):
+                # Créer un nouveau graphique pour le capteur IMU sélectionné
+                plot_widget = pg.PlotWidget(title=sensor_name)
+                plot_widget.setBackground('#1e1e1e')
+                plot_widget.getAxis('left').setTextPen('white')
+                plot_widget.getAxis('bottom').setTextPen('white')
+                plot_widget.showGrid(x=True, y=True, alpha=0.3)
+                plot_widget.setTitle(sensor_name, color='white', size='14pt')
+
+                # Ajouter le graphique à la section "2D Plots"
+                self.middle_layout.addWidget(plot_widget)
+
+                # Stocker le graphique et les données
+                self.plots[sensor_name.split()[0]] = plot_widget
+                self.plot_data[sensor_name.split()[0]] = np.zeros(100)
 
                 # Mettre en surbrillance le capteur sélectionné
                 self.highlight_sensor(sensor_name.split()[0])
+            else:
+                sensor_group = sensor_name.split()[0][:-1]
+                if sensor_group in self.group_plots:
+                    if sensor_name not in self.group_plot_data[sensor_group]:
+                        self.group_plot_data[sensor_group][sensor_name] = np.zeros(100)
+
+                    # Mettre en surbrillance le capteur sélectionné
+                    self.highlight_sensor(sensor_name.split()[0])
         else:
             # Créer un nouveau graphique pour le capteur sélectionné
             plot_widget = pg.PlotWidget(title=sensor_name)
@@ -356,9 +319,6 @@ class DashboardApp(QMainWindow):
             if sensor_group in self.group_plots:
                 if sensor_name in self.group_plot_data[sensor_group]:
                     self.group_plot_data[sensor_group].pop(sensor_name, None)
-                    if sensor_name.startswith("IMU"):
-                        for axis in ['w', 'x', 'y', 'z']:
-                            self.group_plot_data[sensor_group].pop(f"{sensor_name}_{axis}", None)
 
             # Retirer la surbrillance du capteur
             self.unhighlight_sensor(sensor_name)
@@ -385,34 +345,150 @@ class DashboardApp(QMainWindow):
 
     def update_data(self):
         # Mettre à jour les données des graphiques en temps réel
-        packet = self.simulator.generate_packet()
-        
-        # Mettre à jour le modèle 3D avec les données IMU
-        if "IMU" in packet:
-            for i, quaternion in enumerate(packet["IMU"]):
-                imu_id = i + 1  # IMU IDs start at 1
-                if imu_id <= 6:  # Nous n'utilisons que 6 IMUs dans notre mapping
-                    self.model_3d_widget.apply_imu_data(imu_id, quaternion)
-        
+        if self.recording:
+            packet = self.simulator.generate_packet()
+
+            # Enregistrer les données dans self.recorded_data
+            for i in range(8):
+                self.recorded_data["EMG"][i].append(packet["EMG"][i])
+                self.recorded_data["pMMG"][i].append(packet["pMMG"][i])
+
+            for i in range(6):
+                self.recorded_data["IMU"][i].append(packet["IMU"][i])
+
+            # Mettre à jour le modèle 3D avec les données IMU
+            if "IMU" in packet:
+                for i, quaternion in enumerate(packet["IMU"]):
+                    imu_id = i + 1  # IMU IDs start at 1
+                    if imu_id <= 6:  # Nous n'utilisons que 6 IMUs dans notre mapping
+                        self.model_3d_widget.apply_imu_data(imu_id, quaternion)
+
+            for sensor_name, plot_widget in self.plots.items():
+                if sensor_name.startswith("EMG"):
+                    index = int(sensor_name[3]) - 1
+                    self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
+                    self.plot_data[sensor_name][-1] = packet["EMG"][index]
+                    plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
+                elif sensor_name.startswith("pMMG"):
+                    index = int(sensor_name[4]) - 1
+                    self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
+                    self.plot_data[sensor_name][-1] = packet["pMMG"][index]
+                    plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
+                elif sensor_name.startswith("IMU"):
+                    index = int(sensor_name[3]) - 1
+                    quaternion = packet["IMU"][index]
+                    plot_widget.clear()
+                    for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                        self.plot_data[f"{sensor_name}_{axis}"] = np.roll(self.plot_data.get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
+                        self.plot_data[f"{sensor_name}_{axis}"][-1] = quaternion[i]
+                        plot_widget.plot(self.plot_data[f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
+
+                    plot_widget.addLegend()
+
+            for sensor_group, plot_widget in self.group_plots.items():
+                plot_widget.clear()
+                for sensor_name, data in self.group_plot_data[sensor_group].items():
+                    if sensor_name.startswith("IMU"):
+                        index = int(sensor_name[3]) - 1
+                        quaternion = packet["IMU"][index]
+                        for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                            self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"] = np.roll(self.group_plot_data[sensor_group].get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
+                            self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"][-1] = quaternion[i]
+                            plot_widget.plot(self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
+                    else:
+                        # Extraire le numéro du capteur en ignorant les "matched parts"
+                        sensor_num = int(''.join(filter(str.isdigit, sensor_name)))
+                        if sensor_name.startswith("EMG"):
+                            index = sensor_num - 1
+                            self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
+                            self.group_plot_data[sensor_group][sensor_name][-1] = packet["EMG"][index]
+                        elif sensor_name.startswith("pMMG"):
+                            index = sensor_num - 1
+                            self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
+                            self.group_plot_data[sensor_group][sensor_name][-1] = packet["pMMG"][index]
+
+                        plot_widget.plot(self.group_plot_data[sensor_group][sensor_name], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
+
+                plot_widget.addLegend()
+
+    def on_display_mode_changed(self):
+        if hasattr(self, 'recording') and self.recording:
+            QMessageBox.warning(self, 'Warning', "You cannot change the display mode once recording has started.")
+            # Revenir au mode précédent
+            if self.single_sensor_mode.isChecked():
+                self.group_sensor_mode.setChecked(True)
+            else:
+                self.single_sensor_mode.setChecked(True)
+        else:
+            reply = QMessageBox.question(self, 'Change Mode',
+                                         "Are you sure you want to change the display mode?",
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                self.update_display_mode()
+            else:
+                # Revenir au mode précédent
+                if self.single_sensor_mode.isChecked():
+                    self.group_sensor_mode.setChecked(True)
+                else:
+                    self.single_sensor_mode.setChecked(True)
+
+    def update_display_mode(self):
+        # Effacer les graphiques actuels
+        for plot_widget in self.plots.values():
+            plot_widget.setParent(None)
+            plot_widget.deleteLater()
+        self.plots.clear()
+        self.plot_data.clear()
+
+        for plot_widget in self.group_plots.values():
+            plot_widget.setParent(None)
+            plot_widget.deleteLater()
+        self.group_plots.clear()
+        self.group_plot_data.clear()
+
+        # Reconstruire les graphiques en fonction du mode sélectionné
+        if self.group_sensor_mode.isChecked():
+            self.create_group_plots()
+        else:
+            # Re-sélectionner les capteurs précédemment sélectionnés
+            for sensor_name in self.highlighted_sensors:
+                self.plot_sensor_data(sensor_name)
+
+    def start_recording(self):
+        self.recording = True
+        self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}
+        self.record_button.setText("Record Stop")
+        self.record_button.setStyleSheet("font-size: 14px; padding: 8px 20px; background-color: red;")
+
+    def stop_recording(self):
+        self.recording = False
+        self.record_button.setText("Record Start")
+        self.record_button.setStyleSheet("font-size: 14px; padding: 8px 20px; background-color: none;")
+        self.show_recorded_data()
+
+    def show_recorded_data(self):
+        # Afficher les données enregistrées sur les graphiques existants
+        if not any(self.recorded_data["EMG"][0]) and not any(self.recorded_data["IMU"][0]) and not any(self.recorded_data["pMMG"][0]):
+            QMessageBox.warning(self, 'Warning', "No data recorded.")
+            return
+
+        # Arrêter la génération de données
+        self.timer.stop()
+
+        # Afficher les données enregistrées sur les graphiques existants
         for sensor_name, plot_widget in self.plots.items():
             if sensor_name.startswith("EMG"):
                 index = int(sensor_name[3]) - 1
-                self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
-                self.plot_data[sensor_name][-1] = packet["EMG"][index]
-                plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
+                plot_widget.plot(self.recorded_data["EMG"][index], clear=True, pen=pg.mkPen('b', width=2))
             elif sensor_name.startswith("pMMG"):
                 index = int(sensor_name[4]) - 1
-                self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
-                self.plot_data[sensor_name][-1] = packet["pMMG"][index]
-                plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
+                plot_widget.plot(self.recorded_data["pMMG"][index], clear=True, pen=pg.mkPen('b', width=2))
             elif sensor_name.startswith("IMU"):
                 index = int(sensor_name[3]) - 1
-                quaternion = packet["IMU"][index]
+                quaternion = self.recorded_data["IMU"][index]
                 plot_widget.clear()
                 for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                    self.plot_data[f"{sensor_name}_{axis}"] = np.roll(self.plot_data.get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
-                    self.plot_data[f"{sensor_name}_{axis}"][-1] = quaternion[i]
-                    plot_widget.plot(self.plot_data[f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
+                    plot_widget.plot([q[i] for q in quaternion], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
 
                 plot_widget.addLegend()
 
@@ -421,31 +497,27 @@ class DashboardApp(QMainWindow):
             for sensor_name, data in self.group_plot_data[sensor_group].items():
                 if sensor_name.startswith("IMU"):
                     index = int(sensor_name[3]) - 1
-                    quaternion = packet["IMU"][index]
+                    quaternion = self.recorded_data["IMU"][index]
                     for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                        self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"] = np.roll(self.group_plot_data[sensor_group].get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
-                        self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"][-1] = quaternion[i]
-                        plot_widget.plot(self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
+                        plot_widget.plot([q[i] for q in quaternion], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
                 else:
+                    # Extraire le numéro du capteur en ignorant les "matched parts"
+                    sensor_num = int(''.join(filter(str.isdigit, sensor_name)))
                     if sensor_name.startswith("EMG"):
-                        index = int(sensor_name[3]) - 1
-                        self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
-                        self.group_plot_data[sensor_group][sensor_name][-1] = packet["EMG"][index]
+                        index = sensor_num - 1
+                        plot_widget.plot(self.recorded_data["EMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
                     elif sensor_name.startswith("pMMG"):
-                        index = int(sensor_name[4]) - 1
-                        self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
-                        self.group_plot_data[sensor_group][sensor_name][-1] = packet["pMMG"][index]
-
-                    plot_widget.plot(self.group_plot_data[sensor_group][sensor_name], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][int(sensor_name[-1]) - 1], width=2), name=sensor_name)
+                        index = sensor_num - 1
+                        plot_widget.plot(self.recorded_data["pMMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
 
             plot_widget.addLegend()
 
-    def update_3d_model(self, rotation_x, rotation_y, rotation_z):
-        """Updates the 3D model rotation."""
-        try:
-            self.model_3d_widget.update_rotation(rotation_x, rotation_y, rotation_z)
-        except Exception as e:
-            print(f"Error updating 3D model: {e}")
+    def toggle_recording(self):
+        if self.recording:
+            self.stop_recording()
+        else:
+            self.connect_sensors()
+            self.start_recording()
 
     def toggle_animation(self):
         """Toggle stickman walking animation."""
@@ -460,7 +532,7 @@ class DashboardApp(QMainWindow):
             'IMU': self.model_3d_widget.get_current_mappings(),
             'pMMG': {}  # TODO: Stocker les mappages pMMG
         }
-        
+
         dialog = SensorMappingDialog(None, current_mappings)
         dialog.exec_()
 
@@ -469,15 +541,7 @@ class DashboardApp(QMainWindow):
         # Mettre à jour les mappages IMU
         for imu_id, body_part in imu_mappings.items():
             self.model_3d_widget.map_imu_to_body_part(imu_id, body_part)
-            
-        # Mettre à jour la table d'affichage des mappages
-        self.mapping_table.clearContents()
-        for imu_id, body_part in imu_mappings.items():
-            self.mapping_table.setItem(imu_id-1, 0, QTableWidgetItem(f"IMU{imu_id}"))
-            self.mapping_table.setItem(imu_id-1, 1, QTableWidgetItem(self._convert_model_part_to_ui(body_part)))
-            
-        print("Sensor mappings updated")
-        
+
         # TODO: Gérer les mappages EMG et pMMG quand ils seront implémentés
 
     def _convert_model_part_to_ui(self, model_part):
