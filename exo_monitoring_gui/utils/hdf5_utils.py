@@ -16,43 +16,24 @@ def load_metadata(subject_file):
     
     try:
         with h5py.File(subject_file, 'r') as f:
-            # Attempt to read from root (new structure)
             root_attrs = dict(f.attrs)
-            participant_data_from_root = {}
             for key, value in root_attrs.items():
                 if key.startswith("participant_"):
-                    # Store with original key or strip prefix, depending on desired return format
-                    # Storing with original key for now, as it includes the "participant_" prefix
-                    participant_data_from_root[key] = value
-                if key == "image_path": # Check for image_path at root as well
-                     image_path = value
+                    data[key] = value
+                # Recherche de image_path à la racine, préfixé ou non
+                if key == "image_path" and image_path is None: # Prend image_path s'il n'a pas déjà été pris par participant_image_path
+                    image_path = value
+                elif key == "participant_image_path": # Priorité à participant_image_path
+                    image_path = value
+            
+            # Si image_path a été trouvé via "participant_image_path", 
+            # il est déjà dans 'data'. S'il a été trouvé via "image_path",
+            # il faut s'assurer qu'il n'y a pas de conflit ou de redondance.
+            # La logique ci-dessus donne la priorité à "participant_image_path"
+            # et ensuite à "image_path".
 
-
-            if participant_data_from_root:
-                data = participant_data_from_root
-                # If image_path was specifically named 'participant_image_path'
-                if 'participant_image_path' in data and image_path is None:
-                    image_path = data['participant_image_path']
-                elif 'image_path' in root_attrs : # if image_path is at root and not prefixed
-                     image_path = root_attrs['image_path']
-
-
-            # Fallback to /metadata group if no participant data found at root
-            # or if explicitly needed (e.g. if data is still empty)
-            if not data and 'metadata' in f:
-                metadata_group = f['metadata']
-                legacy_data = {}
-                for key in metadata_group.attrs:
-                    legacy_data[key] = metadata_group.attrs[key]
-                
-                if legacy_data:
-                    data = legacy_data # Overwrite data with legacy data
-                    if 'image_path' in metadata_group.attrs:
-                        image_path = metadata_group.attrs['image_path']
-            elif not data and not participant_data_from_root:
-                 # If neither participant_ data at root nor /metadata group, data remains empty.
-                 pass
-
+            # La variable 'data' contient maintenant tous les attributs 'participant_*'.
+            # 'image_path' contient le chemin de l'image trouvé.
 
     except Exception as e:
         print(f"Error loading metadata from {subject_file}: {e}")
@@ -66,38 +47,29 @@ def save_metadata(subject_file, data: dict):
     """
     try:
         with h5py.File(subject_file, 'a') as f:
-            is_new_structure = False
-            # Check for new structure indicators (e.g., presence of participant_ prefixed attrs at root)
-            for key in f.attrs.keys():
-                if key.startswith("participant_"):
-                    is_new_structure = True
-                    break
-            
-            # Or, if no /metadata group exists but it's not an empty file (has other root attrs perhaps)
-            if not is_new_structure and 'metadata' not in f and len(f.attrs) > 0:
-                 # This condition is a bit ambiguous, could be a new file being created by another process
-                 # For simplicity, if /metadata does not exist, assume we should write to root if data is participant data
-                 # A more robust check might be needed depending on file creation lifecycle
-                 # For now, if any key in `data` implies it's participant data, lean towards new structure
-                 for data_key in data.keys():
-                     if data_key.lower().replace(' ', '_') in ['name', 'age', 'last_name', 'description']:
-                         is_new_structure = True # Tentatively new if it looks like participant data
-                         break
+            # Écrire toujours à la racine
+            image_path_value = None
+            if "image_path" in data:
+                image_path_value = data.pop("image_path") # Retire pour éviter double écriture par la boucle
 
-            if is_new_structure:
-                for key, value in data.items():
-                    attr_key = f"participant_{key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
-                    f.attrs[attr_key] = value
-                    if key.lower() == 'image_path': # Also save unprefixed image_path if provided that way
-                        f.attrs['image_path'] = value
-            else:
-                if 'metadata' in f:
-                    metadata_group = f['metadata']
+            for key, value in data.items():
+                # Standardiser les noms de clés pour les attributs des participants
+                # Si la clé est déjà préfixée (par ex. lors du chargement/modification), ne pas re-préfixer
+                if key.startswith("participant_"):
+                    attr_key = key
                 else:
-                    metadata_group = f.create_group('metadata')
+                    attr_key = f"participant_{key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
                 
-                for key, value in data.items():
-                    metadata_group.attrs[key] = value
+                f.attrs[attr_key] = value
+                
+                # Si la clé normalisée correspond à participant_image_path, on stocke sa valeur
+                # pour s'assurer qu'elle soit écrite sous "image_path" si ce n'est pas déjà fait.
+                if attr_key == "participant_image_path" and image_path_value is None:
+                    image_path_value = value
+
+            # Sauvegarder image_path à la racine sous la clé "image_path" s'il existe
+            if image_path_value is not None:
+                f.attrs["image_path"] = image_path_value
             
             f.attrs['last_modified'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -133,10 +105,21 @@ def save_to_default(data: dict, custom_filename: str = None):
             f.attrs['subject_created'] = True # Réactivé pour compatibilité avec load_existing_subject
 
             # Sauvegarder les informations du participant (data) comme attributs à la racine
+            image_path_value = None
+            if "image_path" in data:
+                image_path_value = data.pop("image_path") # Retire pour éviter double écriture
+
             for key, value in data.items():
                 # Standardiser les noms de clés pour les attributs des participants
                 attr_key = f"participant_{key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
                 f.attrs[attr_key] = value
+                # Si la clé normalisée correspond à participant_image_path et que image_path_value n'a pas été défini par data["image_path"]
+                if attr_key == "participant_image_path" and image_path_value is None:
+                    image_path_value = value
+            
+            # Sauvegarder image_path à la racine sous la clé "image_path" s'il a été trouvé
+            if image_path_value is not None:
+                f.attrs["image_path"] = image_path_value
             
             # Créer la structure de groupes pour les données de capteurs
             sensor_group = f.create_group('Sensor')
