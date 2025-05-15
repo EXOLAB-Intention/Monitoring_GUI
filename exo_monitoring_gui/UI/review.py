@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QBrush
 import pyqtgraph as pg
 from utils.hdf5_utils import extract_group_data
+
 class Review(QMainWindow):
     def __init__(self, parent=None, filename=None):
         super().__init__(parent)
@@ -15,8 +16,9 @@ class Review(QMainWindow):
         self.setWindowTitle("Data Monitoring Software")
         self.resize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
-        self._create_menubar()
-        self.init_ui()             # ✅ maintenant c’est bon
+        self.main_bar = self.some_method()
+        self.main_bar._create_menubar()
+        self.init_ui()           
 
 
     def init_ui(self):
@@ -25,6 +27,7 @@ class Review(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout()
         central_widget.setLayout(main_layout)
+
 
         # Titles
         print(self.filename)
@@ -131,25 +134,13 @@ class Review(QMainWindow):
         self.plots = {}
         self.plot_data = {}
 
-    def _create_action(self, text, slot=None, shortcut=None, icon=None, tip=None, checkable=False):
-        """Create a QAction with the given properties"""
-        action = QAction(text, self)
-        if icon:
-            action.setIcon(icon)
-        if shortcut:
-            action.setShortcut(shortcut)
-        if tip:
-            action.setToolTip(tip)
-            action.setStatusTip(tip)
-        if slot:
-            action.triggered.connect(slot)
-        if checkable:
-            action.setCheckable(True)
-        return action
-
     def exit(self):
         QApplication.quit()
-
+    
+    def some_method(self):
+        from utils.Menu_bar import MainBar
+        return MainBar(self)
+    
     def show_about_dialog(self):
         """Show information about the software"""
         about_text = """
@@ -169,29 +160,6 @@ class Review(QMainWindow):
         self.main_app = MainApp()
         self.main_app.show()
 
-    def _create_menubar(self):
-        """Create the application menu bar"""
-        menubar = self.menuBar()
-
-        # File menu
-        file_menu = menubar.addMenu('&File')
-
-        # File menu actions
-        return_main_page = self._create_action("&Return to main page", self.return_to_main, "Ctrl+P",
-                                                  tip="Exit without saving")
-        exit_button = self._create_action("&Exit", self.exit, "Ctrl+Shift+Q",
-                                                  tip="Exit without saving")
-
-        file_menu.addAction(return_main_page)
-        file_menu.addAction(exit_button)
-
-        # Help menu
-        help_menu = menubar.addMenu('&Help')
-        # Help menu actions
-        about_action = self._create_action("&About", self.show_about_dialog,
-                                         tip="About the application")
-
-        help_menu.addAction(about_action)
 
     def show_sensors(self):
         # Afficher les capteurs et les connecter
