@@ -413,6 +413,7 @@ class DashboardApp(QMainWindow):
                 if imu_id <= 6:  # We only use 6 IMUs in our mapping
                     self.model_3d_widget.apply_imu_data(imu_id, quaternion)
         
+        # Update individual plots
         for sensor_name, plot_widget in self.plots.items():
             if sensor_name.startswith("EMG"):
                 index = int(sensor_name[3]) - 1
@@ -435,17 +436,35 @@ class DashboardApp(QMainWindow):
 
                 plot_widget.addLegend()
 
+        # Update group plots
         for sensor_group, plot_widget in self.group_plots.items():
             plot_widget.clear()
-            for sensor_name, data in self.group_plot_data[sensor_group].items():
-                if sensor_name.startswith("IMU"):
+            
+            # Create a copy of the dictionary items to prevent the "changed size during iteration" error
+            sensor_items = list(self.group_plot_data[sensor_group].items())
+            
+            for sensor_name, data in sensor_items:
+                if sensor_name.startswith("IMU") and '_' not in sensor_name:  # Handle IMU sensors but avoid IMU_x, IMU_y, etc.
                     index = int(sensor_name[3]) - 1
                     quaternion = packet["IMU"][index]
                     for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                        self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"] = np.roll(self.group_plot_data[sensor_group].get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
-                        self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"][-1] = quaternion[i]
-                        plot_widget.plot(self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
+                        axis_key = f"{sensor_name}_{axis}"
+                        # Check if the key exists, create it if not
+                        if axis_key not in self.group_plot_data[sensor_group]:
+                            self.group_plot_data[sensor_group][axis_key] = np.zeros(100)
+                        
+                        self.group_plot_data[sensor_group][axis_key] = np.roll(self.group_plot_data[sensor_group][axis_key], -1)
+                        self.group_plot_data[sensor_group][axis_key][-1] = quaternion[i]
+                        plot_widget.plot(
+                            self.group_plot_data[sensor_group][axis_key], 
+                            pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), 
+                            name=f"{sensor_name}_{axis}"
+                        )
                 else:
+                    # Non-IMU sensors or IMU component data that was already created
+                    if '_' in sensor_name:  # Skip IMU component data here as we already handled it above
+                        continue
+                    
                     if sensor_name.startswith("EMG"):
                         index = int(sensor_name[3]) - 1
                         self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
@@ -455,7 +474,11 @@ class DashboardApp(QMainWindow):
                         self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
                         self.group_plot_data[sensor_group][sensor_name][-1] = packet["pMMG"][index]
 
-                    plot_widget.plot(self.group_plot_data[sensor_group][sensor_name], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][int(sensor_name[-1]) - 1], width=2), name=sensor_name)
+                    plot_widget.plot(
+                        self.group_plot_data[sensor_group][sensor_name], 
+                        pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][int(sensor_name[-1]) - 1], width=2), 
+                        name=sensor_name
+                    )
 
             plot_widget.addLegend()
 
