@@ -40,6 +40,7 @@ class DashboardApp(QMainWindow):
 
         self.simulator = SensorSimulator()
         self.recording = False  # Ajouter l'attribut recording
+        self.recording_stopped = False  # Ajoute ceci juste après
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}  # Ajouter l'attribut recorded_data
 
         self.init_ui()
@@ -414,51 +415,83 @@ class DashboardApp(QMainWindow):
             self.plot_sensor_data(item.text(0))
 
     def plot_sensor_data(self, sensor_name):
-        # Ajouter la courbe du capteur au graphique de groupe correspondant
-        if self.group_sensor_mode.isChecked():
-            if sensor_name.startswith("IMU"):
-                # Créer un nouveau graphique pour le capteur IMU sélectionné
+        # Afficher les données enregistrées si l'enregistrement est stoppé
+        if self.recording_stopped:
+            if self.group_sensor_mode.isChecked():
+                sensor_group = sensor_name.split()[0][:-1]
+                if sensor_group in self.group_plots:
+                    plot_widget = self.group_plots[sensor_group]
+                    if sensor_name.startswith("IMU"):
+                        index = int(sensor_name[3]) - 1
+                        quaternion = self.recorded_data["IMU"][index]
+                        for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                            plot_widget.plot([q[i] for q in quaternion], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
+                    else:
+                        sensor_num = int(''.join(filter(str.isdigit, sensor_name)))
+                        if sensor_name.startswith("EMG"):
+                            index = sensor_num - 1
+                            plot_widget.plot(self.recorded_data["EMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
+                        elif sensor_name.startswith("pMMG"):
+                            index = sensor_num - 1
+                            plot_widget.plot(self.recorded_data["pMMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
+                    plot_widget.addLegend()
+                    self.highlight_sensor(sensor_name.split()[0])
+                return
+            else:
                 plot_widget = pg.PlotWidget(title=sensor_name)
                 plot_widget.setBackground('#1e1e1e')
                 plot_widget.getAxis('left').setTextPen('white')
                 plot_widget.getAxis('bottom').setTextPen('white')
                 plot_widget.showGrid(x=True, y=True, alpha=0.3)
                 plot_widget.setTitle(sensor_name, color='white', size='14pt')
-
-                # Ajouter le graphique à la section "2D Plots"
                 self.middle_layout.addWidget(plot_widget)
+                self.plots[sensor_name.split()[0]] = plot_widget
 
-                # Stocker le graphique et les données
+                if sensor_name.startswith("EMG"):
+                    index = int(sensor_name[3]) - 1
+                    plot_widget.plot(self.recorded_data["EMG"][index], clear=True, pen=pg.mkPen('b', width=2))
+                elif sensor_name.startswith("pMMG"):
+                    index = int(sensor_name[4]) - 1
+                    plot_widget.plot(self.recorded_data["pMMG"][index], clear=True, pen=pg.mkPen('b', width=2))
+                elif sensor_name.startswith("IMU"):
+                    index = int(sensor_name[3]) - 1
+                    quaternion = self.recorded_data["IMU"][index]
+                    plot_widget.clear()
+                    for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                        plot_widget.plot([q[i] for q in quaternion], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
+                    plot_widget.addLegend()
+                self.highlight_sensor(sensor_name.split()[0])
+                return
+
+        # --- Mode temps réel (enregistrement en cours) ---
+        if self.group_sensor_mode.isChecked():
+            if sensor_name.startswith("IMU"):
+                plot_widget = pg.PlotWidget(title=sensor_name)
+                plot_widget.setBackground('#1e1e1e')
+                plot_widget.getAxis('left').setTextPen('white')
+                plot_widget.getAxis('bottom').setTextPen('white')
+                plot_widget.showGrid(x=True, y=True, alpha=0.3)
+                plot_widget.setTitle(sensor_name, color='white', size='14pt')
+                self.middle_layout.addWidget(plot_widget)
                 self.plots[sensor_name.split()[0]] = plot_widget
                 self.plot_data[sensor_name.split()[0]] = np.zeros(100)
-
-                # Mettre en surbrillance le capteur sélectionné
                 self.highlight_sensor(sensor_name.split()[0])
             else:
                 sensor_group = sensor_name.split()[0][:-1]
                 if sensor_group in self.group_plots:
                     if sensor_name not in self.group_plot_data[sensor_group]:
                         self.group_plot_data[sensor_group][sensor_name] = np.zeros(100)
-
-                    # Mettre en surbrillance le capteur sélectionné
                     self.highlight_sensor(sensor_name.split()[0])
         else:
-            # Créer un nouveau graphique pour le capteur sélectionné
             plot_widget = pg.PlotWidget(title=sensor_name)
             plot_widget.setBackground('#1e1e1e')
             plot_widget.getAxis('left').setTextPen('white')
             plot_widget.getAxis('bottom').setTextPen('white')
             plot_widget.showGrid(x=True, y=True, alpha=0.3)
             plot_widget.setTitle(sensor_name, color='white', size='14pt')
-
-            # Ajouter le graphique à la section "2D Plots"
             self.middle_layout.addWidget(plot_widget)
-
-            # Stocker le graphique et les données
             self.plots[sensor_name.split()[0]] = plot_widget
             self.plot_data[sensor_name.split()[0]] = np.zeros(100)
-
-            # Mettre en surbrillance le capteur sélectionné
             self.highlight_sensor(sensor_name.split()[0])
 
     def remove_sensor_plot(self, sensor_name):
@@ -612,12 +645,39 @@ class DashboardApp(QMainWindow):
 
     def start_recording(self):
         self.recording = True
+        self.recording_stopped = False
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}
         self.record_button.setText("Record Stop")
 
     def stop_recording(self):
         self.recording = False
+        self.recording_stopped = True
         self.record_button.setText("Record Start")
+        self.record_button.setStyleSheet("""
+        QPushButton {
+            background-color: #4caf50;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            min-width: 120px;
+        }
+        QPushButton:hover {
+            background-color: #43a047;
+        }
+        QPushButton:pressed {
+            background-color: #388e3c;
+        }
+        QPushButton:disabled {
+            background-color: #e0e0e0;
+            border: 1px solid #d0d0d0;
+            color: #a0a0a0;
+        }
+        """)
+        self.record_button.setEnabled(False)  # Désactiver le bouton
         self.show_recorded_data()
 
     def show_recorded_data(self):
@@ -669,48 +729,31 @@ class DashboardApp(QMainWindow):
     def toggle_recording(self):
         if self.recording:
             self.stop_recording()
-            self.record_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4caf50;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-                text-align: center;
-                min-width: 120px;
-            }
-            QPushButton:hover {
-                background-color: #43a047;
-            }
-            QPushButton:pressed {
-                background-color: #388e3c;
-            }
-            """)
         else:
-            self.connect_sensors()
-            self.start_recording()
-            # Style rouge pour le bouton d'arrêt d'enregistrement
-            self.record_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-                text-align: center;
-                min-width: 120px;
-            }
-            QPushButton:hover {
-                background-color: #e53935;
-            }
-            QPushButton:pressed {
-                background-color: #d32f2f;
-            }
-            """)
+            if self.record_button.isEnabled():
+                self.connect_sensors()
+                self.start_recording()
+                # Style rouge pour le bouton d'arrêt d'enregistrement
+                self.record_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #f44336;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    color: white;
+                    font-size: 14px;
+                    font-weight: 500;
+                    text-align: center;
+                    min-width: 120px;
+                }
+                QPushButton:hover {
+                    background-color: #e53935;
+                }
+                QPushButton:pressed {
+                    background-color: #d32f2f;
+                }
+                """)
+
 
     def toggle_animation(self):
         """Toggle stickman walking animation."""
