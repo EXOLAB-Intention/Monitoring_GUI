@@ -118,24 +118,55 @@ class Model3DViewer(QGLWidget):
             head_rotation_z = 2 * math.sin(phase)        # Léger balancement latéral
             
             frame_offsets = {
-                # Mouvements existants...
+                # Mouvements du torse et de la tête
                 'torso_x': torso_sway,
                 'head_x': torso_sway * 1.1,
                 'neck_x': torso_sway * 1.05,
                 
                 # Mouvement vertical
                 'torso_y': vertical_bounce,
-                'head_y': vertical_bounce * 1.2,  # Amplifier légèrement pour la tête
+                'head_y': vertical_bounce * 1.2,
                 'neck_y': vertical_bounce * 1.1,
                 
                 # Rotations
                 'torso_rot_y': torso_rotation,
-                'head_rot_x': head_rotation_x,    # NOUVEAU: rotation avant-arrière
-                'head_rot_y': head_rotation_y,    # NOUVEAU: rotation latérale
-                'head_rot_z': head_rotation_z,    # NOUVEAU: inclinaison
+                'head_rot_x': head_rotation_x,
+                'head_rot_y': head_rotation_y,
+                'head_rot_z': head_rotation_z,
                 
-                # Reste inchangé...
-                # ...
+                # AJOUT DES CLÉS MANQUANTES: hanche
+                'hip_x': torso_sway * 0.5,
+                'hip_y': vertical_bounce,
+                
+                # Bras gauche
+                'deltoid_l_z': arm_swing * 0.7,
+                'biceps_l_z': arm_swing * 0.9,
+                'forearm_l_z': arm_swing,
+                'left_hand_z': arm_swing * 1.2,
+                'dorsalis_major_l_z': arm_swing * 0.5,
+                'pectorals_l_z': arm_swing * 0.4,
+                
+                # Bras droit
+                'deltoid_r_z': -arm_swing * 0.7, 
+                'biceps_r_z': -arm_swing * 0.9,
+                'forearm_r_z': -arm_swing,
+                'right_hand_z': -arm_swing * 1.2,
+                'dorsalis_major_r_z': -arm_swing * 0.5,
+                'pectorals_r_z': -arm_swing * 0.4,
+                
+                # Jambe gauche
+                'glutes_l_z': -leg_swing * 0.5,
+                'quadriceps_l_z': -leg_swing * 0.7,
+                'ishcio_hamstrings_l_z': -leg_swing * 0.7,
+                'calves_l_z': -leg_swing * 0.9,
+                'left_foot_z': -leg_swing * 1.3,
+                
+                # Jambe droite
+                'glutes_r_z': leg_swing * 0.5,
+                'quadriceps_r_z': leg_swing * 0.7,
+                'ishcio_hamstrings_r_z': leg_swing * 0.7,
+                'calves_r_z': leg_swing * 0.9,
+                'right_foot_z': leg_swing * 1.3
             }
             positions.append(frame_offsets)
             
@@ -182,8 +213,8 @@ class Model3DViewer(QGLWidget):
         self.precalc_frame = (self.precalc_frame + 1) % self.num_precalc_frames
         frame_offsets = self.precalculated_positions[self.precalc_frame]
         
-        # Appliquer les offsets à toutes les parties du corps
-        for part_name, offset_key in [
+        # Liste des parties et leurs clés d'offset correspondantes
+        part_offset_pairs = [
             # Tête et torse
             ('torso', 'torso_x'), ('torso', 'torso_y'),
             ('head', 'head_x'), ('head', 'head_y'),
@@ -195,16 +226,16 @@ class Model3DViewer(QGLWidget):
             ('biceps_l', 'biceps_l_z'),
             ('forearm_l', 'forearm_l_z'),
             ('left_hand', 'left_hand_z'),
-            ('dorsalis_major_l', 'dorsalis_major_l_z'),  # AJOUTÉ
-            ('pectorals_l', 'pectorals_l_z'),            # AJOUTÉ
+            ('dorsalis_major_l', 'dorsalis_major_l_z'),
+            ('pectorals_l', 'pectorals_l_z'),
             
             # Bras droit
             ('deltoid_r', 'deltoid_r_z'),
             ('biceps_r', 'biceps_r_z'),
             ('forearm_r', 'forearm_r_z'),
             ('right_hand', 'right_hand_z'),
-            ('dorsalis_major_r', 'dorsalis_major_r_z'),  # AJOUTÉ
-            ('pectorals_r', 'pectorals_r_z'),            # AJOUTÉ
+            ('dorsalis_major_r', 'dorsalis_major_r_z'),
+            ('pectorals_r', 'pectorals_r_z'),
             
             # Jambe gauche
             ('glutes_l', 'glutes_l_z'),
@@ -219,24 +250,29 @@ class Model3DViewer(QGLWidget):
             ('ishcio_hamstrings_r', 'ishcio_hamstrings_r_z'),
             ('calves_r', 'calves_r_z'),
             ('right_foot', 'right_foot_z')
-        ]:
-            # Appliquer l'offset x, y ou z selon le suffixe de la clé
-            if offset_key.endswith('_x'):
-                self.body_parts[part_name]['pos'][0] = self.get_default_position(part_name)[0] + frame_offsets[offset_key]
-            elif offset_key.endswith('_y'):
-                self.body_parts[part_name]['pos'][1] = self.get_default_position(part_name)[1] + frame_offsets[offset_key]
-            elif offset_key.endswith('_z'):
-                self.body_parts[part_name]['pos'][2] = self.get_default_position(part_name)[2] + frame_offsets[offset_key]
+        ]
         
-        # Appliquer les rotations
-        if 'torso_rot_y' in frame_offsets:
-            self.body_parts['torso']['rot'][1] = frame_offsets['torso_rot_y']
-        if 'head_rot_x' in frame_offsets:
-            self.body_parts['head']['rot'][0] = frame_offsets['head_rot_x']
-        if 'head_rot_y' in frame_offsets:
-            self.body_parts['head']['rot'][1] = frame_offsets['head_rot_y']
-        if 'head_rot_z' in frame_offsets:
-            self.body_parts['head']['rot'][2] = frame_offsets['head_rot_z']
+        # Appliquer les offsets seulement si les clés existent
+        for part_name, offset_key in part_offset_pairs:
+            if offset_key in frame_offsets and part_name in self.body_parts:
+                if offset_key.endswith('_x'):
+                    self.body_parts[part_name]['pos'][0] = self.get_default_position(part_name)[0] + frame_offsets[offset_key]
+                elif offset_key.endswith('_y'):
+                    self.body_parts[part_name]['pos'][1] = self.get_default_position(part_name)[1] + frame_offsets[offset_key]
+                elif offset_key.endswith('_z'):
+                    self.body_parts[part_name]['pos'][2] = self.get_default_position(part_name)[2] + frame_offsets[offset_key]
+        
+        # Appliquer les rotations avec vérification des clés
+        rotation_keys = [
+            ('torso', 'torso_rot_y', 1),
+            ('head', 'head_rot_x', 0),
+            ('head', 'head_rot_y', 1),
+            ('head', 'head_rot_z', 2)
+        ]
+        
+        for part_name, rot_key, rot_index in rotation_keys:
+            if rot_key in frame_offsets:
+                self.body_parts[part_name]['rot'][rot_index] = frame_offsets[rot_key]
         
         self.update()
 
