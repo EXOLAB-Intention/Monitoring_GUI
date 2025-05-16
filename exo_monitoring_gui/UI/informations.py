@@ -131,9 +131,7 @@ class InformationWindow(QDialog):
 
     def _load_existing_data(self):
         try:
-            # data_from_file contiendra les clés au format "participant_nom", "participant_age", etc.
-            # et "participant_image_path" si une image est définie.
-            # image_file_path sera la valeur de "participant_image_path" ou None.
+
             data_from_file, image_file_path = load_metadata(self.subject_file)
             
             if not data_from_file:

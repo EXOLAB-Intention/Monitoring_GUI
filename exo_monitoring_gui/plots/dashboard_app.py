@@ -11,8 +11,6 @@ from PyQt5.QtGui import QColor, QBrush, QCursor
 from PyQt5.QtWidgets import QScrollArea
 import pyqtgraph as pg
 
-
-
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Ajouter l'import du model_3d_viewer et du dialogue de mapping
@@ -27,10 +25,9 @@ class DashboardApp(QMainWindow):
         self.resize(1600, 900)
         self.setMinimumSize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
-
+        self.modified = False
         self.simulator = SensorSimulator()
         self.recording = False  # Ajouter l'attribut recording
-        self.recording_stopped = False  # Ajoute ceci juste après
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}  # Ajouter l'attribut recorded_data
 
         self.init_ui()
@@ -42,9 +39,42 @@ class DashboardApp(QMainWindow):
         # Menu bar
         menubar = self.menuBar()
         menubar.setStyleSheet("background-color: white; color: black;")
-        file_menu = menubar.addMenu('File')
-        edit_menu = menubar.addMenu('Edit')
-        options_menu = menubar.addMenu('Options')
+        self.main_bar = self.some_method()
+        self.main_bar._create_menubar()
+
+        # Create actions for the Edit menu
+        self.Clear_plots = self.main_bar._create_action(
+            "&Clear plots",
+            lambda: self.clear_plots(),
+            "Ctrl+N"
+        )
+        self.Refresh_the_connected_system = self.main_bar._create_action(
+            "&Refresh the connected system",
+            lambda: self.refresh_connected_system(),
+            "Ctrl+R"
+        )
+        self.Request_h5_file_transfer = self.main_bar._create_action(
+            "&Request .h5 file transfer",
+            lambda: self.request_h5_file_transfer(),
+            "Ctrl+H"
+        )
+
+        # Add Edit menu
+        edit_menu = menubar.addMenu('&Edit')
+        edit_menu.addAction(self.Clear_plots)
+        edit_menu.addAction(self.Refresh_the_connected_system)
+        edit_menu.addAction(self.Request_h5_file_transfer)
+
+        # Enable actions
+        self.Clear_plots.setEnabled(True)
+        self.Refresh_the_connected_system.setEnabled(True)
+        self.Request_h5_file_transfer.setEnabled(True)
+
+        self.main_bar._all_false_or_true(False)
+        
+        self.Clear_plots.setEnabled(False)
+        self.Refresh_the_connected_system.setEnabled(False)
+        self.Request_h5_file_transfer.setEnabled(False)
 
         # Central widget
         central_widget = QWidget()
@@ -161,7 +191,7 @@ class DashboardApp(QMainWindow):
         content_layout.addLayout(left_panel, stretch=1)  # Réduire la largeur de la section "Connected Systems"
         content_layout.addLayout(middle_panel, stretch=4)  # Augmenter la largeur de la section "Graphics / Visual Zone"
         content_layout.addLayout(right_panel, stretch=2)
-        
+
         # Footer
         footer_layout = QHBoxLayout()
         self.connect_button = QPushButton("Connect")
@@ -296,7 +326,7 @@ class DashboardApp(QMainWindow):
         self.config_button.setStyleSheet(config_button_style)
         self.connect_button.setStyleSheet(button_style)
         self.record_button.setStyleSheet(record_button_style)
-        
+
         for btn in (self.connect_button, self.record_button):
             footer_layout.addWidget(btn)
 
@@ -311,6 +341,22 @@ class DashboardApp(QMainWindow):
 
         # Connecter le signal de changement de mode
         self.display_mode_group.buttonClicked.connect(self.on_display_mode_changed)
+
+    def some_method(self):
+        from utils.Menu_bar import MainBar
+        return MainBar(self)
+
+    def clear_plots(self):
+        # Implement the functionality to clear plots
+        print("Clear plots")
+
+    def refresh_connected_system(self):
+        # Implement the functionality to refresh the connected system
+        print("Refresh the connected system")
+
+    def request_h5_file_transfer(self):
+        # Implement the functionality to request .h5 file transfer
+        print("Request .h5 file transfer")
 
     def connect_sensors(self):
         # Connecter les capteurs et les afficher en vert
@@ -405,83 +451,51 @@ class DashboardApp(QMainWindow):
             self.plot_sensor_data(item.text(0))
 
     def plot_sensor_data(self, sensor_name):
-        # Afficher les données enregistrées si l'enregistrement est stoppé
-        if self.recording_stopped:
-            if self.group_sensor_mode.isChecked():
-                sensor_group = sensor_name.split()[0][:-1]
-                if sensor_group in self.group_plots:
-                    plot_widget = self.group_plots[sensor_group]
-                    if sensor_name.startswith("IMU"):
-                        index = int(sensor_name[3]) - 1
-                        quaternion = self.recorded_data["IMU"][index]
-                        for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                            plot_widget.plot([q[i] for q in quaternion], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
-                    else:
-                        sensor_num = int(''.join(filter(str.isdigit, sensor_name)))
-                        if sensor_name.startswith("EMG"):
-                            index = sensor_num - 1
-                            plot_widget.plot(self.recorded_data["EMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
-                        elif sensor_name.startswith("pMMG"):
-                            index = sensor_num - 1
-                            plot_widget.plot(self.recorded_data["pMMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
-                    plot_widget.addLegend()
-                    self.highlight_sensor(sensor_name.split()[0])
-                return
-            else:
-                plot_widget = pg.PlotWidget(title=sensor_name)
-                plot_widget.setBackground('#1e1e1e')
-                plot_widget.getAxis('left').setTextPen('white')
-                plot_widget.getAxis('bottom').setTextPen('white')
-                plot_widget.showGrid(x=True, y=True, alpha=0.3)
-                plot_widget.setTitle(sensor_name, color='white', size='14pt')
-                self.middle_layout.addWidget(plot_widget)
-                self.plots[sensor_name.split()[0]] = plot_widget
-
-                if sensor_name.startswith("EMG"):
-                    index = int(sensor_name[3]) - 1
-                    plot_widget.plot(self.recorded_data["EMG"][index], clear=True, pen=pg.mkPen('b', width=2))
-                elif sensor_name.startswith("pMMG"):
-                    index = int(sensor_name[4]) - 1
-                    plot_widget.plot(self.recorded_data["pMMG"][index], clear=True, pen=pg.mkPen('b', width=2))
-                elif sensor_name.startswith("IMU"):
-                    index = int(sensor_name[3]) - 1
-                    quaternion = self.recorded_data["IMU"][index]
-                    plot_widget.clear()
-                    for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                        plot_widget.plot([q[i] for q in quaternion], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
-                    plot_widget.addLegend()
-                self.highlight_sensor(sensor_name.split()[0])
-                return
-
-        # --- Mode temps réel (enregistrement en cours) ---
+        # Ajouter la courbe du capteur au graphique de groupe correspondant
         if self.group_sensor_mode.isChecked():
             if sensor_name.startswith("IMU"):
+                # Créer un nouveau graphique pour le capteur IMU sélectionné
                 plot_widget = pg.PlotWidget(title=sensor_name)
                 plot_widget.setBackground('#1e1e1e')
                 plot_widget.getAxis('left').setTextPen('white')
                 plot_widget.getAxis('bottom').setTextPen('white')
                 plot_widget.showGrid(x=True, y=True, alpha=0.3)
                 plot_widget.setTitle(sensor_name, color='white', size='14pt')
+
+                # Ajouter le graphique à la section "2D Plots"
                 self.middle_layout.addWidget(plot_widget)
+
+                # Stocker le graphique et les données
                 self.plots[sensor_name.split()[0]] = plot_widget
                 self.plot_data[sensor_name.split()[0]] = np.zeros(100)
+
+                # Mettre en surbrillance le capteur sélectionné
                 self.highlight_sensor(sensor_name.split()[0])
             else:
                 sensor_group = sensor_name.split()[0][:-1]
                 if sensor_group in self.group_plots:
                     if sensor_name not in self.group_plot_data[sensor_group]:
                         self.group_plot_data[sensor_group][sensor_name] = np.zeros(100)
+
+                    # Mettre en surbrillance le capteur sélectionné
                     self.highlight_sensor(sensor_name.split()[0])
         else:
+            # Créer un nouveau graphique pour le capteur sélectionné
             plot_widget = pg.PlotWidget(title=sensor_name)
             plot_widget.setBackground('#1e1e1e')
             plot_widget.getAxis('left').setTextPen('white')
             plot_widget.getAxis('bottom').setTextPen('white')
             plot_widget.showGrid(x=True, y=True, alpha=0.3)
             plot_widget.setTitle(sensor_name, color='white', size='14pt')
+
+            # Ajouter le graphique à la section "2D Plots"
             self.middle_layout.addWidget(plot_widget)
+
+            # Stocker le graphique et les données
             self.plots[sensor_name.split()[0]] = plot_widget
             self.plot_data[sensor_name.split()[0]] = np.zeros(100)
+
+            # Mettre en surbrillance le capteur sélectionné
             self.highlight_sensor(sensor_name.split()[0])
 
     def remove_sensor_plot(self, sensor_name):
@@ -635,39 +649,15 @@ class DashboardApp(QMainWindow):
 
     def start_recording(self):
         self.recording = True
-        self.recording_stopped = False
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}
         self.record_button.setText("Record Stop")
 
     def stop_recording(self):
         self.recording = False
-        self.recording_stopped = True
         self.record_button.setText("Record Start")
-        self.record_button.setStyleSheet("""
-        QPushButton {
-            background-color: #4caf50;
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            color: white;
-            font-size: 14px;
-            font-weight: 500;
-            text-align: center;
-            min-width: 120px;
-        }
-        QPushButton:hover {
-            background-color: #43a047;
-        }
-        QPushButton:pressed {
-            background-color: #388e3c;
-        }
-        QPushButton:disabled {
-            background-color: #e0e0e0;
-            border: 1px solid #d0d0d0;
-            color: #a0a0a0;
-        }
-        """)
-        self.record_button.setEnabled(False)  # Désactiver le bouton
+        self.Clear_plots.setEnabled(True)
+        self.Refresh_the_connected_system.setEnabled(True)
+        self.Request_h5_file_transfer.setEnabled(True)
         self.show_recorded_data()
 
     def show_recorded_data(self):
@@ -719,31 +709,48 @@ class DashboardApp(QMainWindow):
     def toggle_recording(self):
         if self.recording:
             self.stop_recording()
+            self.record_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4caf50;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #43a047;
+            }
+            QPushButton:pressed {
+                background-color: #388e3c;
+            }
+            """)
         else:
-            if self.record_button.isEnabled():
-                self.connect_sensors()
-                self.start_recording()
-                # Style rouge pour le bouton d'arrêt d'enregistrement
-                self.record_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #f44336;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 8px 16px;
-                    color: white;
-                    font-size: 14px;
-                    font-weight: 500;
-                    text-align: center;
-                    min-width: 120px;
-                }
-                QPushButton:hover {
-                    background-color: #e53935;
-                }
-                QPushButton:pressed {
-                    background-color: #d32f2f;
-                }
-                """)
-
+            self.connect_sensors()
+            self.start_recording()
+            # Style rouge pour le bouton d'arrêt d'enregistrement
+            self.record_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #e53935;
+            }
+            QPushButton:pressed {
+                background-color: #d32f2f;
+            }
+            """)
 
     def toggle_animation(self):
         """Toggle stickman walking animation."""
@@ -756,29 +763,29 @@ class DashboardApp(QMainWindow):
         start_rotation = (self.model_3d_widget.model_viewer.rotation_x,
                         self.model_3d_widget.model_viewer.rotation_y,
                         self.model_3d_widget.model_viewer.rotation_z)
-        
+
         # Créer un timer pour animer le retour à zéro
         steps = 10
         timer = QTimer(self)
         step_counter = [0]  # Utiliser une liste pour pouvoir la modifier dans la closure
-        
+
         def animation_step():
             step_counter[0] += 1
             progress = step_counter[0] / steps
-            
+
             # Interpolation linéaire vers zéro
             x = start_rotation[0] * (1 - progress)
             y = start_rotation[1] * (1 - progress)
             z = start_rotation[2] * (1 - progress)
-            
+
             self.model_3d_widget.model_viewer.rotation_x = x
             self.model_3d_widget.model_viewer.rotation_y = y
             self.model_3d_widget.model_viewer.rotation_z = z
             self.model_3d_widget.model_viewer.update()
-            
+
             if step_counter[0] >= steps:
                 timer.stop()
-        
+
         timer.timeout.connect(animation_step)
         timer.start(20)  # 50 FPS
 
@@ -799,11 +806,11 @@ class DashboardApp(QMainWindow):
         # Mettre à jour les mappages IMU
         for imu_id, body_part in imu_mappings.items():
             self.model_3d_widget.map_imu_to_body_part(imu_id, body_part)
-        
+
         # Mettre à jour les mappages EMG et pMMG
         self.model_3d_widget.model_viewer.set_emg_mapping(emg_mappings)
         self.model_3d_widget.model_viewer.set_pmmg_mapping(pmmg_mappings)
-        
+
         # Stocker les mappages localement
         self.emg_mappings = emg_mappings
         self.pmmg_mappings = pmmg_mappings
@@ -831,13 +838,13 @@ class DashboardApp(QMainWindow):
     def load_external_model(self):
         """Charger un modèle 3D externe"""
         from PyQt5.QtWidgets import QFileDialog
-        
+
         # Ouvrir un dialogue de sélection de fichier
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Load 3D Model", "", 
+            self, "Load 3D Model", "",
             "3D Model Files (*.obj *.stl *.3ds);;All Files (*)"
         )
-        
+
         if file_path:
             success = self.model_3d_widget.load_external_model(file_path)
             if not success:
