@@ -13,21 +13,119 @@ class MappingBadgesWidget(QWidget):
     def __init__(self, mappings, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        for part in sorted(set(mappings.values())):
-            h = QHBoxLayout()
-            part_label = QLabel(f"<b>{part.capitalize()}</b>")
-            h.addWidget(part_label)
-            for typ in ["IMU", "EMG", "pMMG"]:
-                for sid, bpart in mappings.items():
-                    if bpart == part and str(sid).startswith(typ[0]):
-                        badge = QLabel(f"{typ}{sid}")
+        
+        # Définir l'ordre anatomique des parties du corps (de la tête aux pieds)
+        anatomical_order = [
+            # Tête et cou
+            'head', 'neck',
+            # Torse
+            'torso',
+            # Bras gauche
+            'deltoid_l', 'biceps_l', 'forearm_l', 'dorsalis_major_l', 'pectorals_l', 'left_hand',
+            # Bras droit
+            'deltoid_r', 'biceps_r', 'forearm_r', 'dorsalis_major_r', 'pectorals_r', 'right_hand',
+            # Bassin
+            'hip',
+            # Jambe gauche
+            'glutes_l', 'quadriceps_l', 'ishcio_hamstrings_l', 'calves_l', 'left_foot',
+            # Jambe droite
+            'glutes_r', 'quadriceps_r', 'ishcio_hamstrings_r', 'calves_r', 'right_foot'
+        ]
+        
+        # Fonction pour convertir le nom du modèle en nom UI plus lisible
+        def get_display_name(part):
+            part_names = {
+                'head': 'Head', 
+                'neck': 'Neck',
+                'torso': 'Torso',
+                'deltoid_l': 'Left Deltoid',
+                'biceps_l': 'Left Biceps',
+                'forearm_l': 'Left Forearm',
+                'dorsalis_major_l': 'Left Latissimus Dorsi',
+                'pectorals_l': 'Left Pectorals',
+                'left_hand': 'Left Hand',
+                'deltoid_r': 'Right Deltoid',
+                'biceps_r': 'Right Biceps',
+                'forearm_r': 'Right Forearm',
+                'dorsalis_major_r': 'Right Latissimus Dorsi',
+                'pectorals_r': 'Right Pectorals',
+                'right_hand': 'Right Hand',
+                'hip': 'Hip',
+                'glutes_l': 'Left Gluteus',
+                'quadriceps_l': 'Left Quadriceps',
+                'ishcio_hamstrings_l': 'Left Hamstrings',
+                'calves_l': 'Left Calf',
+                'left_foot': 'Left Foot',
+                'glutes_r': 'Right Gluteus',
+                'quadriceps_r': 'Right Quadriceps',
+                'ishcio_hamstrings_r': 'Right Hamstrings',
+                'calves_r': 'Right Calf',
+                'right_foot': 'Right Foot'
+            }
+            return part_names.get(part, part.capitalize())
+        
+        # Créer un dictionnaire regroupant les capteurs par partie du corps
+        body_part_sensors = {}
+        for sid, part in mappings.items():
+            if part not in body_part_sensors:
+                body_part_sensors[part] = []
+            body_part_sensors[part].append(sid)
+        
+        # Ajouter les parties dans l'ordre anatomique
+        for part in anatomical_order:
+            if part in body_part_sensors:
+                h = QHBoxLayout()
+                part_label = QLabel(f"<b>{get_display_name(part)}</b>")
+                h.addWidget(part_label)
+                
+                # Ajouter les capteurs pour cette partie
+                for sid in sorted(body_part_sensors[part]):
+                    typ = None
+                    if str(sid).startswith("I"):
+                        typ = "IMU"
+                    elif str(sid).startswith("E"):
+                        typ = "EMG"
+                    elif str(sid).startswith("p"):
+                        typ = "pMMG"
+                    
+                    if typ:
+                        badge = QLabel(f"{sid}")
                         badge.setStyleSheet(f"background: {self._color(typ)}; color: white; border-radius: 8px; padding: 2px 8px; margin: 2px;")
                         h.addWidget(badge)
-            layout.addLayout(h)
+                
+                layout.addLayout(h)
+        
+        # Ajouter les parties qui ne sont pas dans notre ordre prédéfini (au cas où)
+        for part in body_part_sensors:
+            if part not in anatomical_order:
+                h = QHBoxLayout()
+                part_label = QLabel(f"<b>{get_display_name(part)}</b>")
+                h.addWidget(part_label)
+                
+                for sid in sorted(body_part_sensors[part]):
+                    typ = None
+                    if str(sid).startswith("I"):
+                        typ = "IMU"
+                    elif str(sid).startswith("E"):
+                        typ = "EMG"
+                    elif str(sid).startswith("p"):
+                        typ = "pMMG"
+                    
+                    if typ:
+                        badge = QLabel(f"{sid}")
+                        badge.setStyleSheet(f"background: {self._color(typ)}; color: white; border-radius: 8px; padding: 2px 8px; margin: 2px;")
+                        h.addWidget(badge)
+                
+                layout.addLayout(h)
+        
         layout.addStretch(1)
 
     def _color(self, typ):
-        return {"IMU": "#2196F3", "EMG": "#4CAF50", "pMMG": "#FF9800"}.get(typ, "#888")
+        return {
+            "IMU": "#00CC33",   # Vert comme dans model_3d_viewer.py
+            "EMG": "#CC3300",   # Rouge comme dans model_3d_viewer.py
+            "pMMG": "#0033CC"   # Bleu comme dans model_3d_viewer.py
+        }.get(typ, "#888")
 
 class SimplifiedMappingDialog(QDialog):
     """Interface simplifiée avec onglets pour le mapping des capteurs"""
@@ -312,7 +410,7 @@ class SimplifiedMappingDialog(QDialog):
         )
 
     def _get_color_for_type(self, typ):
-        return {"IMU": "#2196F3", "EMG": "#4CAF50", "pMMG": "#FF9800"}.get(typ, "#888")
+        return {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}.get(typ, "#888")
 
     def load_current_mappings(self):
         """Charge les mappings actuels dans les combos"""
@@ -517,8 +615,8 @@ class SimplifiedMappingDialog(QDialog):
             'quadriceps_r': 'Right Quadriceps',
             'ishcio_hamstrings_l': 'Left Hamstrings',
             'ishcio_hamstrings_r': 'Right Hamstrings',
-            'calves_l': 'Left Calves',
-            'calves_r': 'Right Calves',
+            'calves_l': 'Left Calf',
+            'calves_r': 'Right Calf',
             'glutes_l': 'Left Gluteus',
             'glutes_r': 'Right Gluteus',
             'left_foot': 'Left Foot',
