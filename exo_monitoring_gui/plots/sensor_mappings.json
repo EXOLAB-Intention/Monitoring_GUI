@@ -1,27 +1,23 @@
 {
   "EMG": {
-    "1": "head",
-    "5": "neck",
-    "6": "biceps_l",
-    "7": "forearm_l",
-    "8": "deltoid_l",
-    "3": "deltoid_l",
-    "4": "head"
+    "1": "biceps_l",
+    "2": "biceps_r",
+    "3": "biceps_r",
+    "4": "right_foot",
+    "5": "deltoid_l",
+    "7": "dorsalis_major_l",
+    "6": "torso"
   },
   "IMU": {
-    "1": "head",
-    "2": "forearm_l",
-    "3": "forearm_r",
-    "4": "calves_l",
-    "5": "calves_r",
+    "1": "torso",
+    "2": "pectorals_l",
+    "3": "pectorals_r",
+    "4": "torso",
+    "5": "head",
     "6": "head"
   },
   "pMMG": {
-    "1": "head",
-    "4": "torso",
-    "3": "deltoid_l",
-    "7": "neck",
-    "6": "head",
-    "8": "torso"
+    "1": "deltoid_l",
+    "2": "deltoid_r"
   }
 }
