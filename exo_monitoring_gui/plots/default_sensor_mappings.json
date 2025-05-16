@@ -2,8 +2,10 @@
   "EMG": {
     "1": "biceps_l",
     "2": "biceps_r",
-    "3": "quadriceps_l",
-    "4": "quadriceps_r"
+    "3": "biceps_r",
+    "4": "quadriceps_r",
+    "5": "deltoid_l",
+    "7": "dorsalis_major_l"
   },
   "IMU": {
     "1": "torso",

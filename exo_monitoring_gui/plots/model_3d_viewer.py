@@ -4,7 +4,7 @@ import numpy as np
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
 from PyQt5.QtCore import Qt, QTimer, QElapsedTimer
 from PyQt5.QtOpenGL import QGLWidget, QGLFormat
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QPainter
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
@@ -33,6 +33,7 @@ class Model3DViewer(QGLWidget):
         self.fps_timer.start()
         self.frame_count = 0
         self.fps = 0
+        self.show_fps = True  # Option pour activer/désactiver l'affichage des FPS
         
         # Body part positions and rotations
         self.body_parts = {
@@ -109,30 +110,27 @@ class Model3DViewer(QGLWidget):
         self.fps_update_timer.start(1000)  # Mise à jour FPS chaque seconde
                 
     def _precalculate_animation(self, num_frames):
-        """Precalculate animation positions for optimal performance with improved realism"""
+        """Precalculate animation positions for optimal performance"""
         positions = []
         for i in range(num_frames):
             phase = (i / float(num_frames)) * 2 * math.pi
             
-            # Utiliser des courbes d'accélération/décélération (easing)
-            ease_factor = 0.5 - 0.5 * math.cos(phase) # Smooth sinusoidal easing
-            
-            # Amplitude des mouvements avec easing
-            arm_swing = 0.3 * ease_factor
+            # Calculs simplifiés pour éviter les bugs
+            arm_swing = 0.25 * math.sin(phase)
             
             # Phase opposée pour jambe droite et gauche (décalage de 180 degrés)
-            leg_swing_left = 0.35 * (0.5 - 0.5 * math.cos(phase))
-            leg_swing_right = 0.35 * (0.5 - 0.5 * math.cos(phase + math.pi))
+            leg_swing_left = 0.3 * math.sin(phase)
+            leg_swing_right = 0.3 * math.sin(phase + math.pi)
             
             # Amplitude des mouvements
-            torso_sway = 0.07 * math.sin(phase)
-            vertical_bounce = 0.05 * math.sin(phase * 2)
-            torso_rotation = 5 * math.sin(phase)
+            torso_sway = 0.05 * math.sin(phase)
+            vertical_bounce = 0.03 * math.sin(phase * 2)
+            torso_rotation = 3 * math.sin(phase)
             
-            # Rotation de la tête (suit partiellement la rotation du torse)
-            head_rotation_x = 3 * math.sin(phase + 0.2)  # Légère inclinaison avant-arrière
-            head_rotation_y = torso_rotation * 0.7       # Suit le mouvement de rotation du torse
-            head_rotation_z = 2 * math.sin(phase)        # Léger balancement latéral
+            # Rotation de la tête (réduite)
+            head_rotation_x = 1.0 * math.sin(phase + 0.2)
+            head_rotation_y = torso_rotation * 0.2
+            head_rotation_z = 0.5 * math.sin(phase)
             
             frame_offsets = {
                 # Mouvements du torse et de la tête
@@ -151,7 +149,7 @@ class Model3DViewer(QGLWidget):
                 'head_rot_y': head_rotation_y,
                 'head_rot_z': head_rotation_z,
                 
-                # AJOUT DES CLÉS MANQUANTES: hanche
+                # Hanche
                 'hip_x': torso_sway * 0.5,
                 'hip_y': vertical_bounce,
                 
@@ -171,14 +169,14 @@ class Model3DViewer(QGLWidget):
                 'dorsalis_major_r_z': arm_swing * 0.5,
                 'pectorals_r_z': arm_swing * 0.4,
                 
-                # Jambe gauche - Maintenant avec phase indépendante
+                # Jambe gauche - Phase indépendante
                 'glutes_l_z': leg_swing_left * 0.5,
                 'quadriceps_l_z': leg_swing_left * 0.7,
                 'ishcio_hamstrings_l_z': leg_swing_left * 0.7,
                 'calves_l_z': leg_swing_left * 0.9,
                 'left_foot_z': leg_swing_left * 1.3,
                 
-                # Jambe droite - Maintenant avec phase indépendante
+                # Jambe droite - Phase indépendante
                 'glutes_r_z': leg_swing_right * 0.5,
                 'quadriceps_r_z': leg_swing_right * 0.7,
                 'ishcio_hamstrings_r_z': leg_swing_right * 0.7,
@@ -332,28 +330,116 @@ class Model3DViewer(QGLWidget):
         gluQuadricDrawStyle(self.quadric, GLU_FILL)
         gluQuadricNormals(self.quadric, GLU_SMOOTH)
         
-        self.create_display_list()
+        # Création du sol / grille de référence
+        self.floor_display_list = glGenLists(1)
+        glNewList(self.floor_display_list, GL_COMPILE)
+        self.create_floor()
+        glEndList()
         
+        self.create_display_list()
+
+    def create_floor(self):
+        """Créer un sol quadrillé pour visualiser la direction de déplacement"""
+        # Couleur du sol
+        glColor3f(0.3, 0.3, 0.3)
+        
+        # Taille du sol
+        floor_size = 10.0
+        grid_size = 0.5
+        
+        # Dessiner le sol principal
+        glBegin(GL_QUADS)
+        glVertex3f(-floor_size, 0, -floor_size)
+        glVertex3f(-floor_size, 0, floor_size)
+        glVertex3f(floor_size, 0, floor_size)
+        glVertex3f(floor_size, 0, -floor_size)
+        glEnd()
+        
+        # Dessiner le quadrillage
+        glLineWidth(1.0)
+        glBegin(GL_LINES)
+        
+        # Lignes dans l'axe Z (avant/arrière)
+        glColor3f(0.5, 0.5, 0.5)
+        for x in np.arange(-floor_size, floor_size + grid_size, grid_size):
+            glVertex3f(x, 0.01, -floor_size)
+            glVertex3f(x, 0.01, floor_size)
+        
+        # Lignes dans l'axe X (gauche/droite)
+        for z in np.arange(-floor_size, floor_size + grid_size, grid_size):
+            glVertex3f(-floor_size, 0.01, z)
+            glVertex3f(floor_size, 0.01, z)
+        
+        glEnd()
+        
+        # Dessiner des marqueurs de direction (flèches ou repères)
+        self.draw_direction_marker(0, 0.02, 0, 1.5)  # Marqueur au centre
+        
+        # Ajouter des marqueurs aux quatre coins pour l'orientation
+        self.draw_direction_marker(-floor_size + 0.5, 0.02, -floor_size + 0.5, 0.5)  # Coin arrière gauche
+        self.draw_direction_marker(floor_size - 0.5, 0.02, -floor_size + 0.5, 0.5)   # Coin arrière droit
+        self.draw_direction_marker(-floor_size + 0.5, 0.02, floor_size - 0.5, 0.5)   # Coin avant gauche
+        self.draw_direction_marker(floor_size - 0.5, 0.02, floor_size - 0.5, 0.5)    # Coin avant droit
+
+    def draw_direction_marker(self, x, y, z, size):
+        """Dessiner un marqueur de direction (flèche)"""
+        # Flèche pointant vers Z+ (avant)
+        glBegin(GL_LINES)
+        
+        # Ligne principale de la flèche
+        glColor3f(0.0, 0.7, 0.0)  # Vert pour l'axe Z (avant)
+        glVertex3f(x, y, z)
+        glVertex3f(x, y, z + size)
+        
+        # Pointe de la flèche
+        glVertex3f(x, y, z + size)
+        glVertex3f(x - size/5, y, z + size - size/5)
+        
+        glVertex3f(x, y, z + size)
+        glVertex3f(x + size/5, y, z + size - size/5)
+        
+        # Ligne X (rouge)
+        glColor3f(0.7, 0.0, 0.0)  # Rouge pour l'axe X (droite)
+        glVertex3f(x, y, z)
+        glVertex3f(x + size, y, z)
+        
+        # Pointe de la flèche X
+        glVertex3f(x + size, y, z)
+        glVertex3f(x + size - size/5, y, z - size/5)
+        
+        glVertex3f(x + size, y, z)
+        glVertex3f(x + size - size/5, y, z + size/5)
+        
+        glEnd()
+
     def create_display_list(self):
         """Create an OpenGL display list for the model."""
-        # Check if display_list is already defined and valid
+        # S'assurer que le contexte OpenGL est valide
+        if not self.isValid() or not self.context().isValid():
+            print("Warning: OpenGL context not valid, skipping display list creation")
+            return
+        
+        # Vérifier si display_list est déjà défini et valide
         if hasattr(self, 'display_list') and self.display_list != 0:
             try:
                 glDeleteLists(self.display_list, 1)
             except OpenGL.error.GLError:
                 pass
         
-        # Generate a new display list ID
+        # Générer une nouvelle display list avec gestion d'erreur
         try:
+            # Vérifier que le contexte est bien actif
+            self.makeCurrent()
+            
             self.display_list = glGenLists(1)
             if self.display_list == 0:
                 print("Error: Could not generate a valid display list ID")
                 return
                 
-            # Now create a new display list
+            # Créer la nouvelle display list
             glNewList(self.display_list, GL_COMPILE)
             
-            # Draw the model
+            # Dessiner le modèle
             self.draw_limbs_internal()
             self.draw_joints_internal()
             
@@ -361,6 +447,9 @@ class Model3DViewer(QGLWidget):
         except OpenGL.error.GLError as e:
             print(f"OpenGL error in create_display_list: {e}")
             self.display_list = 0
+        finally:
+            # Libérer le contexte OpenGL
+            self.doneCurrent()
 
     def resizeGL(self, width, height):
         glViewport(0, 0, width, height)
@@ -383,8 +472,8 @@ class Model3DViewer(QGLWidget):
         glRotatef(self.rotation_y, 0, 1, 0)
         glRotatef(self.rotation_z, 0, 0, 1)
         
-        # Réinitialiser la liste d'étiquettes
-        self.labels = []
+        # Dessiner le sol
+        glCallList(self.floor_display_list)
         
         # Si en animation, dessiner directement (plus fluide)
         if self.walking:
@@ -394,71 +483,8 @@ class Model3DViewer(QGLWidget):
             # Sinon utiliser la display list (plus performant)
             glCallList(self.display_list)
         
-        # Dessiner les étiquettes des capteurs
-        if hasattr(self, 'labels'):
-            for x, y, text, sensor_type in self.labels:
-                if sensor_type == "IMU":
-                    color = "#00CC33"  # Vert
-                elif sensor_type == "EMG":
-                    color = "#CC3300"  # Rouge
-                elif sensor_type == "pMMG":
-                    color = "#0033CC"  # Bleu
-                    
-                # Utiliser la version à 3 coordonnées (avec z=0)
-                self.renderText(x, y, 0.0, text, QFont("Arial", 10))
-        
-        self.renderText(10, self.height() - 20, f"FPS: {self.fps}")
-        
-        # Draw the sensor legend with proper English labels
-        # Title and labels
-        self.renderText(10, 20, "Legend:", QFont("Arial", 10, QFont.Bold))  # Déplacé de 30 à 20
-        self.renderText(60, 45, "IMU Sensors", QFont("Arial", 9))  # Ajusté
-        self.renderText(60, 65, "EMG Sensors", QFont("Arial", 9))  # Ajusté
-        self.renderText(60, 85, "pMMG Sensors", QFont("Arial", 9))  # Ajusté
-        
-        # Draw color squares with better positioning
-        glPushMatrix()
-        glLoadIdentity()
-        glMatrixMode(GL_PROJECTION)
-        glPushMatrix()
-        glLoadIdentity()
-        glOrtho(0, self.width(), 0, self.height(), -1, 1)
-        
-        glBegin(GL_QUADS)
-        # IMU (green)
-        glColor3f(0.0, 0.8, 0.2)
-        glVertex2f(30, self.height() - 45)  # Ajusté
-        glVertex2f(50, self.height() - 45)
-        glVertex2f(50, self.height() - 35)
-        glVertex2f(30, self.height() - 35)
-        
-        # EMG (red)
-        glColor3f(0.8, 0.2, 0.0)
-        glVertex2f(30, self.height() - 65)  # Ajusté
-        glVertex2f(50, self.height() - 65)
-        glVertex2f(50, self.height() - 55)
-        glVertex2f(30, self.height() - 55)
-        
-        # pMMG (blue)
-        glColor3f(0.0, 0.2, 0.8)
-        glVertex2f(30, self.height() - 85)  # Ajusté
-        glVertex2f(50, self.height() - 85)
-        glVertex2f(50, self.height() - 75)
-        glVertex2f(30, self.height() - 75)
-        glEnd()
-        
-        # Add a border around the legend - LARGER AND WIDER
-        glColor3f(0.7, 0.7, 0.7)
-        glBegin(GL_LINE_LOOP)
-        glVertex2f(5, self.height() - 100)     # Bas gauche - Plus bas de 5 pixels
-        glVertex2f(180, self.height() - 100)   # Bas droite - Plus large de 10 pixels
-        glVertex2f(180, self.height() - 10)    # Haut droite - Plus haut de 5 pixels
-        glVertex2f(5, self.height() - 10)      # Haut gauche - Plus haut de 5 pixels
-        glEnd()
-        
-        glPopMatrix()
-        glMatrixMode(GL_MODELVIEW)
-        glPopMatrix()
+        # Draw the sensor legend (contient maintenant aussi le FPS)
+        self._draw_legend()
 
     def draw_limbs_internal(self):
         """Draw the limbs of the body using immediate mode OpenGL."""
@@ -778,6 +804,64 @@ class Model3DViewer(QGLWidget):
         self.pmmg_mapping = pmmg_mapping
         self.update()
 
+    def _draw_legend(self):
+        """Dessiner la légende des capteurs et afficher FPS en haut à droite"""
+        # Title and labels
+        self.renderText(10, 20, "Legend:", QFont("Arial", 10, QFont.Bold))
+        self.renderText(60, 45, "IMU Sensors", QFont("Arial", 9))
+        self.renderText(60, 65, "EMG Sensors", QFont("Arial", 9))
+        self.renderText(60, 85, "pMMG Sensors", QFont("Arial", 9))
+        
+        # Afficher FPS en haut à droite
+        if self.show_fps:
+            fps_text = f"FPS: {self.fps:.1f}"
+            text_width = 80  # Largeur approximative du texte
+            self.renderText(self.width() - text_width - 10, 20, fps_text, QFont("Arial", 10, QFont.Bold))
+        
+        # Draw color squares
+        glPushMatrix()
+        glLoadIdentity()
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, self.width(), 0, self.height(), -1, 1)
+        
+        glBegin(GL_QUADS)
+        # IMU (green)
+        glColor3f(0.0, 0.8, 0.2)
+        glVertex2f(30, self.height() - 45)
+        glVertex2f(50, self.height() - 45)
+        glVertex2f(50, self.height() - 35)
+        glVertex2f(30, self.height() - 35)
+        
+        # EMG (red)
+        glColor3f(0.8, 0.2, 0.0)
+        glVertex2f(30, self.height() - 65)
+        glVertex2f(50, self.height() - 65)
+        glVertex2f(50, self.height() - 55)
+        glVertex2f(30, self.height() - 55)
+        
+        # pMMG (blue)
+        glColor3f(0.0, 0.2, 0.8)
+        glVertex2f(30, self.height() - 85)
+        glVertex2f(50, self.height() - 85)
+        glVertex2f(50, self.height() - 75)
+        glVertex2f(30, self.height() - 75)
+        glEnd()
+        
+        # Add a border around the legend
+        glColor3f(0.7, 0.7, 0.7)
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(5, self.height() - 95)
+        glVertex2f(180, self.height() - 95)
+        glVertex2f(180, self.height() - 5)
+        glVertex2f(5, self.height() - 5)
+        glEnd()
+        
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+
     def __del__(self):
         """Clean up OpenGL resources when object is destroyed."""
         try:
@@ -786,6 +870,8 @@ class Model3DViewer(QGLWidget):
                 self.makeCurrent()
                 if hasattr(self, 'display_list') and self.display_list:
                     glDeleteLists(self.display_list, 1)
+                if hasattr(self, 'floor_display_list') and self.floor_display_list:
+                    glDeleteLists(self.floor_display_list, 1)
                 self.doneCurrent()
         except Exception as e:
             # Silently ignore errors during cleanup
