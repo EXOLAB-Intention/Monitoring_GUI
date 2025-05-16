@@ -100,27 +100,161 @@ class Model3DViewer(QGLWidget):
         self.fps_update_timer.start(1000)  # Mise à jour FPS chaque seconde
                 
     def _precalculate_animation(self, num_frames):
-        """Precalculate animation positions for optimal performance"""
+        """Precalculate animation positions for optimal performance with improved realism"""
         positions = []
         for i in range(num_frames):
             phase = (i / float(num_frames)) * 2 * math.pi
-            arm_swing = 0.2 * math.sin(phase)
-            leg_swing = 0.2 * math.sin(phase)
+            
+            # Amplitude des mouvements
+            arm_swing = 0.3 * math.sin(phase)
+            leg_swing = 0.35 * math.sin(phase)
+            torso_sway = 0.07 * math.sin(phase)
+            vertical_bounce = 0.05 * math.sin(phase * 2)
+            torso_rotation = 5 * math.sin(phase)
+            
+            # Rotation de la tête (suit partiellement la rotation du torse)
+            head_rotation_x = 3 * math.sin(phase + 0.2)  # Légère inclinaison avant-arrière
+            head_rotation_y = torso_rotation * 0.7       # Suit le mouvement de rotation du torse
+            head_rotation_z = 2 * math.sin(phase)        # Léger balancement latéral
             
             frame_offsets = {
-                'forearm_l_z': arm_swing,          # Changed from 'left_elbow_z'
-                'forearm_r_z': -arm_swing,         # Changed from 'right_elbow_z'
-                'left_hand_z': arm_swing * 1.5,
-                'right_hand_z': -arm_swing * 1.5,
-                'calves_l_z': -leg_swing,          # Changed from 'left_knee_z'
-                'calves_r_z': leg_swing,           # Changed from 'right_knee_z'
-                'left_foot_z': -leg_swing * 1.5,
-                'right_foot_z': leg_swing * 1.5
+                # Mouvements existants...
+                'torso_x': torso_sway,
+                'head_x': torso_sway * 1.1,
+                'neck_x': torso_sway * 1.05,
+                
+                # Mouvement vertical
+                'torso_y': vertical_bounce,
+                'head_y': vertical_bounce * 1.2,  # Amplifier légèrement pour la tête
+                'neck_y': vertical_bounce * 1.1,
+                
+                # Rotations
+                'torso_rot_y': torso_rotation,
+                'head_rot_x': head_rotation_x,    # NOUVEAU: rotation avant-arrière
+                'head_rot_y': head_rotation_y,    # NOUVEAU: rotation latérale
+                'head_rot_z': head_rotation_z,    # NOUVEAU: inclinaison
+                
+                # Reste inchangé...
+                # ...
             }
             positions.append(frame_offsets)
             
         return positions
-                
+
+    def get_default_position(self, part_name):
+        """Retourne la position par défaut d'une partie du corps (sans animation)"""
+        # Ces positions correspondent aux positions initiales définies dans le dictionnaire body_parts
+        default_positions = {
+            'head': [0, 1.7, 0],
+            'neck': [0, 1.5, 0],
+            'torso': [0, 0.9, 0],
+            'deltoid_l': [-0.15, 1.4, 0],
+            'biceps_l': [-0.3, 1.3, 0],
+            'forearm_l': [-0.4, 1.1, 0],
+            'dorsalis_major_l': [-0.1, 1.2, 0],
+            'pectorals_l': [-0.1, 1.3, 0],
+            'left_hand': [-0.5, 0.8, 0],
+            'deltoid_r': [0.15, 1.4, 0],
+            'biceps_r': [0.3, 1.3, 0],
+            'forearm_r': [0.4, 1.1, 0],
+            'dorsalis_major_r': [0.1, 1.2, 0],
+            'pectorals_r': [0.1, 1.3, 0],
+            'right_hand': [0.5, 0.8, 0],
+            'hip': [0, 0.9, 0],
+            'quadriceps_l': [-0.15, 0.7, 0],
+            'quadriceps_r': [0.15, 0.7, 0],
+            'ishcio_hamstrings_l': [-0.15, 0.6, 0],
+            'ishcio_hamstrings_r': [0.15, 0.6, 0],
+            'calves_l': [-0.2, 0.3, 0],
+            'calves_r': [0.2, 0.3, 0],
+            'glutes_l': [-0.15, 0.8, 0],
+            'glutes_r': [0.15, 0.8, 0],
+            'left_foot': [-0.2, 0.0, 0],
+            'right_foot': [0.2, 0.0, 0]
+        }
+        return default_positions.get(part_name, [0, 0, 0])
+
+    def update_animation_frame(self):
+        """Update walking animation on each QTimer tick with full body movement"""
+        if not self.walking:
+            return
+        
+        self.precalc_frame = (self.precalc_frame + 1) % self.num_precalc_frames
+        frame_offsets = self.precalculated_positions[self.precalc_frame]
+        
+        # Appliquer les offsets à toutes les parties du corps
+        for part_name, offset_key in [
+            # Tête et torse
+            ('torso', 'torso_x'), ('torso', 'torso_y'),
+            ('head', 'head_x'), ('head', 'head_y'),
+            ('neck', 'neck_x'), ('neck', 'neck_y'),
+            ('hip', 'hip_x'), ('hip', 'hip_y'),
+            
+            # Bras gauche
+            ('deltoid_l', 'deltoid_l_z'),
+            ('biceps_l', 'biceps_l_z'),
+            ('forearm_l', 'forearm_l_z'),
+            ('left_hand', 'left_hand_z'),
+            ('dorsalis_major_l', 'dorsalis_major_l_z'),  # AJOUTÉ
+            ('pectorals_l', 'pectorals_l_z'),            # AJOUTÉ
+            
+            # Bras droit
+            ('deltoid_r', 'deltoid_r_z'),
+            ('biceps_r', 'biceps_r_z'),
+            ('forearm_r', 'forearm_r_z'),
+            ('right_hand', 'right_hand_z'),
+            ('dorsalis_major_r', 'dorsalis_major_r_z'),  # AJOUTÉ
+            ('pectorals_r', 'pectorals_r_z'),            # AJOUTÉ
+            
+            # Jambe gauche
+            ('glutes_l', 'glutes_l_z'),
+            ('quadriceps_l', 'quadriceps_l_z'),
+            ('ishcio_hamstrings_l', 'ishcio_hamstrings_l_z'),
+            ('calves_l', 'calves_l_z'),
+            ('left_foot', 'left_foot_z'),
+            
+            # Jambe droite
+            ('glutes_r', 'glutes_r_z'),
+            ('quadriceps_r', 'quadriceps_r_z'),
+            ('ishcio_hamstrings_r', 'ishcio_hamstrings_r_z'),
+            ('calves_r', 'calves_r_z'),
+            ('right_foot', 'right_foot_z')
+        ]:
+            # Appliquer l'offset x, y ou z selon le suffixe de la clé
+            if offset_key.endswith('_x'):
+                self.body_parts[part_name]['pos'][0] = self.get_default_position(part_name)[0] + frame_offsets[offset_key]
+            elif offset_key.endswith('_y'):
+                self.body_parts[part_name]['pos'][1] = self.get_default_position(part_name)[1] + frame_offsets[offset_key]
+            elif offset_key.endswith('_z'):
+                self.body_parts[part_name]['pos'][2] = self.get_default_position(part_name)[2] + frame_offsets[offset_key]
+        
+        # Appliquer les rotations
+        if 'torso_rot_y' in frame_offsets:
+            self.body_parts['torso']['rot'][1] = frame_offsets['torso_rot_y']
+        if 'head_rot_x' in frame_offsets:
+            self.body_parts['head']['rot'][0] = frame_offsets['head_rot_x']
+        if 'head_rot_y' in frame_offsets:
+            self.body_parts['head']['rot'][1] = frame_offsets['head_rot_y']
+        if 'head_rot_z' in frame_offsets:
+            self.body_parts['head']['rot'][2] = frame_offsets['head_rot_z']
+        
+        self.update()
+
+    def toggle_walking(self):
+        """Activer/désactiver l'animation de marche"""
+        self.walking = not self.walking
+        if self.walking:
+            self.precalc_frame = 0
+            self.animation_main_timer.start()
+        else:
+            self.animation_main_timer.stop()
+            # Réinitialiser les positions de toutes les parties du corps
+            for part_name in self.body_parts:
+                default_pos = self.get_default_position(part_name)
+                self.body_parts[part_name]['pos'] = default_pos.copy()
+            self.update()
+        return self.walking
+
     def initializeGL(self):
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
@@ -171,13 +305,12 @@ class Model3DViewer(QGLWidget):
                  0, 1.0, 0.0,
                  0, 1.0, 0.0)
         
+        # Rotation globale du modèle
         glRotatef(self.rotation_x, 1, 0, 0)
         glRotatef(self.rotation_y, 0, 1, 0)
         glRotatef(self.rotation_z, 0, 0, 1)
         
-        if self.display_list is not None:
-            glCallList(self.display_list)
-        
+        # Dessiner avec les rotations individuelles des parties du corps
         self.draw_limbs()
         self.draw_joints()
         
@@ -192,9 +325,10 @@ class Model3DViewer(QGLWidget):
         glColor3f(1.0, 0.8, 0.6)
         self.draw_line_from_parts('head', 'neck')
         
-        # Torso connections
+        # Torso connections - AJOUT DE LA CONNEXION TORSE-HANCHE
         glColor3f(0.2, 0.4, 0.8)
         self.draw_line_from_parts('neck', 'torso')
+        self.draw_line_from_parts('torso', 'hip')  # Cette ligne était manquante
         
         # Left arm muscle groups
         glColor3f(0.0, 0.5, 1.0)  # Blue for left side
@@ -244,11 +378,18 @@ class Model3DViewer(QGLWidget):
         glVertex3f(p2[0], p2[1], p2[2])
     
     def draw_joints(self):
-        """Dessiner les articulations avec une complexité réduite"""
+        """Dessiner les articulations avec rotations individuelles"""
         for part_name, data in self.body_parts.items():
             pos = data['pos']
+            rot = data['rot']
+            
             glPushMatrix()
             glTranslatef(pos[0], pos[1], pos[2])
+            
+            # Appliquer la rotation individuelle de chaque partie
+            glRotatef(rot[0], 1, 0, 0)  # Rotation X
+            glRotatef(rot[1], 0, 1, 0)  # Rotation Y
+            glRotatef(rot[2], 0, 0, 1)  # Rotation Z
 
             # Vérifie si un capteur est assigné à cette partie
             mapped = any(mapped_part == part_name for mapped_part in self.imu_mapping.values())
@@ -258,28 +399,13 @@ class Model3DViewer(QGLWidget):
                 glColor3f(0.9, 0.9, 0.9)  # Gris sinon
 
             if self.quadric:
-                gluSphere(self.quadric, 0.05, 6, 6)
+                # Utiliser une sphère plus grande pour la tête
+                if part_name == 'head':
+                    gluSphere(self.quadric, 0.15, 12, 12)
+                else:
+                    gluSphere(self.quadric, 0.05, 6, 6)
+                    
             glPopMatrix()
-    
-    def update_animation_frame(self):
-        """Update walking animation on each QTimer tick."""
-        if not self.walking:
-            return
-        
-        self.precalc_frame = (self.precalc_frame + 1) % self.num_precalc_frames
-        frame_offsets = self.precalculated_positions[self.precalc_frame]
-        
-        # Update these references to match the new keys
-        self.body_parts['forearm_l']['pos'][2] = frame_offsets['forearm_l_z']
-        self.body_parts['forearm_r']['pos'][2] = frame_offsets['forearm_r_z']
-        self.body_parts['left_hand']['pos'][2] = frame_offsets['left_hand_z']
-        self.body_parts['right_hand']['pos'][2] = frame_offsets['right_hand_z']
-        self.body_parts['calves_l']['pos'][2] = frame_offsets['calves_l_z']
-        self.body_parts['calves_r']['pos'][2] = frame_offsets['calves_r_z']
-        self.body_parts['left_foot']['pos'][2] = frame_offsets['left_foot_z']
-        self.body_parts['right_foot']['pos'][2] = frame_offsets['right_foot_z']
-        
-        self.update()
     
     def update_fps(self):
         """Mise à jour du compteur de FPS"""
@@ -305,20 +431,6 @@ class Model3DViewer(QGLWidget):
             self.update()
             
         self.last_pos = event.pos()
-    
-    def toggle_walking(self):
-        """Activer/désactiver l'animation de marche"""
-        self.walking = not self.walking
-        if self.walking:
-            self.precalc_frame = 0
-            self.animation_main_timer.start()
-        else:
-            self.animation_main_timer.stop()
-            for part_key in ['forearm_l', 'forearm_r', 'left_hand', 'right_hand', 
-                             'calves_l', 'calves_r', 'left_foot', 'right_foot']:
-                self.body_parts[part_key]['pos'][2] = 0
-            self.update()
-        return self.walking
     
     def apply_imu_data(self, imu_id, quaternion):
         """Appliquer les données IMU à une partie du corps"""
