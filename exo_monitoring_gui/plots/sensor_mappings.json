@@ -1,12 +1,27 @@
 {
-  "EMG": {},
+  "EMG": {
+    "1": "head",
+    "5": "neck",
+    "6": "biceps_l",
+    "7": "forearm_l",
+    "8": "deltoid_l",
+    "3": "deltoid_l",
+    "4": "head"
+  },
   "IMU": {
-    "1": "torso",
+    "1": "head",
     "2": "forearm_l",
     "3": "forearm_r",
     "4": "calves_l",
     "5": "calves_r",
     "6": "head"
   },
-  "pMMG": {}
+  "pMMG": {
+    "1": "head",
+    "4": "torso",
+    "3": "deltoid_l",
+    "7": "neck",
+    "6": "head",
+    "8": "torso"
+  }
 }
