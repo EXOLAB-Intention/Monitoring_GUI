@@ -138,6 +138,11 @@ class DashboardApp(QMainWindow):
         self.reset_view_button.clicked.connect(self.reset_model_view)
         right_panel.addWidget(self.reset_view_button)
 
+        # Ajouter le bouton "Load 3D Model"
+        self.load_model_button = QPushButton("Load 3D Model")
+        self.load_model_button.clicked.connect(self.load_external_model)
+        right_panel.addWidget(self.load_model_button)
+
         # Ajouter le bouton "Configure Sensor Mapping" en bas à droite
         self.config_button = QPushButton("Configure Sensor Mapping")
         self.config_button.setStyleSheet("font-size: 14px; padding: 8px 20px;")
@@ -156,8 +161,135 @@ class DashboardApp(QMainWindow):
         self.record_button = QPushButton("Record Start")
         self.record_button.clicked.connect(self.toggle_recording)
 
+        # Style moderne pour les boutons
+        button_style = """
+        QPushButton {
+            background-color: #f0f0f0;
+            border: 1px solid #d0d0d0;
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: #333;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        QPushButton:hover {
+            background-color: #e0e0e0;
+            border: 1px solid #c0c0c0;
+        }
+
+        QPushButton:pressed {
+            background-color: #d0d0d0;
+            border: 1px solid #b0b0b0;
+        }
+
+        QPushButton:disabled {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            color: #a0a0a0;
+        }
+        """
+
+        # Boutons spéciaux
+        record_button_style = """
+        QPushButton {
+            background-color: #4caf50;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        QPushButton:hover {
+            background-color: #43a047;
+        }
+
+        QPushButton:pressed {
+            background-color: #388e3c;
+        }
+        """
+
+        animate_button_style = """
+        QPushButton {
+            background-color: #2196f3;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        QPushButton:hover {
+            background-color: #1e88e5;
+        }
+
+        QPushButton:pressed {
+            background-color: #1976d2;
+        }
+        """
+
+        reset_view_button_style = """
+        QPushButton {
+            background-color: #9e9e9e;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        QPushButton:hover {
+            background-color: #8e8e8e;
+        }
+
+        QPushButton:pressed {
+            background-color: #757575;
+        }
+        """
+
+        config_button_style = """
+        QPushButton {
+            background-color: #ff9800;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        QPushButton:hover {
+            background-color: #fb8c00;
+        }
+
+        QPushButton:pressed {
+            background-color: #f57c00;
+        }
+        """
+
+        # Appliquer les styles aux boutons
+        self.animate_button.setStyleSheet(animate_button_style)
+        self.reset_view_button.setStyleSheet(reset_view_button_style)
+        self.load_model_button.setStyleSheet(button_style)
+        self.config_button.setStyleSheet(config_button_style)
+        self.connect_button.setStyleSheet(button_style)
+        self.record_button.setStyleSheet(record_button_style)
+        
         for btn in (self.connect_button, self.record_button):
-            btn.setStyleSheet("font-size: 14px; padding: 8px 20px;")
             footer_layout.addWidget(btn)
 
         main_layout.addLayout(footer_layout)
@@ -210,10 +342,12 @@ class DashboardApp(QMainWindow):
                 self.group_plot_data[group] = {}
 
     def update_matched_part(self, text):
-        # Mettre à jour les options de Matched Part en fonction de la sélection de Kinematic Model
         self.matched_part_combo.clear()
         if text == "Upper body w/o head":
-            self.matched_part_combo.addItems(["pectorals_L", "Deltoid_L", "Biceps_L", "forearm_L", "dorsalis major_L", "pectorals_R", "Deltoid_R", "Biceps_R", "forearm_R",  "dorsalis major_R"])
+            self.matched_part_combo.addItems([
+                "pectorals_l", "deltoid_l", "biceps_l", "forearm_l", "dorsalis_major_l",
+                "pectorals_r", "deltoid_r", "biceps_r", "forearm_r", "dorsalis_major_r"
+            ])
         elif text == "Upper body w/ head":
             self.matched_part_combo.addItems(["pectorals_L", "Deltoid_L", "Biceps_L", "forearm_L", "dorsalis major_L", "pectorals_R", "Deltoid_R", "Biceps_R", "forearm_R",  "dorsalis major_R"])
         elif text == "Lower body":
@@ -463,12 +597,10 @@ class DashboardApp(QMainWindow):
         self.recording = True
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}
         self.record_button.setText("Record Stop")
-        self.record_button.setStyleSheet("font-size: 14px; padding: 8px 20px; background-color: red;")
 
     def stop_recording(self):
         self.recording = False
         self.record_button.setText("Record Start")
-        self.record_button.setStyleSheet("font-size: 14px; padding: 8px 20px; background-color: none;")
         self.show_recorded_data()
 
     def show_recorded_data(self):
@@ -520,9 +652,48 @@ class DashboardApp(QMainWindow):
     def toggle_recording(self):
         if self.recording:
             self.stop_recording()
+            self.record_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4caf50;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #43a047;
+            }
+            QPushButton:pressed {
+                background-color: #388e3c;
+            }
+            """)
         else:
             self.connect_sensors()
             self.start_recording()
+            # Style rouge pour le bouton d'arrêt d'enregistrement
+            self.record_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #e53935;
+            }
+            QPushButton:pressed {
+                background-color: #d32f2f;
+            }
+            """)
 
     def toggle_animation(self):
         """Toggle stickman walking animation."""
@@ -530,8 +701,36 @@ class DashboardApp(QMainWindow):
         self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
 
     def reset_model_view(self):
-        """Réinitialiser la vue du modèle 3D à la position de face"""
-        self.model_3d_widget.reset_view()
+        """Réinitialiser la vue avec animation et retour visuel"""
+        # Obtenir les rotations actuelles
+        start_rotation = (self.model_3d_widget.model_viewer.rotation_x,
+                        self.model_3d_widget.model_viewer.rotation_y,
+                        self.model_3d_widget.model_viewer.rotation_z)
+        
+        # Créer un timer pour animer le retour à zéro
+        steps = 10
+        timer = QTimer(self)
+        step_counter = [0]  # Utiliser une liste pour pouvoir la modifier dans la closure
+        
+        def animation_step():
+            step_counter[0] += 1
+            progress = step_counter[0] / steps
+            
+            # Interpolation linéaire vers zéro
+            x = start_rotation[0] * (1 - progress)
+            y = start_rotation[1] * (1 - progress)
+            z = start_rotation[2] * (1 - progress)
+            
+            self.model_3d_widget.model_viewer.rotation_x = x
+            self.model_3d_widget.model_viewer.rotation_y = y
+            self.model_3d_widget.model_viewer.rotation_z = z
+            self.model_3d_widget.model_viewer.update()
+            
+            if step_counter[0] >= steps:
+                timer.stop()
+        
+        timer.timeout.connect(animation_step)
+        timer.start(20)  # 50 FPS
 
     def open_sensor_mapping_dialog(self):
         """Ouvrir le dialogue de configuration des capteurs"""
@@ -550,8 +749,14 @@ class DashboardApp(QMainWindow):
         # Mettre à jour les mappages IMU
         for imu_id, body_part in imu_mappings.items():
             self.model_3d_widget.map_imu_to_body_part(imu_id, body_part)
-
-        # TODO: Gérer les mappages EMG et pMMG quand ils seront implémentés
+        
+        # Mettre à jour les mappages EMG et pMMG
+        self.model_3d_widget.model_viewer.set_emg_mapping(emg_mappings)
+        self.model_3d_widget.model_viewer.set_pmmg_mapping(pmmg_mappings)
+        
+        # Stocker les mappages localement
+        self.emg_mappings = emg_mappings
+        self.pmmg_mappings = pmmg_mappings
 
     def _convert_model_part_to_ui(self, model_part):
         """Convertit les noms des parties du modèle 3D vers des noms plus lisibles pour l'UI."""
@@ -572,6 +777,21 @@ class DashboardApp(QMainWindow):
             'right_foot': 'Right Foot'
         }
         return mapping.get(model_part, model_part)
+
+    def load_external_model(self):
+        """Charger un modèle 3D externe"""
+        from PyQt5.QtWidgets import QFileDialog
+        
+        # Ouvrir un dialogue de sélection de fichier
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Load 3D Model", "", 
+            "3D Model Files (*.obj *.stl *.3ds);;All Files (*)"
+        )
+        
+        if file_path:
+            success = self.model_3d_widget.load_external_model(file_path)
+            if not success:
+                QMessageBox.warning(self, "Error", f"Failed to load model from {file_path}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

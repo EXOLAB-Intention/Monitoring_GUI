@@ -4,6 +4,7 @@ import numpy as np
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
 from PyQt5.QtCore import Qt, QTimer, QElapsedTimer
 from PyQt5.QtOpenGL import QGLWidget, QGLFormat
+from PyQt5.QtGui import QFont
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
@@ -80,6 +81,14 @@ class Model3DViewer(QGLWidget):
             6: 'head'
         }
         
+        # Legacy mappings for backward compatibility
+        self.legacy_mappings = {
+            'left_elbow': 'forearm_l',
+            'right_elbow': 'forearm_r',
+            'left_knee': 'calves_l',
+            'right_knee': 'calves_r'
+        }
+        
         # Précalculer les animations pour optimisation
         self.num_precalc_frames = 120
         self.precalculated_positions = self._precalculate_animation(self.num_precalc_frames)
@@ -105,9 +114,14 @@ class Model3DViewer(QGLWidget):
         for i in range(num_frames):
             phase = (i / float(num_frames)) * 2 * math.pi
             
+            # Utiliser des courbes d'accélération/décélération (easing)
+            ease_factor = 0.5 - 0.5 * math.cos(phase) # Smooth sinusoidal easing
+            
+            # Amplitude des mouvements avec easing
+            arm_swing = 0.3 * ease_factor
+            leg_swing = 0.35 * ease_factor
+            
             # Amplitude des mouvements
-            arm_swing = 0.3 * math.sin(phase)
-            leg_swing = 0.35 * math.sin(phase)
             torso_sway = 0.07 * math.sin(phase)
             vertical_bounce = 0.05 * math.sin(phase * 2)
             torso_rotation = 5 * math.sin(phase)
@@ -274,6 +288,8 @@ class Model3DViewer(QGLWidget):
             if rot_key in frame_offsets:
                 self.body_parts[part_name]['rot'][rot_index] = frame_offsets[rot_key]
         
+        # Recréer la display list pour l'animation
+        self.create_display_list()
         self.update()
 
     def toggle_walking(self):
@@ -316,20 +332,19 @@ class Model3DViewer(QGLWidget):
         self.create_display_list()
         
     def create_display_list(self):
-        """Créer un display list pour accélérer le rendu"""
+        """Optimiser le rendu avec des display lists pour toutes les parties du corps"""
         if self.display_list:
             glDeleteLists(self.display_list, 1)
             
         self.display_list = glGenLists(1)
         glNewList(self.display_list, GL_COMPILE)
         
-        glPushMatrix()
-        glTranslatef(*self.body_parts['head']['pos'])
-        gluSphere(self.quadric, 0.15, 12, 12)
-        glPopMatrix()
+        # Dessiner les contours et articulations dans la display list
+        self.draw_limbs_internal()
+        self.draw_joints_internal()
         
         glEndList()
-        
+
     def resizeGL(self, width, height):
         glViewport(0, 0, width, height)
         glMatrixMode(GL_PROJECTION)
@@ -344,22 +359,81 @@ class Model3DViewer(QGLWidget):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         
-        gluLookAt(0, 1.0, 5.0,
-                 0, 1.0, 0.0,
-                 0, 1.0, 0.0)
+        gluLookAt(0, 1.0, 5.0, 0, 1.0, 0.0, 0, 1.0, 0.0)
         
-        # Rotation globale du modèle
+        # Rotation globale
         glRotatef(self.rotation_x, 1, 0, 0)
         glRotatef(self.rotation_y, 0, 1, 0)
         glRotatef(self.rotation_z, 0, 0, 1)
         
-        # Dessiner avec les rotations individuelles des parties du corps
-        self.draw_limbs()
-        self.draw_joints()
+        # Réinitialiser la liste d'étiquettes
+        self.labels = []
+        
+        # Si en animation, dessiner directement (plus fluide)
+        if self.walking:
+            self.draw_limbs_internal()
+            self.draw_joints_internal()
+        else:
+            # Sinon utiliser la display list (plus performant)
+            glCallList(self.display_list)
+        
+        # Dessiner les étiquettes des capteurs
+        if hasattr(self, 'labels'):
+            for x, y, text, sensor_type in self.labels:
+                if sensor_type == "IMU":
+                    color = "#00CC33"  # Vert
+                elif sensor_type == "EMG":
+                    color = "#CC3300"  # Rouge
+                elif sensor_type == "pMMG":
+                    color = "#0033CC"  # Bleu
+                    
+                # Utiliser la version à 3 coordonnées (avec z=0)
+                self.renderText(x, y, 0.0, text, QFont("Arial", 10))
         
         self.renderText(10, self.height() - 20, f"FPS: {self.fps}")
-    
-    def draw_limbs(self):
+        
+        # Dessiner la légende des capteurs
+        self.renderText(10, 30, "Légende:", QFont("Arial", 10, QFont.Bold))
+        self.renderText(10, 50, "IMU", QFont("Arial", 10))
+        self.renderText(10, 70, "EMG", QFont("Arial", 10))
+        self.renderText(10, 90, "pMMG", QFont("Arial", 10))
+        
+        # Dessiner des carrés de couleur pour la légende
+        glPushMatrix()
+        glLoadIdentity()
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, self.width(), 0, self.height(), -1, 1)
+        
+        glBegin(GL_QUADS)
+        # IMU (vert)
+        glColor3f(0.0, 0.8, 0.2)
+        glVertex2f(50, self.height() - 55)
+        glVertex2f(70, self.height() - 55)
+        glVertex2f(70, self.height() - 45)
+        glVertex2f(50, self.height() - 45)
+        
+        # EMG (rouge)
+        glColor3f(0.8, 0.2, 0.0)
+        glVertex2f(50, self.height() - 75)
+        glVertex2f(70, self.height() - 75)
+        glVertex2f(70, self.height() - 65)
+        glVertex2f(50, self.height() - 65)
+        
+        # pMMG (bleu)
+        glColor3f(0.0, 0.2, 0.8)
+        glVertex2f(50, self.height() - 95)
+        glVertex2f(70, self.height() - 95)
+        glVertex2f(70, self.height() - 85)
+        glVertex2f(50, self.height() - 85)
+        glEnd()
+        
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+
+    def draw_limbs_internal(self):
         """Draw the limbs of the body using immediate mode OpenGL."""
         glLineWidth(3.0)
         glBegin(GL_LINES)
@@ -420,8 +494,8 @@ class Model3DViewer(QGLWidget):
         glVertex3f(p1[0], p1[1], p1[2])
         glVertex3f(p2[0], p2[1], p2[2])
     
-    def draw_joints(self):
-        """Dessiner les articulations avec rotations individuelles"""
+    def draw_joints_internal(self):
+        """Dessiner les articulations avec rotations individuelles et indication du type de capteur"""
         for part_name, data in self.body_parts.items():
             pos = data['pos']
             rot = data['rot']
@@ -430,25 +504,87 @@ class Model3DViewer(QGLWidget):
             glTranslatef(pos[0], pos[1], pos[2])
             
             # Appliquer la rotation individuelle de chaque partie
-            glRotatef(rot[0], 1, 0, 0)  # Rotation X
-            glRotatef(rot[1], 0, 1, 0)  # Rotation Y
-            glRotatef(rot[2], 0, 0, 1)  # Rotation Z
+            glRotatef(rot[0], 1, 0, 0)
+            glRotatef(rot[1], 0, 1, 0)
+            glRotatef(rot[2], 0, 0, 1)
 
-            # Vérifie si un capteur est assigné à cette partie
-            mapped = any(mapped_part == part_name for mapped_part in self.imu_mapping.values())
-            if mapped:
-                glColor3f(0.0, 0.8, 0.2)  # Vert si capteur assigné
+            # Déterminer le type de capteur
+            sensor_type = self._get_mapped_sensor_type(part_name)
+            
+            # Couleur selon le type de capteur
+            if sensor_type == "IMU":
+                glColor3f(0.0, 0.8, 0.2)  # Vert pour IMU
+            elif sensor_type == "EMG":
+                glColor3f(0.8, 0.2, 0.0)  # Rouge pour EMG
+            elif sensor_type == "pMMG":
+                glColor3f(0.0, 0.2, 0.8)  # Bleu pour pMMG
             else:
-                glColor3f(0.9, 0.9, 0.9)  # Gris sinon
+                glColor3f(0.9, 0.9, 0.9)  # Gris si aucun capteur
 
+            # Dessiner la sphère de l'articulation
             if self.quadric:
-                # Utiliser une sphère plus grande pour la tête
+                if part_name == 'head':
+                    gluSphere(self.quadric, 0.15, 12, 12)
+                else:
+                    gluSphere(self.quadric, 0.05, 6, 6)
+            
+            # Ajouter une étiquette pour le type de capteur
+            if sensor_type:
+                # Sauvegarder la position pour l'étiquette
+                model = glGetDoublev(GL_MODELVIEW_MATRIX)
+                proj = glGetDoublev(GL_PROJECTION_MATRIX)
+                view = glGetIntegerv(GL_VIEWPORT)
+                
+                # Obtenir les coordonnées d'écran
+                win_x, win_y, win_z = gluProject(0, 0, 0, model, proj, view)
+                
+                # Stocker pour affichage ultérieur
+                if not hasattr(self, 'labels'):
+                    self.labels = []
+                self.labels.append((win_x, self.height() - win_y, f"{sensor_type}", sensor_type))
+            
+            glPopMatrix()
+    
+    def draw_joints(self):
+        """Améliorer le rendu des articulations avec indication visuelle du mapping"""
+        for part_name, data in self.body_parts.items():
+            pos = data['pos']
+            rot = data['rot']
+            
+            glPushMatrix()
+            glTranslatef(pos[0], pos[1], pos[2])
+            
+            # Appliquer rotation
+            glRotatef(rot[0], 1, 0, 0)
+            glRotatef(rot[1], 0, 1, 0)
+            glRotatef(rot[2], 0, 0, 1)
+
+            # Déterminer le type de capteur associé à cette partie
+            mapped_sensor_type = self._get_mapped_sensor_type(part_name)
+            
+            # Couleur selon le type de capteur
+            if mapped_sensor_type == "IMU":
+                glColor3f(0.0, 0.8, 0.2)  # Vert pour IMU
+            elif mapped_sensor_type == "EMG":
+                glColor3f(0.8, 0.2, 0.0)  # Rouge pour EMG
+            elif mapped_sensor_type == "pMMG":
+                glColor3f(0.0, 0.2, 0.8)  # Bleu pour pMMG
+            else:
+                glColor3f(0.9, 0.9, 0.9)  # Gris si aucun capteur
+
+            # Dessiner la sphère
+            if self.quadric:
                 if part_name == 'head':
                     gluSphere(self.quadric, 0.15, 12, 12)
                 else:
                     gluSphere(self.quadric, 0.05, 6, 6)
                     
             glPopMatrix()
+    
+    def draw_limbs(self):
+        """Méthode publique pour redessiner les limbs - utilise la version interne"""
+        self.create_display_list()
+        self.update()
     
     def update_fps(self):
         """Mise à jour du compteur de FPS"""
@@ -488,6 +624,8 @@ class Model3DViewer(QGLWidget):
             
             self._adjust_limb_position(part_name, [x_rot, y_rot, z_rot])
             
+            # Recréer la display list lorsque l'IMU change
+            self.create_display_list()
             self.update()
             return True
         return False
@@ -513,11 +651,17 @@ class Model3DViewer(QGLWidget):
             self.body_parts[foot]['pos'][2] = direction * rot_factor * 0.5
     
     def map_imu_to_body_part(self, imu_id, body_part):
-        """Associer un capteur IMU à une partie du corps"""
-        if body_part in self.body_parts:
-            self.imu_mapping[imu_id] = body_part
-            return True
-        return False
+        """Associer un capteur IMU à une partie du corps avec validation"""
+        if body_part not in self.body_parts and body_part not in self.legacy_mappings:
+            print(f"Warning: Body part '{body_part}' not found in model")
+            return False
+        
+        # Si c'est un nom hérité, le convertir au nom actuel
+        if body_part in self.legacy_mappings:
+            body_part = self.legacy_mappings[body_part]
+        
+        self.imu_mapping[imu_id] = body_part
+        return True
         
     def get_available_body_parts(self):
         """Obtenir la liste des parties du corps disponibles"""
@@ -527,6 +671,86 @@ class Model3DViewer(QGLWidget):
         """Obtenir les associations actuelles IMU-parties du corps"""
         return self.imu_mapping.copy()
         
+    def load_external_model(self, file_path):
+        """Charger un modèle 3D externe (obj, stl, etc.)"""
+        if not os.path.exists(file_path):
+            return False
+            
+        try:
+            # Cette implémentation dépend des bibliothèques que vous utilisez
+            # Par exemple, avec PyMesh:
+            # import pymesh
+            # mesh = pymesh.load_mesh(file_path)
+            
+            # Ou avec trimesh:
+            import trimesh
+            mesh = trimesh.load(file_path)
+            
+            # Stocker le mesh et l'utiliser pour le rendu
+            self.external_mesh = mesh
+            
+            # Mettre à jour le mapping des parties du corps sur le nouveau modèle
+            self._map_body_parts_to_model()
+            
+            # Mise à jour de l'affichage
+            self.update()
+            
+            return True
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            return False
+        
+    def _map_body_parts_to_model(self):
+        """Mapper les parties du corps sur un modèle externe"""
+        # Cette implémentation dépendra de la structure du modèle chargé
+        # Vous devrez adapter cette fonction à votre cas spécifique
+        
+        # Exemple: utiliser les positions extrêmes pour estimer les parties
+        if hasattr(self, 'external_mesh'):
+            vertices = np.array(self.external_mesh.vertices)
+            
+            # Trouver la hauteur totale du modèle
+            min_y = np.min(vertices[:, 1])
+            max_y = np.max(vertices[:, 1])
+            height = max_y - min_y
+            
+            # Mapper les parties du corps en fonction de la hauteur relative
+            self.body_parts['head']['pos'] = [0, min_y + height * 0.9, 0]
+            self.body_parts['neck']['pos'] = [0, min_y + height * 0.85, 0]
+            self.body_parts['torso']['pos'] = [0, min_y + height * 0.7, 0]
+            # ... mapper toutes les autres parties
+        
+    def _get_mapped_sensor_type(self, part_name):
+        """Déterminer le type de capteur associé à une partie du corps"""
+        # Vérifier les IMU (déjà implémentés)
+        for imu_id, mapped_part in self.imu_mapping.items():
+            if mapped_part == part_name:
+                return "IMU"
+        
+        # Structure pour stocker les mappings EMG et pMMG (à implémenter)
+        # Ces attributs doivent être définis lors de l'initialisation
+        if hasattr(self, 'emg_mapping'):
+            for emg_id, mapped_part in self.emg_mapping.items():
+                if mapped_part == part_name:
+                    return "EMG"
+                    
+        if hasattr(self, 'pmmg_mapping'):
+            for pmmg_id, mapped_part in self.pmmg_mapping.items():
+                if mapped_part == part_name:
+                    return "pMMG"
+        
+        return None  # Aucun capteur associé
+
+    def set_emg_mapping(self, emg_mapping):
+        """Définir les associations EMG-parties du corps"""
+        self.emg_mapping = emg_mapping
+        self.update()
+
+    def set_pmmg_mapping(self, pmmg_mapping):
+        """Définir les associations pMMG-parties du corps"""
+        self.pmmg_mapping = pmmg_mapping
+        self.update()
+
     def __del__(self):
         """Clean up OpenGL resources when object is destroyed."""
         try:
@@ -579,6 +803,10 @@ class Model3DWidget(QWidget):
     def reset_view(self):
         """Réinitialiser la vue du modèle 3D à la position de face"""
         self.model_viewer.reset_view()
+    
+    def load_external_model(self, file_path):
+        """Proxy method to load external 3D model"""
+        return self.model_viewer.load_external_model(file_path)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
