@@ -56,9 +56,9 @@ class MainBar:
 
                 self.main_app.current_subject_file = filename
                 self.main_app.modified = False
-                self.main_app.save_subject_action.setEnabled(True)
-                self.main_app.save_subject_as_action.setEnabled(True)
-                self.main_app.show_metadata_action.setEnabled(True)
+                self.save_subject_action.setEnabled(True)
+                self.save_subject_as_action.setEnabled(True)
+                self.show_metadata_action.setEnabled(True)
 
                 self.main_app.statusBar().showMessage(f"New subject file created: {os.path.basename(filename)}")
 
@@ -67,9 +67,9 @@ class MainBar:
                 self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
 
                 def closeEvent(event):
-                    self.main_app.save_subject_action.setEnabled(False)
-                    self.main_app.save_subject_as_action.setEnabled(False)
-                    self.main_app.show_metadata_action.setEnabled(False)
+                    self.save_subject_action.setEnabled(False)
+                    self.save_subject_as_action.setEnabled(False)
+                    self.show_metadata_action.setEnabled(False)
                     event.accept()
 
                 self.main_app.info_window.closeEvent = closeEvent
@@ -114,9 +114,9 @@ class MainBar:
                         # Update the current file and UI
                         self.main_app.current_subject_file = filename
                         self.main_app.modified = False
-                        self.main_app.save_subject_action.setEnabled(True)
-                        self.main_app.save_subject_as_action.setEnabled(True)
-                        self.main_app.show_metadata_action.setEnabled(True)
+                        self.save_subject_action.setEnabled(True)
+                        self.save_subject_as_action.setEnabled(True)
+                        self.show_metadata_action.setEnabled(True)
 
                         # Update the status bar
                         self.main_app.statusBar().showMessage(f"Loaded subject file: {os.path.basename(filename)}")
@@ -128,9 +128,9 @@ class MainBar:
                         self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
 
                         def closeEvent(event):
-                            self.main_app.save_subject_action.setEnabled(False)
-                            self.main_app.save_subject_as_action.setEnabled(False)
-                            self.main_app.show_metadata_action.setEnabled(False)
+                            self.save_subject_action.setEnabled(False)
+                            self.save_subject_as_action.setEnabled(False)
+                            self.show_metadata_action.setEnabled(False)
                             event.accept()
 
                         self.main_app.info_window.closeEvent = closeEvent

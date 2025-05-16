@@ -1,13 +1,3 @@
-'''
-Regler les probleme des matched part qui contient pas de backend (revoir le code et le programme) (les imu sont deja assigné par defaut, et ya plein de bouton a faire fonctionner)
-Regler le probleme de quand on a appuyé sur record stop on ne peut plus appuyer sur recors start ensuite (pk pas une fenetre dialogue pour dire que l'on ne peut plus appuyer sur record start)
-regler le probleme de quand on a stop le record et que on veux afficher un nouveau capteur pour voir son graphique sa laffiche sans données (soit on envoie un message derreur pour dire quil peut pas afficher ou soit on afiche les donnees)
-
-
-'''
-
-
-
 import sys
 import os
 import time
@@ -20,8 +10,6 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QBrush, QCursor
 from PyQt5.QtWidgets import QScrollArea
 import pyqtgraph as pg
-
-
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -41,7 +29,6 @@ class DashboardApp(QMainWindow):
         self.simulator = SensorSimulator()
         self.recording = False  # Ajouter l'attribut recording
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}  # Ajouter l'attribut recorded_data
-        
 
         self.init_ui()
         self.timer = QTimer(self)
@@ -54,32 +41,41 @@ class DashboardApp(QMainWindow):
         menubar.setStyleSheet("background-color: white; color: black;")
         self.main_bar = self.some_method()
         self.main_bar._create_menubar()
-        self.Clear_plots = self.main_bar._create_action(            
+
+        # Create actions for the Edit menu
+        self.Clear_plots = self.main_bar._create_action(
             "&Clear plots",
-            lambda: self.main_bar.create_new_subject,
+            lambda: self.clear_plots(),
             "Ctrl+N"
-            )
-        self.Refresh_the_connected_system = self.main_bar._create_action(            
+        )
+        self.Refresh_the_connected_system = self.main_bar._create_action(
             "&Refresh the connected system",
-            lambda: self.main_bar.create_new_subject,
-            "Ctrl+N"
-            )
-        self.Request_h5_file_transfer = self.main_bar._create_action(            
+            lambda: self.refresh_connected_system(),
+            "Ctrl+R"
+        )
+        self.Request_h5_file_transfer = self.main_bar._create_action(
             "&Request .h5 file transfer",
-            lambda: self.main_bar.create_new_subject,
-            "Ctrl+N"
-            )
-        menubar_dashboard = self.menuBar()
+            lambda: self.request_h5_file_transfer(),
+            "Ctrl+H"
+        )
 
-        edit_menu = menubar_dashboard.addMenu('&Edit')
-
+        # Add Edit menu
+        edit_menu = menubar.addMenu('&Edit')
         edit_menu.addAction(self.Clear_plots)
         edit_menu.addAction(self.Refresh_the_connected_system)
         edit_menu.addAction(self.Request_h5_file_transfer)
+
+        # Enable actions
+        self.Clear_plots.setEnabled(True)
+        self.Refresh_the_connected_system.setEnabled(True)
+        self.Request_h5_file_transfer.setEnabled(True)
+
+        self.main_bar._all_false_or_true(False)
+        
         self.Clear_plots.setEnabled(False)
         self.Refresh_the_connected_system.setEnabled(False)
         self.Request_h5_file_transfer.setEnabled(False)
-        self.main_bar._all_false_or_true(False)
+
         # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -195,7 +191,7 @@ class DashboardApp(QMainWindow):
         content_layout.addLayout(left_panel, stretch=1)  # Réduire la largeur de la section "Connected Systems"
         content_layout.addLayout(middle_panel, stretch=4)  # Augmenter la largeur de la section "Graphics / Visual Zone"
         content_layout.addLayout(right_panel, stretch=2)
-        
+
         # Footer
         footer_layout = QHBoxLayout()
         self.connect_button = QPushButton("Connect")
@@ -330,7 +326,7 @@ class DashboardApp(QMainWindow):
         self.config_button.setStyleSheet(config_button_style)
         self.connect_button.setStyleSheet(button_style)
         self.record_button.setStyleSheet(record_button_style)
-        
+
         for btn in (self.connect_button, self.record_button):
             footer_layout.addWidget(btn)
 
@@ -345,11 +341,23 @@ class DashboardApp(QMainWindow):
 
         # Connecter le signal de changement de mode
         self.display_mode_group.buttonClicked.connect(self.on_display_mode_changed)
-    
+
     def some_method(self):
         from utils.Menu_bar import MainBar
         return MainBar(self)
-    
+
+    def clear_plots(self):
+        # Implement the functionality to clear plots
+        print("Clear plots")
+
+    def refresh_connected_system(self):
+        # Implement the functionality to refresh the connected system
+        print("Refresh the connected system")
+
+    def request_h5_file_transfer(self):
+        # Implement the functionality to request .h5 file transfer
+        print("Request .h5 file transfer")
+
     def connect_sensors(self):
         # Connecter les capteurs et les afficher en vert
         for i in range(self.connected_systems.topLevelItemCount()):
@@ -647,6 +655,9 @@ class DashboardApp(QMainWindow):
     def stop_recording(self):
         self.recording = False
         self.record_button.setText("Record Start")
+        self.Clear_plots.setEnabled(True)
+        self.Refresh_the_connected_system.setEnabled(True)
+        self.Request_h5_file_transfer.setEnabled(True)
         self.show_recorded_data()
 
     def show_recorded_data(self):
@@ -752,29 +763,29 @@ class DashboardApp(QMainWindow):
         start_rotation = (self.model_3d_widget.model_viewer.rotation_x,
                         self.model_3d_widget.model_viewer.rotation_y,
                         self.model_3d_widget.model_viewer.rotation_z)
-        
+
         # Créer un timer pour animer le retour à zéro
         steps = 10
         timer = QTimer(self)
         step_counter = [0]  # Utiliser une liste pour pouvoir la modifier dans la closure
-        
+
         def animation_step():
             step_counter[0] += 1
             progress = step_counter[0] / steps
-            
+
             # Interpolation linéaire vers zéro
             x = start_rotation[0] * (1 - progress)
             y = start_rotation[1] * (1 - progress)
             z = start_rotation[2] * (1 - progress)
-            
+
             self.model_3d_widget.model_viewer.rotation_x = x
             self.model_3d_widget.model_viewer.rotation_y = y
             self.model_3d_widget.model_viewer.rotation_z = z
             self.model_3d_widget.model_viewer.update()
-            
+
             if step_counter[0] >= steps:
                 timer.stop()
-        
+
         timer.timeout.connect(animation_step)
         timer.start(20)  # 50 FPS
 
@@ -795,11 +806,11 @@ class DashboardApp(QMainWindow):
         # Mettre à jour les mappages IMU
         for imu_id, body_part in imu_mappings.items():
             self.model_3d_widget.map_imu_to_body_part(imu_id, body_part)
-        
+
         # Mettre à jour les mappages EMG et pMMG
         self.model_3d_widget.model_viewer.set_emg_mapping(emg_mappings)
         self.model_3d_widget.model_viewer.set_pmmg_mapping(pmmg_mappings)
-        
+
         # Stocker les mappages localement
         self.emg_mappings = emg_mappings
         self.pmmg_mappings = pmmg_mappings
@@ -827,13 +838,13 @@ class DashboardApp(QMainWindow):
     def load_external_model(self):
         """Charger un modèle 3D externe"""
         from PyQt5.QtWidgets import QFileDialog
-        
+
         # Ouvrir un dialogue de sélection de fichier
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Load 3D Model", "", 
+            self, "Load 3D Model", "",
             "3D Model Files (*.obj *.stl *.3ds);;All Files (*)"
         )
-        
+
         if file_path:
             success = self.model_3d_widget.load_external_model(file_path)
             if not success:

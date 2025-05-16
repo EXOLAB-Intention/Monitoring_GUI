@@ -45,6 +45,8 @@ def save_metadata(subject_file, data: dict):
     try:
         with h5py.File(subject_file, 'a') as f:
             # Écrire toujours à la racine
+            if "subject_created" not in f.attrs:
+                f.attrs['subject_created'] = True
             image_path_value = None
             if "image_path" in data:
                 image_path_value = data.pop("image_path") # Retire pour éviter double écriture par la boucle
