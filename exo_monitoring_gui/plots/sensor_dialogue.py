@@ -8,8 +8,6 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QBrush, QFont
 from plots.model_3d_viewer import Model3DWidget
 import re
-import json
-import os
 
 class MappingBadgesWidget(QWidget):
     def __init__(self, mappings, parent=None):
@@ -92,15 +90,7 @@ class MappingBadgesWidget(QWidget):
                     
                     if typ:
                         badge = QLabel(f"{sid}")
-                        badge.setStyleSheet(f"""
-                            background: {self._color(typ)}; 
-                            color: white; 
-                            border-radius: 8px; 
-                            padding: 4px 10px; 
-                            margin: 3px;
-                            font-weight: bold;
-                            font-size: 13px;
-                        """)
+                        badge.setStyleSheet(f"background: {self._color(typ)}; color: white; border-radius: 8px; padding: 2px 8px; margin: 2px;")
                         h.addWidget(badge)
                 
                 layout.addLayout(h)
@@ -123,15 +113,7 @@ class MappingBadgesWidget(QWidget):
                     
                     if typ:
                         badge = QLabel(f"{sid}")
-                        badge.setStyleSheet(f"""
-                            background: {self._color(typ)}; 
-                            color: white; 
-                            border-radius: 8px; 
-                            padding: 4px 10px; 
-                            margin: 3px;
-                            font-weight: bold;
-                            font-size: 13px;
-                        """)
+                        badge.setStyleSheet(f"background: {self._color(typ)}; color: white; border-radius: 8px; padding: 2px 8px; margin: 2px;")
                         h.addWidget(badge)
                 
                 layout.addLayout(h)
@@ -179,50 +161,10 @@ class SimplifiedMappingDialog(QDialog):
         title = QLabel("Sensor Mapping Configuration")
         title.setFont(QFont("Arial", 16, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            color: #333;
-            margin: 10px 0;
-            padding: 5px;
-            border-bottom: 2px solid #4CAF50;
-        """)
         main_layout.addWidget(title)
 
         # Create tab widget
         self.tab_widget = QTabWidget()
-        
-        # Style des onglets - ajoutez ceci juste après la création du widget tab_widget
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                background: white;
-                padding: 10px;
-            }
-            QTabBar::tab {
-                background: #e0e0e0;
-                border: 1px solid #c0c0c0;
-                border-bottom: none;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                padding: 10px 20px;
-                margin-right: 4px;
-                font-weight: bold;
-                font-size: 14px;
-                color: #555555;
-                min-width: 100px;
-                text-align: center;
-            }
-            QTabBar::tab:selected {
-                background: #4CAF50;
-                color: white;
-                border: 1px solid #388E3C;
-                border-bottom: none;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #f0f0f0;
-                border-color: #b0b0b0;
-            }
-        """)
         
         # Create tabs
         self.general_tab = self.create_general_tab()
@@ -258,63 +200,15 @@ class SimplifiedMappingDialog(QDialog):
         button_layout = QHBoxLayout()
         
         self.reset_button = QPushButton("Reset to Default Values")
-        self.reset_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                color: #555;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
-        """)
+        self.reset_button.setStyleSheet("padding: 8px 16px;")
         self.reset_button.clicked.connect(self.reset_to_default)
         
         self.confirm_button = QPushButton("Confirm")
-        self.confirm_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #43A047;
-            }
-            QPushButton:pressed {
-                background-color: #388E3C;
-            }
-        """)
+        self.confirm_button.setStyleSheet("padding: 8px 16px; font-weight: bold; background-color: #4CAF50; color: white;")
         self.confirm_button.clicked.connect(self.confirm_mapping)
         
         self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #e53935;
-            }
-            QPushButton:pressed {
-                background-color: #d32f2f;
-            }
-        """)
+        self.cancel_button.setStyleSheet("padding: 8px 16px;")
         self.cancel_button.clicked.connect(self.reject)
         
         button_layout.addWidget(self.reset_button)
@@ -327,70 +221,21 @@ class SimplifiedMappingDialog(QDialog):
         
         # Initialize combos with current mappings
         self.load_current_mappings()
-        
-        self.styleAllComboBoxes()
-
-    def styleAllComboBoxes(self):
-        """Style all comboboxes to fix dropdowns"""
-        for widget in self.findChildren(QComboBox):
-            widget.setStyleSheet("""
-                QComboBox {
-                    border: 1px solid #d0d0d0;
-                    border-radius: 4px;
-                    padding: 5px 10px;
-                    min-height: 30px;
-                    background: white;
-                }
-                QComboBox::drop-down {
-                    subcontrol-origin: padding;
-                    subcontrol-position: top right;
-                    width: 20px;
-                    border-left: 1px solid #d0d0d0;
-                }
-                QComboBox::down-arrow {
-                    image: url(none);
-                    width: 14px;
-                    height: 14px;
-                }
-                QComboBox::down-arrow:on {
-                    /* shift the arrow when popup is open */
-                    top: 1px;
-                    left: 1px;
-                }
-                QComboBox QAbstractItemView {
-                    border: 1px solid #d0d0d0;
-                    selection-background-color: #e0e0e0;
-                    selection-color: black;
-                    background-color: white;
-                    padding: 2px;
-                }
-            """)
 
     def create_general_tab(self):
         """Create general tab with 3D model and manual assignment"""
         tab = QWidget()
         layout = QVBoxLayout()
         
-        # Create a splitter for horizontal layout
-        splitter = QSplitter(Qt.Horizontal)
-        
-        # 3D Model - Now in a container on the left
-        model_container = QWidget()
-        model_layout = QVBoxLayout(model_container)
-        
+        # 3D Model
         model_group = QGroupBox("3D Model")
-        model_inner_layout = QVBoxLayout()
+        model_layout = QVBoxLayout()
         self.general_model = Model3DWidget()
-        model_inner_layout.addWidget(self.general_model)
-        model_group.setLayout(model_inner_layout)
-        model_layout.addWidget(model_group)
+        model_layout.addWidget(self.general_model)
+        model_group.setLayout(model_layout)
+        layout.addWidget(model_group, 3)
         
-        splitter.addWidget(model_container)
-        
-        # Manual assignment - Now on the right side
-        assign_container = QWidget()
-        assign_container_layout = QVBoxLayout(assign_container)
-        
+        # Manual assignment
         assign_group = QGroupBox("Assign a Sensor")
         assign_layout = QGridLayout()
         
@@ -414,162 +259,30 @@ class SimplifiedMappingDialog(QDialog):
         # Add all body parts
         body_parts = upper_body + lower_body
         self.body_part_combo.addItems(body_parts)
-        self.body_part_combo.setStyleSheet("""
-            QComboBox {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                padding: 5px 10px;
-                min-height: 30px;
-                background: white;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left: 1px solid #d0d0d0;
-            }
-            QComboBox::down-arrow {
-                image: url(none);
-                width: 14px;
-                height: 14px;
-            }
-            QComboBox::down-arrow:on {
-                /* shift the arrow when popup is open */
-                top: 1px;
-                left: 1px;
-            }
-            QComboBox QAbstractItemView {
-                border: 1px solid #d0d0d0;
-                selection-background-color: #e0e0e0;
-                selection-color: black;
-                background-color: white;
-                padding: 2px;
-            }
-        """)
         assign_layout.addWidget(self.body_part_combo, 0, 1)
         
         # Sensor type
-        assign_layout.addWidget(QLabel("Sensor type:"), 1, 0)
+        assign_layout.addWidget(QLabel("Sensor type:"), 1, 0)  # Changed from French
         self.sensor_type_combo = QComboBox()
         self.sensor_type_combo.addItems(["EMG", "IMU", "pMMG"])
         self.sensor_type_combo.currentTextChanged.connect(self.update_sensor_list)
-        self.sensor_type_combo.setStyleSheet("""
-            QComboBox {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                padding: 5px 10px;
-                min-height: 30px;
-                background: white;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left: 1px solid #d0d0d0;
-            }
-            QComboBox::down-arrow {
-                image: url(none);
-                width: 14px;
-                height: 14px;
-            }
-            QComboBox::down-arrow:on {
-                /* shift the arrow when popup is open */
-                top: 1px;
-                left: 1px;
-            }
-            QComboBox QAbstractItemView {
-                border: 1px solid #d0d0d0;
-                selection-background-color: #e0e0e0;
-                selection-color: black;
-                background-color: white;
-                padding: 2px;
-            }
-        """)
         assign_layout.addWidget(self.sensor_type_combo, 1, 1)
         
         # Sensor number
-        assign_layout.addWidget(QLabel("Sensor:"), 2, 0)
+        assign_layout.addWidget(QLabel("Sensor:"), 2, 0)  # Changed from French
         self.sensor_id_combo = QComboBox()
-        self.sensor_id_combo.setStyleSheet("""
-            QComboBox {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                padding: 5px 10px;
-                min-height: 30px;
-                background: white;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left: 1px solid #d0d0d0;
-            }
-            QComboBox::down-arrow {
-                image: url(none);
-                width: 14px;
-                height: 14px;
-            }
-            QComboBox::down-arrow:on {
-                /* shift the arrow when popup is open */
-                top: 1px;
-                left: 1px;
-            }
-            QComboBox QAbstractItemView {
-                border: 1px solid #d0d0d0;
-                selection-background-color: #e0e0e0;
-                selection-color: black;
-                background-color: white;
-                padding: 2px;
-            }
-        """)
         assign_layout.addWidget(self.sensor_id_combo, 2, 1)
         self.update_sensor_list("IMU")
         
         # Assignment button
-        self.manual_assign_button = QPushButton("Assign this Sensor")
+        self.manual_assign_button = QPushButton("Assign this Sensor")  # Changed from French
         self.manual_assign_button.clicked.connect(self.manual_assign)
-        self.manual_assign_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #43A047;
-            }
-            QPushButton:pressed {
-                background-color: #388E3C;
-            }
-        """)
+        self.manual_assign_button.setStyleSheet("font-weight: bold;")
         assign_layout.addWidget(self.manual_assign_button, 3, 0, 1, 2)
         
         assign_group.setLayout(assign_layout)
-        assign_container_layout.addWidget(assign_group)
-        assign_container_layout.addStretch(1)  # Add stretch to keep the assign group at the top
+        layout.addWidget(assign_group, 1)
         
-        # Add a help section below the assignment controls
-        help_group = QGroupBox("Help")
-        help_layout = QVBoxLayout()
-        help_text = QLabel(
-            "Use this panel to assign sensors to body parts. "
-            "Select the body part first, then choose the sensor type and number. "
-            "Click 'Assign this Sensor' to complete the mapping."
-        )
-        help_text.setWordWrap(True)
-        help_layout.addWidget(help_text)
-        help_group.setLayout(help_layout)
-        assign_container_layout.addWidget(help_group)
-        
-        splitter.addWidget(assign_container)
-        
-        # Set the proportion (70% model, 30% controls)
-        splitter.setSizes([int(splitter.width() * 0.7), int(splitter.width() * 0.3)])
-        
-        layout.addWidget(splitter)
         tab.setLayout(layout)
         return tab
 
@@ -631,38 +344,6 @@ class SimplifiedMappingDialog(QDialog):
             
             combo = QComboBox()
             combo.addItems(body_parts)
-            combo.setStyleSheet("""
-                QComboBox {
-                    border: 1px solid #d0d0d0;
-                    border-radius: 4px;
-                    padding: 5px 10px;
-                    min-height: 30px;
-                    background: white;
-                }
-                QComboBox::drop-down {
-                    subcontrol-origin: padding;
-                    subcontrol-position: top right;
-                    width: 20px;
-                    border-left: 1px solid #d0d0d0;
-                }
-                QComboBox::down-arrow {
-                    image: url(none);
-                    width: 14px;
-                    height: 14px;
-                }
-                QComboBox::down-arrow:on {
-                    /* shift the arrow when popup is open */
-                    top: 1px;
-                    left: 1px;
-                }
-                QComboBox QAbstractItemView {
-                    border: 1px solid #d0d0d0;
-                    selection-background-color: #e0e0e0;
-                    selection-color: black;
-                    background-color: white;
-                    padding: 2px;
-                }
-            """)
             combo.currentTextChanged.connect(lambda text, s=sensor_type, id=i: self.on_combo_changed(s, id, text))
             
             control_grid.addWidget(label, i-1, 0)
@@ -868,32 +549,6 @@ class SimplifiedMappingDialog(QDialog):
 
     def reset_to_default(self):
         """Reset all mappings to default values"""
-        # Essayer de charger les mappages par défaut personnalisés
-        filepath = os.path.join(os.path.dirname(__file__), 'default_sensor_mappings.json')
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r') as f:
-                    default_mappings = json.load(f)
-                
-                # Convertir les clés string en int
-                for sensor_type in ['EMG', 'IMU', 'pMMG']:
-                    if sensor_type in default_mappings:
-                        self.current_mappings[sensor_type] = {int(k): v for k, v in default_mappings[sensor_type].items()}
-                
-                QMessageBox.information(self, "Reset", "All mappings have been reset to your custom default values.")
-            except Exception as e:
-                # Utiliser les mappages par défaut du système en cas d'erreur
-                self._use_system_defaults()
-        else:
-            # Utiliser les mappages par défaut du système s'il n'y a pas de fichier personnalisé
-            self._use_system_defaults()
-        
-        # Mettre à jour l'interface utilisateur
-        self.load_current_mappings()
-        self.update_badges()
-
-    def _use_system_defaults(self):
-        """Utilise les mappages par défaut du système"""
         default_mappings = {
             'EMG': {
                 1: 'biceps_l',
@@ -916,39 +571,58 @@ class SimplifiedMappingDialog(QDialog):
         }
         
         self.current_mappings = default_mappings
-        QMessageBox.information(self, "Reset", "All mappings have been reset to system default values.")
+        
+        # Update combos
+        self.load_current_mappings()
+        
+        # Update badges
+        self.update_badges()
+        
+        QMessageBox.information(self, "Reset", "All mappings have been reset to default values.")
 
     def _convert_model_part_to_ui(self, model_part):
-        """Convertit les noms des parties du modèle 3D vers des noms plus lisibles pour l'UI."""
+        """Convert a model part name to a readable UI name"""
+        if not model_part:
+            return "-- Not assigned --"
+            
         mapping = {
-            'head': 'Head', 
+            # Head/Neck
+            'head': 'Head',
             'neck': 'Neck',
+            
+            # Torso
             'torso': 'Torso',
+            
+            # Upper body - Left side
             'deltoid_l': 'Left Deltoid',
             'biceps_l': 'Left Biceps',
             'forearm_l': 'Left Forearm',
             'dorsalis_major_l': 'Left Latissimus Dorsi',
             'pectorals_l': 'Left Pectorals',
             'left_hand': 'Left Hand',
+            
+            # Upper body - Right side
             'deltoid_r': 'Right Deltoid',
             'biceps_r': 'Right Biceps',
-            'forearm_r': 'Right Forearm',
+            'forearm_r': 'Right Forearm', 
             'dorsalis_major_r': 'Right Latissimus Dorsi',
             'pectorals_r': 'Right Pectorals',
             'right_hand': 'Right Hand',
+            
+            # Lower body
             'hip': 'Hip',
-            'glutes_l': 'Left Gluteus',
             'quadriceps_l': 'Left Quadriceps',
-            'ishcio_hamstrings_l': 'Left Hamstrings',
-            'calves_l': 'Left Calf',
-            'left_foot': 'Left Foot',
-            'glutes_r': 'Right Gluteus',
             'quadriceps_r': 'Right Quadriceps',
+            'ishcio_hamstrings_l': 'Left Hamstrings',
             'ishcio_hamstrings_r': 'Right Hamstrings',
+            'calves_l': 'Left Calf',
             'calves_r': 'Right Calf',
+            'glutes_l': 'Left Gluteus',
+            'glutes_r': 'Right Gluteus',
+            'left_foot': 'Left Foot',
             'right_foot': 'Right Foot'
         }
-        return mapping.get(model_part, model_part.capitalize())
+        return mapping.get(model_part, model_part)
 
     def _convert_ui_to_model_part(self, ui_name):
         """Convert a UI name to a model part name"""

@@ -12,7 +12,6 @@ import sys
 import os
 import time
 import numpy as np
-import json
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox, QRadioButton, QButtonGroup, QGroupBox, QTableWidget, QTableWidgetItem, QMenu, QAction
@@ -34,66 +33,6 @@ from data_generator.sensor_simulator import SensorSimulator
 class DashboardApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        # Style global de l'application
-        self.setStyleSheet("""
-            QMainWindow, QDialog {
-                background-color: #f5f5f5;
-            }
-            QTabWidget::pane {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                background: white;
-            }
-            QTabBar::tab {
-                background: #e8e8e8;
-                border: 1px solid #d0d0d0;
-                border-bottom: none;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                padding: 8px 16px;
-                margin-right: 2px;
-            }
-            QTabBar::tab:selected {
-                background: white;
-                border-bottom: 1px solid white;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #f0f0f0;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                margin-top: 8px;
-                padding-top: 16px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-            QTreeWidget, QTableWidget {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                background: white;
-            }
-            QComboBox {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                padding: 4px 10px;
-                min-height: 25px;
-            }
-            QLineEdit {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                padding: 4px 8px;
-            }
-            QScrollArea {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                background: white;
-            }
-        """)
         self.setWindowTitle("Data Monitoring Software")
         self.resize(1600, 900)
         self.setMinimumSize(1400, 800)
@@ -101,19 +40,13 @@ class DashboardApp(QMainWindow):
         self.modified = False
         self.simulator = SensorSimulator()
         self.recording = False  # Ajouter l'attribut recording
-        self.recording_stopped = False  # Ajoute ceci juste après
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}  # Ajouter l'attribut recorded_data
         
-
-        # Initialiser les mappages de capteurs
-        self.emg_mappings = {}
-        self.pmmg_mappings = {}
 
         self.init_ui()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_data)
         self.timer.start(40)  # Mettre à jour les données toutes les 40 ms
-        self.load_mappings()  # Charger les mappages sauvegardés au démarrage
 
     def init_ui(self):
         # Menu bar
@@ -257,30 +190,6 @@ class DashboardApp(QMainWindow):
         self.config_button.setStyleSheet("font-size: 14px; padding: 8px 20px;")
         self.config_button.clicked.connect(self.open_sensor_mapping_dialog)
         right_panel.addWidget(self.config_button)
-
-        # Ajouter le bouton "Set Up Default Assignments"
-        self.default_config_button = QPushButton("Set Up Default Assignments")
-        self.default_config_button.setStyleSheet("""
-            QPushButton {
-                background-color: #9C27B0;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-                text-align: center;
-                min-width: 120px;
-            }
-            QPushButton:hover {
-                background-color: #8E24AA;
-            }
-            QPushButton:pressed {
-                background-color: #7B1FA2;
-            }
-        """)
-        self.default_config_button.clicked.connect(self.setup_default_mappings)
-        right_panel.addWidget(self.default_config_button)
 
         # Ajout des panneaux gauche / centre / droite
         content_layout.addLayout(left_panel, stretch=1)  # Réduire la largeur de la section "Connected Systems"
@@ -534,83 +443,51 @@ class DashboardApp(QMainWindow):
             self.plot_sensor_data(item.text(0))
 
     def plot_sensor_data(self, sensor_name):
-        # Afficher les données enregistrées si l'enregistrement est stoppé
-        if self.recording_stopped:
-            if self.group_sensor_mode.isChecked():
-                sensor_group = sensor_name.split()[0][:-1]
-                if sensor_group in self.group_plots:
-                    plot_widget = self.group_plots[sensor_group]
-                    if sensor_name.startswith("IMU"):
-                        index = int(sensor_name[3]) - 1
-                        quaternion = self.recorded_data["IMU"][index]
-                        for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                            plot_widget.plot([q[i] for q in quaternion], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
-                    else:
-                        sensor_num = int(''.join(filter(str.isdigit, sensor_name)))
-                        if sensor_name.startswith("EMG"):
-                            index = sensor_num - 1
-                            plot_widget.plot(self.recorded_data["EMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
-                        elif sensor_name.startswith("pMMG"):
-                            index = sensor_num - 1
-                            plot_widget.plot(self.recorded_data["pMMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
-                    plot_widget.addLegend()
-                    self.highlight_sensor(sensor_name.split()[0])
-                return
-            else:
-                plot_widget = pg.PlotWidget(title=sensor_name)
-                plot_widget.setBackground('#1e1e1e')
-                plot_widget.getAxis('left').setTextPen('white')
-                plot_widget.getAxis('bottom').setTextPen('white')
-                plot_widget.showGrid(x=True, y=True, alpha=0.3)
-                plot_widget.setTitle(sensor_name, color='white', size='14pt')
-                self.middle_layout.addWidget(plot_widget)
-                self.plots[sensor_name.split()[0]] = plot_widget
-
-                if sensor_name.startswith("EMG"):
-                    index = int(sensor_name[3]) - 1
-                    plot_widget.plot(self.recorded_data["EMG"][index], clear=True, pen=pg.mkPen('b', width=2))
-                elif sensor_name.startswith("pMMG"):
-                    index = int(sensor_name[4]) - 1
-                    plot_widget.plot(self.recorded_data["pMMG"][index], clear=True, pen=pg.mkPen('b', width=2))
-                elif sensor_name.startswith("IMU"):
-                    index = int(sensor_name[3]) - 1
-                    quaternion = self.recorded_data["IMU"][index]
-                    plot_widget.clear()
-                    for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                        plot_widget.plot([q[i] for q in quaternion], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
-                    plot_widget.addLegend()
-                self.highlight_sensor(sensor_name.split()[0])
-                return
-
-        # --- Mode temps réel (enregistrement en cours) ---
+        # Ajouter la courbe du capteur au graphique de groupe correspondant
         if self.group_sensor_mode.isChecked():
             if sensor_name.startswith("IMU"):
+                # Créer un nouveau graphique pour le capteur IMU sélectionné
                 plot_widget = pg.PlotWidget(title=sensor_name)
                 plot_widget.setBackground('#1e1e1e')
                 plot_widget.getAxis('left').setTextPen('white')
                 plot_widget.getAxis('bottom').setTextPen('white')
                 plot_widget.showGrid(x=True, y=True, alpha=0.3)
                 plot_widget.setTitle(sensor_name, color='white', size='14pt')
+
+                # Ajouter le graphique à la section "2D Plots"
                 self.middle_layout.addWidget(plot_widget)
+
+                # Stocker le graphique et les données
                 self.plots[sensor_name.split()[0]] = plot_widget
                 self.plot_data[sensor_name.split()[0]] = np.zeros(100)
+
+                # Mettre en surbrillance le capteur sélectionné
                 self.highlight_sensor(sensor_name.split()[0])
             else:
                 sensor_group = sensor_name.split()[0][:-1]
                 if sensor_group in self.group_plots:
                     if sensor_name not in self.group_plot_data[sensor_group]:
                         self.group_plot_data[sensor_group][sensor_name] = np.zeros(100)
+
+                    # Mettre en surbrillance le capteur sélectionné
                     self.highlight_sensor(sensor_name.split()[0])
         else:
+            # Créer un nouveau graphique pour le capteur sélectionné
             plot_widget = pg.PlotWidget(title=sensor_name)
             plot_widget.setBackground('#1e1e1e')
             plot_widget.getAxis('left').setTextPen('white')
             plot_widget.getAxis('bottom').setTextPen('white')
             plot_widget.showGrid(x=True, y=True, alpha=0.3)
             plot_widget.setTitle(sensor_name, color='white', size='14pt')
+
+            # Ajouter le graphique à la section "2D Plots"
             self.middle_layout.addWidget(plot_widget)
+
+            # Stocker le graphique et les données
             self.plots[sensor_name.split()[0]] = plot_widget
             self.plot_data[sensor_name.split()[0]] = np.zeros(100)
+
+            # Mettre en surbrillance le capteur sélectionné
             self.highlight_sensor(sensor_name.split()[0])
 
     def remove_sensor_plot(self, sensor_name):
@@ -764,39 +641,12 @@ class DashboardApp(QMainWindow):
 
     def start_recording(self):
         self.recording = True
-        self.recording_stopped = False
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}
         self.record_button.setText("Record Stop")
 
     def stop_recording(self):
         self.recording = False
-        self.recording_stopped = True
         self.record_button.setText("Record Start")
-        self.record_button.setStyleSheet("""
-        QPushButton {
-            background-color: #4caf50;
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            color: white;
-            font-size: 14px;
-            font-weight: 500;
-            text-align: center;
-            min-width: 120px;
-        }
-        QPushButton:hover {
-            background-color: #43a047;
-        }
-        QPushButton:pressed {
-            background-color: #388e3c;
-        }
-        QPushButton:disabled {
-            background-color: #e0e0e0;
-            border: 1px solid #d0d0d0;
-            color: #a0a0a0;
-        }
-        """)
-        self.record_button.setEnabled(False)  # Désactiver le bouton
         self.show_recorded_data()
 
     def show_recorded_data(self):
@@ -848,40 +698,30 @@ class DashboardApp(QMainWindow):
     def toggle_recording(self):
         if self.recording:
             self.stop_recording()
+            self.record_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4caf50;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #43a047;
+            }
+            QPushButton:pressed {
+                background-color: #388e3c;
+            }
+            """)
         else:
-            if self.record_button.isEnabled():
-                self.connect_sensors()
-                self.start_recording()
-                # Style rouge pour le bouton d'arrêt d'enregistrement
-                self.record_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #f44336;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 8px 16px;
-                    color: white;
-                    font-size: 14px;
-                    font-weight: 500;
-                    text-align: center;
-                    min-width: 120px;
-                }
-                QPushButton:hover {
-                    background-color: #e53935;
-                }
-                QPushButton:pressed {
-                    background-color: #d32f2f;
-                }
-                """)
-
-
-    def toggle_animation(self):
-        """Toggle stickman walking animation."""
-        is_walking = self.model_3d_widget.toggle_animation()
-        self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
-        
-        # Change button color based on animation state
-        if is_walking:
-            self.animate_button.setStyleSheet("""
+            self.connect_sensors()
+            self.start_recording()
+            # Style rouge pour le bouton d'arrêt d'enregistrement
+            self.record_button.setStyleSheet("""
             QPushButton {
                 background-color: #f44336;
                 border: none;
@@ -900,26 +740,11 @@ class DashboardApp(QMainWindow):
                 background-color: #d32f2f;
             }
             """)
-        else:
-            self.animate_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2196f3;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-                text-align: center;
-                min-width: 120px;
-            }
-            QPushButton:hover {
-                background-color: #1e88e5;
-            }
-            QPushButton:pressed {
-                background-color: #1976d2;
-            }
-            """)
+
+    def toggle_animation(self):
+        """Toggle stickman walking animation."""
+        is_walking = self.model_3d_widget.toggle_animation()
+        self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
 
     def reset_model_view(self):
         """Réinitialiser la vue avec animation et retour visuel"""
@@ -957,16 +782,12 @@ class DashboardApp(QMainWindow):
         """Ouvrir le dialogue de configuration des capteurs"""
         # Récupérer les mappages actuels
         current_mappings = {
-            'EMG': getattr(self, 'emg_mappings', {}), 
+            'EMG': {},  # TODO: Stocker les mappages EMG
             'IMU': self.model_3d_widget.get_current_mappings(),
-            'pMMG': getattr(self, 'pmmg_mappings', {})
+            'pMMG': {}  # TODO: Stocker les mappages pMMG
         }
 
-        dialog = SensorMappingDialog(self, current_mappings)
-        
-        # Connecter le signal aux méthodes de mise à jour
-        dialog.mappings_updated.connect(self.update_sensor_mappings)
-        
+        dialog = SensorMappingDialog(None, current_mappings)
         dialog.exec_()
 
     def update_sensor_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
@@ -975,50 +796,13 @@ class DashboardApp(QMainWindow):
         for imu_id, body_part in imu_mappings.items():
             self.model_3d_widget.map_imu_to_body_part(imu_id, body_part)
         
-        # Stocker les mappages EMG et pMMG
-        self.emg_mappings = emg_mappings
-        self.pmmg_mappings = pmmg_mappings
-        
-        # Mettre à jour les mappages dans le modèle 3D
+        # Mettre à jour les mappages EMG et pMMG
         self.model_3d_widget.model_viewer.set_emg_mapping(emg_mappings)
         self.model_3d_widget.model_viewer.set_pmmg_mapping(pmmg_mappings)
         
-        # Mettre à jour l'interface utilisateur pour refléter les nouveaux mappages
-        self.refresh_sensor_tree()
-        self.save_mappings()  # Sauvegarder les changements immédiatement
-
-    def refresh_sensor_tree(self):
-        """Mettre à jour l'arbre des capteurs pour refléter les mappages actuels"""
-        # Parcourir tous les éléments de l'arbre
-        for i in range(self.connected_systems.topLevelItemCount()):
-            group_item = self.connected_systems.topLevelItem(i)
-            sensor_type = group_item.text(0).split()[0]  # "EMG", "IMU" ou "pMMG"
-            
-            for j in range(group_item.childCount()):
-                sensor_item = group_item.child(j)
-                sensor_name = sensor_item.text(0).split()[0]  # Ex: "EMG1", "IMU2", etc.
-                
-                if sensor_name.startswith("IMU"):
-                    sensor_id = int(sensor_name[3:])
-                    mappings = self.model_3d_widget.get_current_mappings()
-                    if sensor_id in mappings:
-                        body_part = mappings[sensor_id]
-                        body_part_ui = self._convert_model_part_to_ui(body_part)
-                        sensor_item.setText(0, f"{sensor_name} ({body_part_ui})")
-                
-                elif sensor_name.startswith("EMG") and hasattr(self, 'emg_mappings'):
-                    sensor_id = int(sensor_name[3:])
-                    if sensor_id in self.emg_mappings:
-                        body_part = self.emg_mappings[sensor_id]
-                        body_part_ui = self._convert_model_part_to_ui(body_part)
-                        sensor_item.setText(0, f"{sensor_name} ({body_part_ui})")
-                
-                elif sensor_name.startswith("pMMG") and hasattr(self, 'pmmg_mappings'):
-                    sensor_id = int(sensor_name[4:])
-                    if sensor_id in self.pmmg_mappings:
-                        body_part = self.pmmg_mappings[sensor_id]
-                        body_part_ui = self._convert_model_part_to_ui(body_part)
-                        sensor_item.setText(0, f"{sensor_name} ({body_part_ui})")
+        # Stocker les mappages localement
+        self.emg_mappings = emg_mappings
+        self.pmmg_mappings = pmmg_mappings
 
     def _convert_model_part_to_ui(self, model_part):
         """Convertit les noms des parties du modèle 3D vers des noms plus lisibles pour l'UI."""
@@ -1054,116 +838,6 @@ class DashboardApp(QMainWindow):
             success = self.model_3d_widget.load_external_model(file_path)
             if not success:
                 QMessageBox.warning(self, "Error", f"Failed to load model from {file_path}")
-
-    def save_mappings(self):
-        """Save sensor mappings to a JSON file"""
-        mappings = {
-            'EMG': self.emg_mappings,
-            'IMU': self.model_3d_widget.get_current_mappings(),
-            'pMMG': self.pmmg_mappings
-        }
-        
-        # Convert keys to strings for JSON serialization
-        serializable_mappings = {}
-        for sensor_type, mapping in mappings.items():
-            serializable_mappings[sensor_type] = {str(k): v for k, v in mapping.items()}
-        
-        filepath = os.path.join(os.path.dirname(__file__), 'sensor_mappings.json')
-        with open(filepath, 'w') as f:
-            json.dump(serializable_mappings, f, indent=2)
-
-    def load_mappings(self):
-        """Load sensor mappings from a JSON file"""
-        filepath = os.path.join(os.path.dirname(__file__), 'sensor_mappings.json')
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r') as f:
-                    mappings = json.load(f)
-                
-                # Convert string keys back to integers
-                if 'EMG' in mappings:
-                    self.emg_mappings = {int(k): v for k, v in mappings['EMG'].items()}
-                if 'pMMG' in mappings:
-                    self.pmmg_mappings = {int(k): v for k, v in mappings['pMMG'].items()}
-                    
-                # Update IMU mappings directly
-                if 'IMU' in mappings:
-                    for imu_id, body_part in {int(k): v for k, v in mappings['IMU'].items()}.items():
-                        self.model_3d_widget.map_imu_to_body_part(imu_id, body_part)
-                
-                # Refresh the UI to reflect loaded mappings
-                self.refresh_sensor_tree()
-                return True
-            except Exception as e:
-                print(f"Error loading mappings: {e}")
-        return False
-
-    def setup_default_mappings(self):
-        """Permet à l'utilisateur de définir ses propres assignations par défaut"""
-        # Récupérer les mappages actuels
-        current_mappings = {
-            'EMG': getattr(self, 'emg_mappings', {}), 
-            'IMU': self.model_3d_widget.get_current_mappings(),
-            'pMMG': getattr(self, 'pmmg_mappings', {})
-        }
-
-        # Afficher un dialogue pour configurer les mappages par défaut
-        dialog = SensorMappingDialog(self, current_mappings)
-        
-        # Connecter le signal pour mettre à jour les mappages
-        dialog.mappings_updated.connect(self.save_as_default_mappings)
-        
-        # Afficher un message pour expliquer la fonction
-        QMessageBox.information(
-            self, 
-            "Default Assignments Setup",
-            "Configure your sensor mappings as you prefer.\n"
-            "These settings will be saved as the default configuration for future use."
-        )
-        
-        dialog.exec_()
-
-    def save_as_default_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
-        """Sauvegarder les mappages actuels comme configuration par défaut"""
-        # Mettre à jour les mappages actuels
-        self.update_sensor_mappings(emg_mappings, imu_mappings, pmmg_mappings)
-        
-        # Sauvegarder les mappages comme configuration par défaut
-        default_mappings = {
-            'EMG': emg_mappings,
-            'IMU': imu_mappings,
-            'pMMG': pmmg_mappings
-        }
-        
-        # Convertir les clés en chaînes pour la sérialisation JSON
-        serializable_mappings = {}
-        for sensor_type, mapping in default_mappings.items():
-            serializable_mappings[sensor_type] = {str(k): v for k, v in mapping.items()}
-        
-        # Sauvegarder dans un fichier séparé pour les mappages par défaut
-        filepath = os.path.join(os.path.dirname(__file__), 'default_sensor_mappings.json')
-        with open(filepath, 'w') as f:
-            json.dump(serializable_mappings, f, indent=2)
-        
-        QMessageBox.information(
-            self, 
-            "Default Saved",
-            "Your sensor assignments have been saved as the default configuration."
-        )
-
-    def closeEvent(self, event):
-        """Called when the application is closed"""
-        self.save_mappings()  # Sauvegarder les mappages à la fermeture
-        event.accept()
-
-    def create_specific_tab(self, sensor_type, i):
-        label = QLabel(f"{sensor_type} {i}")
-        label.setStyleSheet(f"""
-            color: {self._get_color_for_type(sensor_type)};
-            font-weight: bold;
-            font-size: 14px;
-            padding: 3px;
-        """)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

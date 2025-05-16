@@ -95,7 +95,7 @@ class Model3DViewer(QGLWidget):
         self.precalc_frame = 0
         
         # Optimisations pour OpenGL
-        self.display_list = 0  # Initialize display_list to 0 (invalid)
+        self.display_list = None
         self.quadric = None
         
         # Remplacer AnimationThread par QTimer
@@ -119,10 +119,7 @@ class Model3DViewer(QGLWidget):
             
             # Amplitude des mouvements avec easing
             arm_swing = 0.3 * ease_factor
-            
-            # Phase opposée pour jambe droite et gauche (décalage de 180 degrés)
-            leg_swing_left = 0.35 * (0.5 - 0.5 * math.cos(phase))
-            leg_swing_right = 0.35 * (0.5 - 0.5 * math.cos(phase + math.pi))
+            leg_swing = 0.35 * ease_factor
             
             # Amplitude des mouvements
             torso_sway = 0.07 * math.sin(phase)
@@ -155,35 +152,35 @@ class Model3DViewer(QGLWidget):
                 'hip_x': torso_sway * 0.5,
                 'hip_y': vertical_bounce,
                 
-                # Bras gauche - Synchronisé avec jambe droite
-                'deltoid_l_z': -arm_swing * 0.7,
-                'biceps_l_z': -arm_swing * 0.9,
-                'forearm_l_z': -arm_swing,
-                'left_hand_z': -arm_swing * 1.2,
-                'dorsalis_major_l_z': -arm_swing * 0.5,
-                'pectorals_l_z': -arm_swing * 0.4,
+                # Bras gauche
+                'deltoid_l_z': arm_swing * 0.7,
+                'biceps_l_z': arm_swing * 0.9,
+                'forearm_l_z': arm_swing,
+                'left_hand_z': arm_swing * 1.2,
+                'dorsalis_major_l_z': arm_swing * 0.5,
+                'pectorals_l_z': arm_swing * 0.4,
                 
-                # Bras droit - Synchronisé avec jambe gauche
-                'deltoid_r_z': arm_swing * 0.7, 
-                'biceps_r_z': arm_swing * 0.9,
-                'forearm_r_z': arm_swing,
-                'right_hand_z': arm_swing * 1.2,
-                'dorsalis_major_r_z': arm_swing * 0.5,
-                'pectorals_r_z': arm_swing * 0.4,
+                # Bras droit
+                'deltoid_r_z': -arm_swing * 0.7, 
+                'biceps_r_z': -arm_swing * 0.9,
+                'forearm_r_z': -arm_swing,
+                'right_hand_z': -arm_swing * 1.2,
+                'dorsalis_major_r_z': -arm_swing * 0.5,
+                'pectorals_r_z': -arm_swing * 0.4,
                 
-                # Jambe gauche - Maintenant avec phase indépendante
-                'glutes_l_z': leg_swing_left * 0.5,
-                'quadriceps_l_z': leg_swing_left * 0.7,
-                'ishcio_hamstrings_l_z': leg_swing_left * 0.7,
-                'calves_l_z': leg_swing_left * 0.9,
-                'left_foot_z': leg_swing_left * 1.3,
+                # Jambe gauche
+                'glutes_l_z': -leg_swing * 0.5,
+                'quadriceps_l_z': -leg_swing * 0.7,
+                'ishcio_hamstrings_l_z': -leg_swing * 0.7,
+                'calves_l_z': -leg_swing * 0.9,
+                'left_foot_z': -leg_swing * 1.3,
                 
-                # Jambe droite - Maintenant avec phase indépendante
-                'glutes_r_z': leg_swing_right * 0.5,
-                'quadriceps_r_z': leg_swing_right * 0.7,
-                'ishcio_hamstrings_r_z': leg_swing_right * 0.7,
-                'calves_r_z': leg_swing_right * 0.9,
-                'right_foot_z': leg_swing_right * 1.3
+                # Jambe droite
+                'glutes_r_z': leg_swing * 0.5,
+                'quadriceps_r_z': leg_swing * 0.7,
+                'ishcio_hamstrings_r_z': leg_swing * 0.7,
+                'calves_r_z': leg_swing * 0.9,
+                'right_foot_z': leg_swing * 1.3
             }
             positions.append(frame_offsets)
             
@@ -335,32 +332,18 @@ class Model3DViewer(QGLWidget):
         self.create_display_list()
         
     def create_display_list(self):
-        """Create an OpenGL display list for the model."""
-        # Check if display_list is already defined and valid
-        if hasattr(self, 'display_list') and self.display_list != 0:
-            try:
-                glDeleteLists(self.display_list, 1)
-            except OpenGL.error.GLError:
-                pass
+        """Optimiser le rendu avec des display lists pour toutes les parties du corps"""
+        if self.display_list:
+            glDeleteLists(self.display_list, 1)
+            
+        self.display_list = glGenLists(1)
+        glNewList(self.display_list, GL_COMPILE)
         
-        # Generate a new display list ID
-        try:
-            self.display_list = glGenLists(1)
-            if self.display_list == 0:
-                print("Error: Could not generate a valid display list ID")
-                return
-                
-            # Now create a new display list
-            glNewList(self.display_list, GL_COMPILE)
-            
-            # Draw the model
-            self.draw_limbs_internal()
-            self.draw_joints_internal()
-            
-            glEndList()
-        except OpenGL.error.GLError as e:
-            print(f"OpenGL error in create_display_list: {e}")
-            self.display_list = 0
+        # Dessiner les contours et articulations dans la display list
+        self.draw_limbs_internal()
+        self.draw_joints_internal()
+        
+        glEndList()
 
     def resizeGL(self, width, height):
         glViewport(0, 0, width, height)
@@ -409,14 +392,13 @@ class Model3DViewer(QGLWidget):
         
         self.renderText(10, self.height() - 20, f"FPS: {self.fps}")
         
-        # Draw the sensor legend with proper English labels
-        # Title and labels
-        self.renderText(10, 20, "Legend:", QFont("Arial", 10, QFont.Bold))  # Déplacé de 30 à 20
-        self.renderText(60, 45, "IMU Sensors", QFont("Arial", 9))  # Ajusté
-        self.renderText(60, 65, "EMG Sensors", QFont("Arial", 9))  # Ajusté
-        self.renderText(60, 85, "pMMG Sensors", QFont("Arial", 9))  # Ajusté
+        # Dessiner la légende des capteurs
+        self.renderText(10, 30, "Légende:", QFont("Arial", 10, QFont.Bold))
+        self.renderText(10, 50, "IMU", QFont("Arial", 10))
+        self.renderText(10, 70, "EMG", QFont("Arial", 10))
+        self.renderText(10, 90, "pMMG", QFont("Arial", 10))
         
-        # Draw color squares with better positioning
+        # Dessiner des carrés de couleur pour la légende
         glPushMatrix()
         glLoadIdentity()
         glMatrixMode(GL_PROJECTION)
@@ -425,35 +407,26 @@ class Model3DViewer(QGLWidget):
         glOrtho(0, self.width(), 0, self.height(), -1, 1)
         
         glBegin(GL_QUADS)
-        # IMU (green)
+        # IMU (vert)
         glColor3f(0.0, 0.8, 0.2)
-        glVertex2f(30, self.height() - 45)  # Ajusté
-        glVertex2f(50, self.height() - 45)
-        glVertex2f(50, self.height() - 35)
-        glVertex2f(30, self.height() - 35)
-        
-        # EMG (red)
-        glColor3f(0.8, 0.2, 0.0)
-        glVertex2f(30, self.height() - 65)  # Ajusté
-        glVertex2f(50, self.height() - 65)
         glVertex2f(50, self.height() - 55)
-        glVertex2f(30, self.height() - 55)
+        glVertex2f(70, self.height() - 55)
+        glVertex2f(70, self.height() - 45)
+        glVertex2f(50, self.height() - 45)
         
-        # pMMG (blue)
-        glColor3f(0.0, 0.2, 0.8)
-        glVertex2f(30, self.height() - 85)  # Ajusté
-        glVertex2f(50, self.height() - 85)
+        # EMG (rouge)
+        glColor3f(0.8, 0.2, 0.0)
         glVertex2f(50, self.height() - 75)
-        glVertex2f(30, self.height() - 75)
-        glEnd()
+        glVertex2f(70, self.height() - 75)
+        glVertex2f(70, self.height() - 65)
+        glVertex2f(50, self.height() - 65)
         
-        # Add a border around the legend - LARGER AND WIDER
-        glColor3f(0.7, 0.7, 0.7)
-        glBegin(GL_LINE_LOOP)
-        glVertex2f(5, self.height() - 100)     # Bas gauche - Plus bas de 5 pixels
-        glVertex2f(180, self.height() - 100)   # Bas droite - Plus large de 10 pixels
-        glVertex2f(180, self.height() - 10)    # Haut droite - Plus haut de 5 pixels
-        glVertex2f(5, self.height() - 10)      # Haut gauche - Plus haut de 5 pixels
+        # pMMG (bleu)
+        glColor3f(0.0, 0.2, 0.8)
+        glVertex2f(50, self.height() - 95)
+        glVertex2f(70, self.height() - 95)
+        glVertex2f(70, self.height() - 85)
+        glVertex2f(50, self.height() - 85)
         glEnd()
         
         glPopMatrix()
@@ -826,14 +799,6 @@ class Model3DWidget(QWidget):
     def get_current_mappings(self):
         """Obtenir les associations actuelles IMU-parties du corps"""
         return self.model_viewer.get_current_mappings()
-        
-    def get_emg_mappings(self):
-        """Obtenir les associations actuelles EMG-parties du corps"""
-        return getattr(self.model_viewer, 'emg_mapping', {}).copy()
-    
-    def get_pmmg_mappings(self):
-        """Obtenir les associations actuelles pMMG-parties du corps"""
-        return getattr(self.model_viewer, 'pmmg_mapping', {}).copy()
         
     def reset_view(self):
         """Réinitialiser la vue du modèle 3D à la position de face"""
