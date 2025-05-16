@@ -33,7 +33,6 @@ class MainApp(QMainWindow):
         # Use MainBar to create the menu bar
         self.main_bar._create_menubar()
 
-        # Apply styles
         _apply_styles(self)
 
         # Timer for auto-save (every 5 minutes)

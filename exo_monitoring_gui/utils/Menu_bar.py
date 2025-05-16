@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QAction, QFileDialog,
-                         QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout)
+                             QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout)
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
 import h5py
@@ -7,9 +7,11 @@ import os
 from datetime import datetime
 from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata
+
 class MainBar:
     def __init__(self, main_app):
         self.main_app = main_app
+
 
     def create_new_subject(self):
         """Creates a new subject file and opens information window"""
@@ -21,7 +23,7 @@ class MainBar:
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
             )
             if reply == QMessageBox.Save:
-                self.main_app.save_subject_notsave()
+                self.save_subject_notsave()
             elif reply == QMessageBox.Cancel:
                 return
 
@@ -48,20 +50,26 @@ class MainBar:
 
                 self.main_app.current_subject_file = filename
                 self.main_app.modified = False
-                self.main_app.save_subject_action.setEnabled(True)
-                self.main_app.save_subject_as_action.setEnabled(True)
-                self.main_app.show_metadata_action.setEnabled(True)
+                self.save_subject_action.setEnabled(True)
+                self.save_subject_as_action.setEnabled(True)
+                self.show_metadata_action.setEnabled(True)
 
                 self.main_app.statusBar().showMessage(f"New subject file created: {os.path.basename(filename)}")
 
                 # Display information window to collect metadata
                 self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file)
                 self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
+                self.create_subject_action.setEnabled(False)
+                self.load_subject_action.setEnabled(False)
+                self.load_existing_trial.setEnabled(False)
 
                 def closeEvent(event):
-                    self.main_app.save_subject_action.setEnabled(False)
-                    self.main_app.save_subject_as_action.setEnabled(False)
-                    self.main_app.show_metadata_action.setEnabled(False)
+                    self.create_subject_action.setEnabled(True)
+                    self.load_subject_action.setEnabled(True)
+                    self.load_existing_trial.setEnabled(True)
+                    self.save_subject_action.setEnabled(False)
+                    self.save_subject_as_action.setEnabled(False)
+                    self.show_metadata_action.setEnabled(False)
                     event.accept()
 
                 self.main_app.info_window.closeEvent = closeEvent
@@ -70,11 +78,7 @@ class MainBar:
             except Exception as e:
                 self.main_app._show_error(f"Error creating subject file: {str(e)}")
 
-    # Ajoutez les autres méthodes de MainBar ici
-
-
-    # Ajoutez les autres méthodes de MainBar ici
-
+    # Add other methods of MainBar here
 
     def load_existing_subject(self, review=False):
         """Load an existing subject file"""
@@ -83,7 +87,7 @@ class MainBar:
                                         'There are unsaved changes. Save before loading a new subject?',
                                         QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
             if reply == QMessageBox.Save:
-                self.main_app.save_subject_notsave()
+                self.save_subject_notsave()
             elif reply == QMessageBox.Cancel:
                 return
 
@@ -106,9 +110,9 @@ class MainBar:
                         # Update the current file and UI
                         self.main_app.current_subject_file = filename
                         self.main_app.modified = False
-                        self.main_app.save_subject_action.setEnabled(True)
-                        self.main_app.save_subject_as_action.setEnabled(True)
-                        self.main_app.show_metadata_action.setEnabled(True)
+                        self.save_subject_action.setEnabled(True)
+                        self.save_subject_as_action.setEnabled(True)
+                        self.show_metadata_action.setEnabled(True)
 
                         # Update the status bar
                         self.main_app.statusBar().showMessage(f"Loaded subject file: {os.path.basename(filename)}")
@@ -118,11 +122,17 @@ class MainBar:
 
                         self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file, review)
                         self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
+                        self.create_subject_action.setEnabled(False)
+                        self.load_subject_action.setEnabled(False)
+                        self.load_existing_trial.setEnabled(False)
 
                         def closeEvent(event):
-                            self.main_app.save_subject_action.setEnabled(False)
-                            self.main_app.save_subject_as_action.setEnabled(False)
-                            self.main_app.show_metadata_action.setEnabled(False)
+                            self.create_subject_action.setEnabled(True)
+                            self.load_subject_action.setEnabled(True)
+                            self.load_existing_trial.setEnabled(True)
+                            self.save_subject_action.setEnabled(False)
+                            self.save_subject_as_action.setEnabled(False)
+                            self.show_metadata_action.setEnabled(False)
                             event.accept()
 
                         self.main_app.info_window.closeEvent = closeEvent
@@ -135,6 +145,9 @@ class MainBar:
             except Exception as e:
                 self.main_app._show_error(f"Error loading subject file: {str(e)}")
                 return
+    
+
+
 
     def save_subject(self):
         """Save the current subject file"""
@@ -445,7 +458,6 @@ class MainBar:
         self.save_subject_action.setEnabled(False)
         self.save_subject_as_action.setEnabled(False)
         self.show_metadata_action.setEnabled(False)
-
 
     def _all_false_or_true(self, boold):
         self.create_subject_action.setEnabled(boold)
