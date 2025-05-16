@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import json
 import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -814,6 +815,59 @@ class DashboardApp(QMainWindow):
         # Stocker les mappages localement
         self.emg_mappings = emg_mappings
         self.pmmg_mappings = pmmg_mappings
+
+    def setup_default_mappings(self):
+        """Permet à l'utilisateur de définir ses propres assignations par défaut"""
+        # Récupérer les mappages actuels
+        current_mappings = {
+            'EMG': getattr(self, 'emg_mappings', {}), 
+            'IMU': self.model_3d_widget.get_current_mappings(),
+            'pMMG': getattr(self, 'pmmg_mappings', {})
+        }
+
+        # Afficher un dialogue pour configurer les mappages par défaut
+        dialog = SensorMappingDialog(self, current_mappings)
+        
+        # Connecter le signal pour mettre à jour les mappages
+        dialog.mappings_updated.connect(self.save_as_default_mappings)
+        
+        # Afficher un message pour expliquer la fonction
+        QMessageBox.information(
+            self, 
+            "Default Assignments Setup",
+            "Configure your sensor mappings as you prefer.\n"
+            "These settings will be saved as the default configuration for future use."
+        )
+        
+        dialog.exec_()
+
+    def save_as_default_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
+        """Sauvegarder les mappages actuels comme configuration par défaut"""
+        # Mettre à jour les mappages actuels
+        self.update_sensor_mappings(emg_mappings, imu_mappings, pmmg_mappings)
+        
+        # Sauvegarder les mappages comme configuration par défaut
+        default_mappings = {
+            'EMG': emg_mappings,
+            'IMU': imu_mappings,
+            'pMMG': pmmg_mappings
+        }
+        
+        # Convertir les clés en chaînes pour la sérialisation JSON
+        serializable_mappings = {}
+        for sensor_type, mapping in default_mappings.items():
+            serializable_mappings[sensor_type] = {str(k): v for k, v in mapping.items()}
+        
+        # Sauvegarder dans un fichier séparé pour les mappages par défaut
+        filepath = os.path.join(os.path.dirname(__file__), 'default_sensor_mappings.json')
+        with open(filepath, 'w') as f:
+            json.dump(serializable_mappings, f, indent=2)
+        
+        QMessageBox.information(
+            self, 
+            "Default Saved",
+            "Your sensor assignments have been saved as the default configuration."
+        )
 
     def _convert_model_part_to_ui(self, model_part):
         """Convertit les noms des parties du modèle 3D vers des noms plus lisibles pour l'UI."""

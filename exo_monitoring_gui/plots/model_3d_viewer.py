@@ -96,7 +96,7 @@ class Model3DViewer(QGLWidget):
         self.precalc_frame = 0
         
         # Optimisations pour OpenGL
-        self.display_list = None
+        self.display_list = 0  # Doit être initialisé à 0, pas à None
         self.quadric = None
         
         # Remplacer AnimationThread par QTimer
@@ -316,27 +316,55 @@ class Model3DViewer(QGLWidget):
         self.update()
 
     def initializeGL(self):
-        glEnable(GL_DEPTH_TEST)
-        glEnable(GL_CULL_FACE)
-        glClearColor(0.2, 0.2, 0.2, 1.0)
-        
-        glShadeModel(GL_SMOOTH)
-        glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST)
-        glHint(GL_POLYGON_SMOOTH_HINT, GL_FASTEST)
-        glDisable(GL_LIGHTING)
-        glDisable(GL_DITHER)
-        
-        self.quadric = gluNewQuadric()
-        gluQuadricDrawStyle(self.quadric, GLU_FILL)
-        gluQuadricNormals(self.quadric, GLU_SMOOTH)
-        
-        # Création du sol / grille de référence
-        self.floor_display_list = glGenLists(1)
-        glNewList(self.floor_display_list, GL_COMPILE)
-        self.create_floor()
-        glEndList()
-        
-        self.create_display_list()
+        """Initialize OpenGL context and resources."""
+        # Vérifie si le contexte est valide avant d'appeler les fonctions OpenGL
+        if not self.isValid() or not self.context().isValid():
+            print("Warning: OpenGL context not valid during initialization")
+            return
+
+        # Configuration OpenGL de base
+        try:
+            glClearColor(0.1, 0.1, 0.1, 1.0)
+            glEnable(GL_DEPTH_TEST)
+            glEnable(GL_LIGHTING)
+            glEnable(GL_LIGHT0)
+            glEnable(GL_COLOR_MATERIAL)
+            glEnable(GL_NORMALIZE)
+            
+            # Configurer la lumière
+            glLightfv(GL_LIGHT0, GL_POSITION, [5.0, 5.0, 5.0, 1.0])
+            glLightfv(GL_LIGHT0, GL_DIFFUSE, [1.0, 1.0, 1.0, 1.0])
+            glLightfv(GL_LIGHT0, GL_SPECULAR, [0.5, 0.5, 0.5, 1.0])
+            
+            # Initialiser le quadric pour les articulations
+            self.quadric = gluNewQuadric()
+            gluQuadricDrawStyle(self.quadric, GLU_FILL)
+            gluQuadricNormals(self.quadric, GLU_SMOOTH)
+            
+            # Initialiser d'abord la display_list du modèle
+            self.display_list = 0  # Initialisation explicite
+            self.create_display_list()
+            
+            # Puis créer le sol
+            try:
+                # Créer le sol uniquement si la display_list du modèle a été créée avec succès
+                if self.display_list != 0:
+                    self.floor_display_list = glGenLists(1)
+                    if self.floor_display_list != 0:
+                        glNewList(self.floor_display_list, GL_COMPILE)
+                        self.create_floor()
+                        glEndList()
+                    else:
+                        self.floor_display_list = 0
+                        print("Warning: Could not create floor display list")
+                else:
+                    self.floor_display_list = 0
+            except OpenGL.error.GLError as e:
+                print(f"OpenGL error creating floor: {e}")
+                self.floor_display_list = 0
+                
+        except OpenGL.error.GLError as e:
+            print(f"OpenGL initialization error: {e}")
 
     def create_floor(self):
         """Créer un sol quadrillé pour visualiser la direction de déplacement"""
@@ -414,29 +442,27 @@ class Model3DViewer(QGLWidget):
 
     def create_display_list(self):
         """Create an OpenGL display list for the model."""
-        # S'assurer que le contexte OpenGL est valide
+        # S'assurer que le contexte est valide
         if not self.isValid() or not self.context().isValid():
-            print("Warning: OpenGL context not valid, skipping display list creation")
+            print("Warning: OpenGL context not valid when creating display list")
             return
         
-        # Vérifier si display_list est déjà défini et valide
-        if hasattr(self, 'display_list') and self.display_list != 0:
-            try:
-                glDeleteLists(self.display_list, 1)
-            except OpenGL.error.GLError:
-                pass
-        
-        # Générer une nouvelle display list avec gestion d'erreur
         try:
-            # Vérifier que le contexte est bien actif
             self.makeCurrent()
             
+            # Vérifier si display_list est déjà défini et valide
+            if hasattr(self, 'display_list') and self.display_list != 0:
+                try:
+                    glDeleteLists(self.display_list, 1)
+                except OpenGL.error.GLError:
+                    pass
+            
+            # Générer une nouvelle liste
             self.display_list = glGenLists(1)
             if self.display_list == 0:
-                print("Error: Could not generate a valid display list ID")
+                print("Error: Failed to generate a valid display list ID")
                 return
                 
-            # Créer la nouvelle display list
             glNewList(self.display_list, GL_COMPILE)
             
             # Dessiner le modèle
@@ -448,43 +474,62 @@ class Model3DViewer(QGLWidget):
             print(f"OpenGL error in create_display_list: {e}")
             self.display_list = 0
         finally:
-            # Libérer le contexte OpenGL
             self.doneCurrent()
 
     def resizeGL(self, width, height):
-        glViewport(0, 0, width, height)
-        glMatrixMode(GL_PROJECTION)
-        glLoadIdentity()
-        aspect = width / float(height)
-        gluPerspective(45.0, aspect, 0.1, 100.0)
-        glMatrixMode(GL_MODELVIEW)
-    
+        """Handle window resize events."""
+        # Vérifier que le contexte OpenGL est valide
+        if not self.isValid() or not self.context().isValid():
+            return
+        
+        try:
+            glViewport(0, 0, width, height)
+            glMatrixMode(GL_PROJECTION)
+            glLoadIdentity()
+            aspect = width / float(height) if height > 0 else 1.0
+            gluPerspective(45.0, aspect, 0.1, 100.0)
+            glMatrixMode(GL_MODELVIEW)
+        except OpenGL.error.GLError as e:
+            print(f"OpenGL resize error: {e}")
+
     def paintGL(self):
-        self.frame_count += 1
+        """Render the OpenGL scene."""
+        # Vérifier que le contexte OpenGL est valide
+        if not self.isValid() or not self.context().isValid():
+            return
         
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glLoadIdentity()
-        
-        gluLookAt(0, 1.0, 5.0, 0, 1.0, 0.0, 0, 1.0, 0.0)
-        
-        # Rotation globale
-        glRotatef(self.rotation_x, 1, 0, 0)
-        glRotatef(self.rotation_y, 0, 1, 0)
-        glRotatef(self.rotation_z, 0, 0, 1)
-        
-        # Dessiner le sol
-        glCallList(self.floor_display_list)
-        
-        # Si en animation, dessiner directement (plus fluide)
-        if self.walking:
-            self.draw_limbs_internal()
-            self.draw_joints_internal()
-        else:
-            # Sinon utiliser la display list (plus performant)
-            glCallList(self.display_list)
-        
-        # Draw the sensor legend (contient maintenant aussi le FPS)
-        self._draw_legend()
+        try:
+            self.frame_count += 1
+            
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+            glLoadIdentity()
+            
+            gluLookAt(0, 1.0, 5.0, 0, 1.0, 0.0, 0, 1.0, 0.0)
+            
+            # Rotation globale
+            glRotatef(self.rotation_x, 1, 0, 0)
+            glRotatef(self.rotation_y, 0, 1, 0)
+            glRotatef(self.rotation_z, 0, 0, 1)
+            
+            # Dessiner le sol si disponible
+            if hasattr(self, 'floor_display_list') and self.floor_display_list != 0:
+                glCallList(self.floor_display_list)
+            
+            # Si en animation, dessiner directement (plus fluide)
+            if not hasattr(self, 'walking') or not self.walking:
+                if hasattr(self, 'display_list') and self.display_list != 0:
+                    glCallList(self.display_list)
+                else:
+                    self.draw_limbs_internal()
+                    self.draw_joints_internal()
+            else:
+                self.draw_limbs_internal()
+                self.draw_joints_internal()
+            
+            # Draw the sensor legend
+            self._draw_legend()
+        except OpenGL.error.GLError as e:
+            print(f"OpenGL rendering error: {e}")
 
     def draw_limbs_internal(self):
         """Draw the limbs of the body using immediate mode OpenGL."""
@@ -852,10 +897,10 @@ class Model3DViewer(QGLWidget):
         # Add a border around the legend
         glColor3f(0.7, 0.7, 0.7)
         glBegin(GL_LINE_LOOP)
-        glVertex2f(5, self.height() - 95)
-        glVertex2f(180, self.height() - 95)
-        glVertex2f(180, self.height() - 5)
-        glVertex2f(5, self.height() - 5)
+        glVertex2f(5, self.height() - 100)     # Bas gauche - Plus bas de 5 pixels
+        glVertex2f(180, self.height() - 100)   # Bas droite - Plus large de 10 pixels
+        glVertex2f(180, self.height() - 10)    # Haut droite - Plus haut de 5 pixels
+        glVertex2f(5, self.height() - 10)      # Haut gauche - Plus haut de 5 pixels
         glEnd()
         
         glPopMatrix()

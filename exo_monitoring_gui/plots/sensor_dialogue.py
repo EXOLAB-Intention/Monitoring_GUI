@@ -8,6 +8,8 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QBrush, QFont
 from plots.model_3d_viewer import Model3DWidget
 import re
+import os
+import json
 
 class MappingBadgesWidget(QWidget):
     def __init__(self, mappings, parent=None):
@@ -227,20 +229,28 @@ class SimplifiedMappingDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout()
         
-        # 3D Model
-        model_group = QGroupBox("3D Model")
-        model_layout = QVBoxLayout()
-        self.general_model = Model3DWidget()
-        model_layout.addWidget(self.general_model)
-        model_group.setLayout(model_layout)
-        layout.addWidget(model_group, 3)
+        # Créer un splitter horizontal pour diviser le modèle 3D et les contrôles
+        splitter = QSplitter(Qt.Horizontal)
         
-        # Manual assignment
+        # 3D Model - À gauche
+        model_container = QWidget()
+        model_layout = QVBoxLayout(model_container)
+        model_group = QGroupBox("3D Model")
+        model_inner_layout = QVBoxLayout()
+        self.general_model = Model3DWidget()
+        model_inner_layout.addWidget(self.general_model)
+        model_group.setLayout(model_inner_layout)
+        model_layout.addWidget(model_group)
+        splitter.addWidget(model_container)
+        
+        # Manual assignment - À droite
+        assign_container = QWidget()
+        assign_layout = QVBoxLayout(assign_container)
         assign_group = QGroupBox("Assign a Sensor")
-        assign_layout = QGridLayout()
+        assign_grid = QGridLayout()
         
         # Body part selection
-        assign_layout.addWidget(QLabel("Body part:"), 0, 0)
+        assign_grid.addWidget(QLabel("Body part:"), 0, 0)
         self.body_part_combo = QComboBox()
         
         # Upper body parts
@@ -259,30 +269,95 @@ class SimplifiedMappingDialog(QDialog):
         # Add all body parts
         body_parts = upper_body + lower_body
         self.body_part_combo.addItems(body_parts)
-        assign_layout.addWidget(self.body_part_combo, 0, 1)
+        self.body_part_combo.setStyleSheet("""
+            QComboBox {
+                border: 1px solid #d0d0d0;
+                border-radius: 4px;
+                padding: 5px 10px;
+                min-height: 30px;
+                background: white;
+            }
+        """)
+        assign_grid.addWidget(self.body_part_combo, 0, 1)
         
         # Sensor type
-        assign_layout.addWidget(QLabel("Sensor type:"), 1, 0)  # Changed from French
+        assign_grid.addWidget(QLabel("Sensor type:"), 1, 0)
         self.sensor_type_combo = QComboBox()
         self.sensor_type_combo.addItems(["EMG", "IMU", "pMMG"])
         self.sensor_type_combo.currentTextChanged.connect(self.update_sensor_list)
-        assign_layout.addWidget(self.sensor_type_combo, 1, 1)
+        self.sensor_type_combo.setStyleSheet("""
+            QComboBox {
+                border: 1px solid #d0d0d0;
+                border-radius: 4px;
+                padding: 5px 10px;
+                min-height: 30px;
+                background: white;
+            }
+        """)
+        assign_grid.addWidget(self.sensor_type_combo, 1, 1)
         
         # Sensor number
-        assign_layout.addWidget(QLabel("Sensor:"), 2, 0)  # Changed from French
+        assign_grid.addWidget(QLabel("Sensor:"), 2, 0)
         self.sensor_id_combo = QComboBox()
-        assign_layout.addWidget(self.sensor_id_combo, 2, 1)
+        self.sensor_id_combo.setStyleSheet("""
+            QComboBox {
+                border: 1px solid #d0d0d0;
+                border-radius: 4px;
+                padding: 5px 10px;
+                min-height: 30px;
+                background: white;
+            }
+        """)
+        assign_grid.addWidget(self.sensor_id_combo, 2, 1)
         self.update_sensor_list("IMU")
         
         # Assignment button
-        self.manual_assign_button = QPushButton("Assign this Sensor")  # Changed from French
+        self.manual_assign_button = QPushButton("Assign this Sensor")
         self.manual_assign_button.clicked.connect(self.manual_assign)
-        self.manual_assign_button.setStyleSheet("font-weight: bold;")
-        assign_layout.addWidget(self.manual_assign_button, 3, 0, 1, 2)
+        self.manual_assign_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #43A047;
+            }
+            QPushButton:pressed {
+                background-color: #388E3C;
+            }
+        """)
+        assign_grid.addWidget(self.manual_assign_button, 3, 0, 1, 2)
         
-        assign_group.setLayout(assign_layout)
-        layout.addWidget(assign_group, 1)
+        assign_group.setLayout(assign_grid)
+        assign_layout.addWidget(assign_group)
         
+        # Ajouter un espacement
+        assign_layout.addStretch(1)
+        
+        # Ajouter une section d'aide
+        help_group = QGroupBox("Help")
+        help_layout = QVBoxLayout()
+        help_text = QLabel(
+            "Use this panel to assign sensors to body parts. "
+            "Select the body part first, then choose the sensor type and number. "
+            "Click 'Assign this Sensor' to complete the mapping."
+        )
+        help_text.setWordWrap(True)
+        help_layout.addWidget(help_text)
+        help_group.setLayout(help_layout)
+        assign_layout.addWidget(help_group)
+        
+        splitter.addWidget(assign_container)
+        
+        # Définir les proportions (70% modèle, 30% contrôles)
+        splitter.setSizes([int(splitter.width() * 0.7), int(splitter.width() * 0.3)])
+        
+        layout.addWidget(splitter)
         tab.setLayout(layout)
         return tab
 
@@ -549,6 +624,32 @@ class SimplifiedMappingDialog(QDialog):
 
     def reset_to_default(self):
         """Reset all mappings to default values"""
+        # Essayer de charger les mappages par défaut personnalisés
+        filepath = os.path.join(os.path.dirname(__file__), 'default_sensor_mappings.json')
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r') as f:
+                    default_mappings = json.load(f)
+                
+                # Convertir les clés string en int
+                for sensor_type in ['EMG', 'IMU', 'pMMG']:
+                    if sensor_type in default_mappings:
+                        self.current_mappings[sensor_type] = {int(k): v for k, v in default_mappings[sensor_type].items()}
+                
+                QMessageBox.information(self, "Reset", "All mappings have been reset to your custom default values.")
+            except Exception as e:
+                # Utiliser les mappages par défaut du système en cas d'erreur
+                self._use_system_defaults()
+        else:
+            # Utiliser les mappages par défaut du système s'il n'y a pas de fichier personnalisé
+            self._use_system_defaults()
+        
+        # Mettre à jour l'interface utilisateur
+        self.load_current_mappings()
+        self.update_badges()
+
+    def _use_system_defaults(self):
+        """Utilise les mappages par défaut du système"""
         default_mappings = {
             'EMG': {
                 1: 'biceps_l',
@@ -571,14 +672,7 @@ class SimplifiedMappingDialog(QDialog):
         }
         
         self.current_mappings = default_mappings
-        
-        # Update combos
-        self.load_current_mappings()
-        
-        # Update badges
-        self.update_badges()
-        
-        QMessageBox.information(self, "Reset", "All mappings have been reset to default values.")
+        QMessageBox.information(self, "Reset", "All mappings have been reset to system default values.")
 
     def _convert_model_part_to_ui(self, model_part):
         """Convert a model part name to a readable UI name"""
