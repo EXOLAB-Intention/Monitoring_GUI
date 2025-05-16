@@ -11,6 +11,14 @@ class MainBar:
     def __init__(self, main_app):
         self.main_app = main_app
 
+    def _all_false_or_true(self, boolen):
+        self.Save_current_trial.setEnabled(boolen)
+        self.Save_current_trial_as.setEnabled(boolen)
+        self.Save_current_plotas_image.setEnabled(boolen)
+        self.save_subject_action.setEnabled(boolen)
+        self.save_subject_as_action.setEnabled(boolen)
+        self.show_metadata_action.setEnabled(boolen)
+
     def create_new_subject(self):
         """Creates a new subject file and opens information window"""
         if self.main_app.modified:
@@ -48,20 +56,20 @@ class MainBar:
 
                 self.main_app.current_subject_file = filename
                 self.main_app.modified = False
-                self.main_app.save_subject_action.setEnabled(True)
-                self.main_app.save_subject_as_action.setEnabled(True)
-                self.main_app.show_metadata_action.setEnabled(True)
+                self.save_subject_action.setEnabled(True)
+                self.save_subject_as_action.setEnabled(True)
+                self.show_metadata_action.setEnabled(True)
 
                 self.main_app.statusBar().showMessage(f"New subject file created: {os.path.basename(filename)}")
 
                 # Display information window to collect metadata
-                self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file)
+                self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file)                
                 self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
 
                 def closeEvent(event):
-                    self.main_app.save_subject_action.setEnabled(False)
-                    self.main_app.save_subject_as_action.setEnabled(False)
-                    self.main_app.show_metadata_action.setEnabled(False)
+                    self.save_subject_action.setEnabled(False)
+                    self.save_subject_as_action.setEnabled(False)
+                    self.show_metadata_action.setEnabled(False)
                     event.accept()
 
                 self.main_app.info_window.closeEvent = closeEvent
@@ -106,9 +114,9 @@ class MainBar:
                         # Update the current file and UI
                         self.main_app.current_subject_file = filename
                         self.main_app.modified = False
-                        self.main_app.save_subject_action.setEnabled(True)
-                        self.main_app.save_subject_as_action.setEnabled(True)
-                        self.main_app.show_metadata_action.setEnabled(True)
+                        self.save_subject_action.setEnabled(True)
+                        self.save_subject_as_action.setEnabled(True)
+                        self.show_metadata_action.setEnabled(True)
 
                         # Update the status bar
                         self.main_app.statusBar().showMessage(f"Loaded subject file: {os.path.basename(filename)}")
@@ -120,9 +128,9 @@ class MainBar:
                         self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
 
                         def closeEvent(event):
-                            self.main_app.save_subject_action.setEnabled(False)
-                            self.main_app.save_subject_as_action.setEnabled(False)
-                            self.main_app.show_metadata_action.setEnabled(False)
+                            self.save_subject_action.setEnabled(False)
+                            self.save_subject_as_action.setEnabled(False)
+                            self.show_metadata_action.setEnabled(False)
                             event.accept()
 
                         self.main_app.info_window.closeEvent = closeEvent
@@ -338,13 +346,13 @@ class MainBar:
         file_menu = menubar.addMenu('&File')
 
         # File menu actions
-        create_subject_action = self._create_action(
+        self.create_subject_action = self._create_action(
             "&Create new subject",
             lambda: self.create_new_subject(),
             "Ctrl+N"
         )
 
-        load_subject_action = self._create_action(
+        self.load_subject_action = self._create_action(
             "&Load existing subject",
             lambda: self.load_existing_subject(),
             "Ctrl+O",
@@ -400,7 +408,7 @@ class MainBar:
             tip="Save current plotas image"
         )
 
-        exit_action = self._create_action(
+        self.exit_action = self._create_action(
             "E&xit",
             lambda: self.main_app.close,
             "Alt+F4",
@@ -408,8 +416,8 @@ class MainBar:
         )
 
         # Add actions to file menu
-        file_menu.addAction(create_subject_action)
-        file_menu.addAction(load_subject_action)
+        file_menu.addAction(self.create_subject_action)
+        file_menu.addAction(self.load_subject_action)
         file_menu.addSeparator()
         file_menu.addAction(self.save_subject_action)
         file_menu.addAction(self.save_subject_as_action)
@@ -421,7 +429,7 @@ class MainBar:
         file_menu.addSeparator()
         file_menu.addAction(self.show_metadata_action)
         file_menu.addSeparator()
-        file_menu.addAction(exit_action)
+        file_menu.addAction(self.exit_action)
 
         # Help menu
         help_menu = menubar.addMenu('&Help')
@@ -444,3 +452,16 @@ class MainBar:
         self.save_subject_action.setEnabled(False)
         self.save_subject_as_action.setEnabled(False)
         self.show_metadata_action.setEnabled(False)
+
+    def _all_false_or_true(self, boolen):
+        self.create_subject_action.setEnabled(boolen)
+        self.load_subject_action.setEnabled(boolen)
+        self.load_existing_trial.setEnabled(boolen)
+        self.save_subject_action.setEnabled(boolen)
+        self.Save_current_trial.setEnabled(boolen)
+        self.Save_current_trial_as.setEnabled(boolen)
+        self.Save_current_plotas_image.setEnabled(boolen)
+        self.save_subject_action.setEnabled(boolen)
+        self.save_subject_as_action.setEnabled(boolen)
+        self.show_metadata_action.setEnabled(boolen)
+        self.exit_action.setEnabled(boolen)
