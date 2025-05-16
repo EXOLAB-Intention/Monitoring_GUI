@@ -18,7 +18,6 @@ def load_metadata(subject_file):
         with h5py.File(subject_file, 'r') as f:
             root_attrs = dict(f.attrs)
             for key, value in root_attrs.items():
-                print(key)
                 if key.startswith("participant_"):
                     # Stocker directement la clé telle quelle, par exemple "participant_name"
                     data[key] = value 
@@ -42,11 +41,13 @@ def load_metadata(subject_file):
     return data, image_path
 
 def save_metadata(subject_file, data: dict):
+    """Save metadata to an HDF5 file.
+    Detects if the file uses the new structure (participant_ attributes at root)
+    or old structure (/metadata group) and saves accordingly.
+    """
     try:
         with h5py.File(subject_file, 'a') as f:
             # Écrire toujours à la racine
-            if "subject_created" not in f.attrs:
-                f.attrs['subject_created'] = True
             image_path_value = None
             if "image_path" in data:
                 image_path_value = data.pop("image_path") # Retire pour éviter double écriture par la boucle
