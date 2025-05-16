@@ -1,13 +1,3 @@
-'''
-Regler les probleme des matched part qui contient pas de backend (revoir le code et le programme) (les imu sont deja assigné par defaut, et ya plein de bouton a faire fonctionner)
-Regler le probleme de quand on a appuyé sur record stop on ne peut plus appuyer sur recors start ensuite (pk pas une fenetre dialogue pour dire que l'on ne peut plus appuyer sur record start)
-regler le probleme de quand on a stop le record et que on veux afficher un nouveau capteur pour voir son graphique sa laffiche sans données (soit on envoie un message derreur pour dire quil peut pas afficher ou soit on afiche les donnees)
-
-
-'''
-
-
-
 import sys
 import os
 import time
