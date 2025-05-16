@@ -26,10 +26,11 @@ class DashboardApp(QMainWindow):
         self.resize(1600, 900)
         self.setMinimumSize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
-
+        self.modified = False
         self.simulator = SensorSimulator()
         self.recording = False  # Ajouter l'attribut recording
         self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}  # Ajouter l'attribut recorded_data
+        
 
         self.init_ui()
         self.timer = QTimer(self)
@@ -40,10 +41,34 @@ class DashboardApp(QMainWindow):
         # Menu bar
         menubar = self.menuBar()
         menubar.setStyleSheet("background-color: white; color: black;")
-        file_menu = menubar.addMenu('File')
-        edit_menu = menubar.addMenu('Edit')
-        options_menu = menubar.addMenu('Options')
+        self.main_bar = self.some_method()
+        self.main_bar._create_menubar()
+        self.Clear_plots = self.main_bar._create_action(            
+            "&Clear plots",
+            lambda: self.main_bar.create_new_subject,
+            "Ctrl+N"
+            )
+        self.Refresh_the_connected_system = self.main_bar._create_action(            
+            "&Refresh the connected system",
+            lambda: self.main_bar.create_new_subject,
+            "Ctrl+N"
+            )
+        self.Request_h5_file_transfer = self.main_bar._create_action(            
+            "&Request .h5 file transfer",
+            lambda: self.main_bar.create_new_subject,
+            "Ctrl+N"
+            )
+        menubar_dashboard = self.menuBar()
 
+        edit_menu = menubar_dashboard.addMenu('&Edit')
+
+        edit_menu.addAction(self.Clear_plots)
+        edit_menu.addAction(self.Refresh_the_connected_system)
+        edit_menu.addAction(self.Request_h5_file_transfer)
+        self.Clear_plots.setEnabled(False)
+        self.Refresh_the_connected_system.setEnabled(False)
+        self.Request_h5_file_transfer.setEnabled(False)
+        self.main_bar._all_false_or_true(False)
         # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -166,7 +191,11 @@ class DashboardApp(QMainWindow):
 
         # Connecter le signal de changement de mode
         self.display_mode_group.buttonClicked.connect(self.on_display_mode_changed)
-
+    
+    def some_method(self):
+        from utils.Menu_bar import MainBar
+        return MainBar(self)
+    
     def connect_sensors(self):
         # Connecter les capteurs et les afficher en vert
         for i in range(self.connected_systems.topLevelItemCount()):
