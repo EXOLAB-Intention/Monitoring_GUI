@@ -48,9 +48,9 @@ class MainBar:
 
                 self.main_app.current_subject_file = filename
                 self.main_app.modified = False
-                self.save_subject_action.setEnabled(True)
-                self.save_subject_as_action.setEnabled(True)
-                self.show_metadata_action.setEnabled(True)
+                self.main_app.save_subject_action.setEnabled(True)
+                self.main_app.save_subject_as_action.setEnabled(True)
+                self.main_app.show_metadata_action.setEnabled(True)
 
                 self.main_app.statusBar().showMessage(f"New subject file created: {os.path.basename(filename)}")
 
@@ -59,9 +59,9 @@ class MainBar:
                 self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
 
                 def closeEvent(event):
-                    self.save_subject_action.setEnabled(False)
-                    self.save_subject_as_action.setEnabled(False)
-                    self.show_metadata_action.setEnabled(False)
+                    self.main_app.save_subject_action.setEnabled(False)
+                    self.main_app.save_subject_as_action.setEnabled(False)
+                    self.main_app.show_metadata_action.setEnabled(False)
                     event.accept()
 
                 self.main_app.info_window.closeEvent = closeEvent
@@ -106,9 +106,9 @@ class MainBar:
                         # Update the current file and UI
                         self.main_app.current_subject_file = filename
                         self.main_app.modified = False
-                        self.save_subject_action.setEnabled(True)
-                        self.save_subject_as_action.setEnabled(True)
-                        self.show_metadata_action.setEnabled(True)
+                        self.main_app.save_subject_action.setEnabled(True)
+                        self.main_app.save_subject_as_action.setEnabled(True)
+                        self.main_app.show_metadata_action.setEnabled(True)
 
                         # Update the status bar
                         self.main_app.statusBar().showMessage(f"Loaded subject file: {os.path.basename(filename)}")
@@ -120,9 +120,9 @@ class MainBar:
                         self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
 
                         def closeEvent(event):
-                            self.save_subject_action.setEnabled(False)
-                            self.save_subject_as_action.setEnabled(False)
-                            self.show_metadata_action.setEnabled(False)
+                            self.main_app.save_subject_action.setEnabled(False)
+                            self.main_app.save_subject_as_action.setEnabled(False)
+                            self.main_app.show_metadata_action.setEnabled(False)
                             event.accept()
 
                         self.main_app.info_window.closeEvent = closeEvent
@@ -339,13 +339,13 @@ class MainBar:
         file_menu = menubar.addMenu('&File')
 
         # File menu actions
-        self.create_subject_action = self._create_action(
+        create_subject_action = self._create_action(
             "&Create new subject",
             lambda: self.create_new_subject(),
             "Ctrl+N"
         )
 
-        self.load_subject_action = self._create_action(
+        load_subject_action = self._create_action(
             "&Load existing subject",
             lambda: self.load_existing_subject(),
             "Ctrl+O",
@@ -401,7 +401,7 @@ class MainBar:
             tip="Save current plotas image"
         )
 
-        self.exit_action = self._create_action(
+        exit_action = self._create_action(
             "E&xit",
             lambda: self.main_app.close,
             "Alt+F4",
@@ -409,8 +409,8 @@ class MainBar:
         )
 
         # Add actions to file menu
-        file_menu.addAction(self.create_subject_action)
-        file_menu.addAction(self.load_subject_action)
+        file_menu.addAction(create_subject_action)
+        file_menu.addAction(load_subject_action)
         file_menu.addSeparator()
         file_menu.addAction(self.save_subject_action)
         file_menu.addAction(self.save_subject_as_action)
@@ -422,7 +422,7 @@ class MainBar:
         file_menu.addSeparator()
         file_menu.addAction(self.show_metadata_action)
         file_menu.addSeparator()
-        file_menu.addAction(self.exit_action)
+        file_menu.addAction(exit_action)
 
         # Help menu
         help_menu = menubar.addMenu('&Help')
