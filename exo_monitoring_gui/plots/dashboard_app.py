@@ -10,13 +10,13 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QBrush, QCursor
 import pyqtgraph as pg
 
-# Ajouter l'import du model_3d_viewer et du dialogue de mapping
-from plots.model_3d_viewer import Model3DWidget
-from plots.sensor_dialogue import SensorMappingDialog
+
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+# Ajouter l'import du model_3d_viewer et du dialogue de mapping
+from plots.model_3d_viewer import Model3DWidget
+from plots.sensor_dialogue import SensorMappingDialog
 from data_generator.sensor_simulator import SensorSimulator
 
 class DashboardApp(QMainWindow):
@@ -132,6 +132,11 @@ class DashboardApp(QMainWindow):
         self.animate_button = QPushButton("Start Animation")
         self.animate_button.clicked.connect(self.toggle_animation)
         right_panel.addWidget(self.animate_button)
+
+        # Ajouter un bouton pour réinitialiser la vue du modèle 3D
+        self.reset_view_button = QPushButton("Reset View")
+        self.reset_view_button.clicked.connect(self.reset_model_view)
+        right_panel.addWidget(self.reset_view_button)
 
         # Ajouter le bouton "Configure Sensor Mapping" en bas à droite
         self.config_button = QPushButton("Configure Sensor Mapping")
@@ -523,6 +528,10 @@ class DashboardApp(QMainWindow):
         """Toggle stickman walking animation."""
         is_walking = self.model_3d_widget.toggle_animation()
         self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
+
+    def reset_model_view(self):
+        """Réinitialiser la vue du modèle 3D à la position de face"""
+        self.model_3d_widget.reset_view()
 
     def open_sensor_mapping_dialog(self):
         """Ouvrir le dialogue de configuration des capteurs"""

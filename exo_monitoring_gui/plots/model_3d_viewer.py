@@ -291,6 +291,13 @@ class Model3DViewer(QGLWidget):
             self.update()
         return self.walking
 
+    def reset_view(self):
+        """Réinitialiser la vue du modèle à la position de face par défaut"""
+        self.rotation_x = 0
+        self.rotation_y = 0
+        self.rotation_z = 0
+        self.update()
+
     def initializeGL(self):
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
@@ -568,6 +575,10 @@ class Model3DWidget(QWidget):
     def get_current_mappings(self):
         """Obtenir les associations actuelles IMU-parties du corps"""
         return self.model_viewer.get_current_mappings()
+        
+    def reset_view(self):
+        """Réinitialiser la vue du modèle 3D à la position de face"""
+        self.model_viewer.reset_view()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
