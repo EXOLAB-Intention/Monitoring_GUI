@@ -215,6 +215,7 @@ class InformationWindow(QDialog):
                 # Pass self.parent() which could be the main window or None
                 self.exp_dialog = ExperimenterDialog(self.parent())
                 self.exp_dialog.experimenter_name_submitted.connect(self._launch_dashboard_after_experimenter_input)
+                self.exp_dialog.closeEvent = self.parent().main_bar._save_and_saveas_closed()
                 
                 # exec_() will show the dialog and block until it's closed
                 if self.exp_dialog.exec_() == QDialog.Accepted:

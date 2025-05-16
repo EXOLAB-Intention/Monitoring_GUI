@@ -339,13 +339,13 @@ class MainBar:
         file_menu = menubar.addMenu('&File')
 
         # File menu actions
-        create_subject_action = self._create_action(
+        self.create_subject_action = self._create_action(
             "&Create new subject",
             lambda: self.create_new_subject(),
             "Ctrl+N"
         )
 
-        load_subject_action = self._create_action(
+        self.load_subject_action = self._create_action(
             "&Load existing subject",
             lambda: self.load_existing_subject(),
             "Ctrl+O",
@@ -401,7 +401,7 @@ class MainBar:
             tip="Save current plotas image"
         )
 
-        exit_action = self._create_action(
+        self.exit_action = self._create_action(
             "E&xit",
             lambda: self.main_app.close,
             "Alt+F4",
@@ -409,8 +409,8 @@ class MainBar:
         )
 
         # Add actions to file menu
-        file_menu.addAction(create_subject_action)
-        file_menu.addAction(load_subject_action)
+        file_menu.addAction(self.create_subject_action)
+        file_menu.addAction(self.load_subject_action)
         file_menu.addSeparator()
         file_menu.addAction(self.save_subject_action)
         file_menu.addAction(self.save_subject_as_action)
@@ -422,7 +422,7 @@ class MainBar:
         file_menu.addSeparator()
         file_menu.addAction(self.show_metadata_action)
         file_menu.addSeparator()
-        file_menu.addAction(exit_action)
+        file_menu.addAction(self.exit_action)
 
         # Help menu
         help_menu = menubar.addMenu('&Help')
@@ -458,3 +458,7 @@ class MainBar:
         self.Save_current_plotas_image.setEnabled(boold)
         self.show_metadata_action.setEnabled(boold)
         self.exit_action.setEnabled(boold)
+
+    def _save_and_saveas_closed(self):
+        self.save_subject_action.setEnabled(False)
+        self.save_subject_as_action.setEnabled(False)
