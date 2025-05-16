@@ -106,7 +106,7 @@ class InformationWindow(QDialog):
 
         self.cancel_button = QPushButton("Cancel", self)
         self.cancel_button.setGeometry(780, 600, 200, 50)
-        self.cancel_button.clicked.connect(self.reject)
+        self.cancel_button.clicked.connect(self.close)
         self._set_button_style(self.cancel_button, "#f44336", "#d32f2f", "#b71c1c", "#aaaaaa")
 
     def _set_button_style(self, button, color, hover, pressed, disabled):
@@ -131,7 +131,9 @@ class InformationWindow(QDialog):
 
     def _load_existing_data(self):
         try:
-
+            # data_from_file contiendra les clés au format "participant_nom", "participant_age", etc.
+            # et "participant_image_path" si une image est définie.
+            # image_file_path sera la valeur de "participant_image_path" ou None.
             data_from_file, image_file_path = load_metadata(self.subject_file)
             
             if not data_from_file:

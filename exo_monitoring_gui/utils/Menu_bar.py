@@ -11,14 +11,6 @@ class MainBar:
     def __init__(self, main_app):
         self.main_app = main_app
 
-    def _all_false_or_true(self, boolen):
-        self.Save_current_trial.setEnabled(boolen)
-        self.Save_current_trial_as.setEnabled(boolen)
-        self.Save_current_plotas_image.setEnabled(boolen)
-        self.save_subject_action.setEnabled(boolen)
-        self.save_subject_as_action.setEnabled(boolen)
-        self.show_metadata_action.setEnabled(boolen)
-
     def create_new_subject(self):
         """Creates a new subject file and opens information window"""
         if self.main_app.modified:
@@ -63,7 +55,7 @@ class MainBar:
                 self.main_app.statusBar().showMessage(f"New subject file created: {os.path.basename(filename)}")
 
                 # Display information window to collect metadata
-                self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file)                
+                self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file)
                 self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
 
                 def closeEvent(event):
@@ -165,6 +157,7 @@ class MainBar:
         if not self.main_app.current_subject_file:
             return self.save_subject_as()
         else:
+            print("Saving subject without saving data")
             self.main_app.info_window._collect_data_notsave()
         try:
             self.main_app.modified = False
@@ -207,7 +200,7 @@ class MainBar:
         if filename:
             if not filename.endswith(".h5") and not filename.endswith(".hdf5"):
                 filename += ".h5"
-
+            print("Saving subject without saving data")
             self.main_app.current_subject_file = filename
             return self.save_subject_notsave()
         return False
@@ -453,15 +446,15 @@ class MainBar:
         self.save_subject_as_action.setEnabled(False)
         self.show_metadata_action.setEnabled(False)
 
-    def _all_false_or_true(self, boolen):
-        self.create_subject_action.setEnabled(boolen)
-        self.load_subject_action.setEnabled(boolen)
-        self.load_existing_trial.setEnabled(boolen)
-        self.save_subject_action.setEnabled(boolen)
-        self.Save_current_trial.setEnabled(boolen)
-        self.Save_current_trial_as.setEnabled(boolen)
-        self.Save_current_plotas_image.setEnabled(boolen)
-        self.save_subject_action.setEnabled(boolen)
-        self.save_subject_as_action.setEnabled(boolen)
-        self.show_metadata_action.setEnabled(boolen)
-        self.exit_action.setEnabled(boolen)
+
+    def _all_false_or_true(self, boold):
+        self.create_subject_action.setEnabled(boold)
+        self.load_subject_action.setEnabled(boold)
+        self.save_subject_action.setEnabled(boold)
+        self.save_subject_as_action.setEnabled(boold)
+        self.load_existing_trial.setEnabled(boold)
+        self.Save_current_trial.setEnabled(boold)
+        self.Save_current_trial_as.setEnabled(boold)
+        self.Save_current_plotas_image.setEnabled(boold)
+        self.show_metadata_action.setEnabled(boold)
+        self.exit_action.setEnabled(boold)

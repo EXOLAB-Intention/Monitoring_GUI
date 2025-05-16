@@ -18,7 +18,6 @@ def load_metadata(subject_file):
         with h5py.File(subject_file, 'r') as f:
             root_attrs = dict(f.attrs)
             for key, value in root_attrs.items():
-                print(key)
                 if key.startswith("participant_"):
                     # Stocker directement la clé telle quelle, par exemple "participant_name"
                     data[key] = value 
@@ -41,12 +40,18 @@ def load_metadata(subject_file):
     
     return data, image_path
 
+
 def save_metadata(subject_file, data: dict):
+    """Save metadata to an HDF5 file.
+    Detects if the file uses the new structure (participant_ attributes at root)
+    or old structure (/metadata group) and saves accordingly.
+    """
     try:
         with h5py.File(subject_file, 'a') as f:
-            # Écrire toujours à la racine
+            # Set subject_created attribute if it doesn't exist
             if "subject_created" not in f.attrs:
                 f.attrs['subject_created'] = True
+
             image_path_value = None
             if "image_path" in data:
                 image_path_value = data.pop("image_path") # Retire pour éviter double écriture par la boucle
@@ -58,9 +63,9 @@ def save_metadata(subject_file, data: dict):
                     attr_key = key
                 else:
                     attr_key = f"participant_{key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
-                
+
                 f.attrs[attr_key] = value
-                
+
                 # Si la clé normalisée correspond à participant_image_path, on stocke sa valeur
                 # pour s'assurer qu'elle soit écrite sous "image_path" si ce n'est pas déjà fait.
                 if attr_key == "participant_image_path" and image_path_value is None:
@@ -69,13 +74,14 @@ def save_metadata(subject_file, data: dict):
             # Sauvegarder image_path à la racine sous la clé "image_path" s'il existe
             if image_path_value is not None:
                 f.attrs["image_path"] = image_path_value
-            
+
             f.attrs['last_modified'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         return True
     except Exception as e:
         print(f"Error saving metadata to {subject_file}: {e}")
         return False
+
 
 def save_to_default(data: dict, custom_filename: str = None):
     """Save metadata to a default HDF5 file if no file is specified,

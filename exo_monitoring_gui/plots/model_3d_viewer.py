@@ -96,7 +96,7 @@ class Model3DViewer(QGLWidget):
         self.precalc_frame = 0
         
         # Optimisations pour OpenGL
-        self.display_list = None
+        self.display_list = 0  # Initialize display_list to 0 (invalid)
         self.quadric = None
         
         # Remplacer AnimationThread par QTimer
@@ -153,21 +153,21 @@ class Model3DViewer(QGLWidget):
                 'hip_x': torso_sway * 0.5,
                 'hip_y': vertical_bounce,
                 
-                # Bras gauche
-                'deltoid_l_z': arm_swing * 0.7,
-                'biceps_l_z': arm_swing * 0.9,
-                'forearm_l_z': arm_swing,
-                'left_hand_z': arm_swing * 1.2,
-                'dorsalis_major_l_z': arm_swing * 0.5,
-                'pectorals_l_z': arm_swing * 0.4,
+                # Bras gauche - Synchronisé avec jambe droite
+                'deltoid_l_z': -arm_swing * 0.7,
+                'biceps_l_z': -arm_swing * 0.9,
+                'forearm_l_z': -arm_swing,
+                'left_hand_z': -arm_swing * 1.2,
+                'dorsalis_major_l_z': -arm_swing * 0.5,
+                'pectorals_l_z': -arm_swing * 0.4,
                 
-                # Bras droit
-                'deltoid_r_z': -arm_swing * 0.7, 
-                'biceps_r_z': -arm_swing * 0.9,
-                'forearm_r_z': -arm_swing,
-                'right_hand_z': -arm_swing * 1.2,
-                'dorsalis_major_r_z': -arm_swing * 0.5,
-                'pectorals_r_z': -arm_swing * 0.4,
+                # Bras droit - Synchronisé avec jambe gauche
+                'deltoid_r_z': arm_swing * 0.7, 
+                'biceps_r_z': arm_swing * 0.9,
+                'forearm_r_z': arm_swing,
+                'right_hand_z': arm_swing * 1.2,
+                'dorsalis_major_r_z': arm_swing * 0.5,
+                'pectorals_r_z': arm_swing * 0.4,
                 
                 # Jambe gauche - Phase indépendante
                 'glutes_l_z': leg_swing_left * 0.5,
@@ -912,6 +912,14 @@ class Model3DWidget(QWidget):
     def get_current_mappings(self):
         """Obtenir les associations actuelles IMU-parties du corps"""
         return self.model_viewer.get_current_mappings()
+        
+    def get_emg_mappings(self):
+        """Obtenir les associations actuelles EMG-parties du corps"""
+        return getattr(self.model_viewer, 'emg_mapping', {}).copy()
+    
+    def get_pmmg_mappings(self):
+        """Obtenir les associations actuelles pMMG-parties du corps"""
+        return getattr(self.model_viewer, 'pmmg_mapping', {}).copy()
         
     def reset_view(self):
         """Réinitialiser la vue du modèle 3D à la position de face"""
