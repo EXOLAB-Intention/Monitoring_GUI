@@ -1,9 +1,5 @@
 '''
-Regler les probleme des matched part qui contient pas de backend (revoir le code et le programme) (les imu sont deja assigné par defaut, et ya plein de bouton a faire fonctionner)
-Regler le probleme de quand on a appuyé sur record stop on ne peut plus appuyer sur recors start ensuite (pk pas une fenetre dialogue pour dire que l'on ne peut plus appuyer sur record start)
-regler le probleme de quand on a stop le record et que on veux afficher un nouveau capteur pour voir son graphique sa laffiche sans données (soit on envoie un message derreur pour dire quil peut pas afficher ou soit on afiche les donnees)
-
-
+Regler le probleme des capteur IMU qui ne saffiche pas dans le 2D Plot apres avoir appuyé sur record stop et en etant dans le mode plot par groupe de capteur
 '''
 
 
@@ -520,10 +516,10 @@ class DashboardApp(QMainWindow):
                         sensor_num = int(''.join(filter(str.isdigit, sensor_name)))
                         if sensor_name.startswith("EMG"):
                             index = sensor_num - 1
-                            plot_widget.plot(self.recorded_data["EMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
+                            plot_widget.plot(self.recorded_data["EMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][sensor_num - 1], width=2), name=sensor_name)
                         elif sensor_name.startswith("pMMG"):
                             index = sensor_num - 1
-                            plot_widget.plot(self.recorded_data["pMMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
+                            plot_widget.plot(self.recorded_data["pMMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][sensor_num - 1], width=2), name=sensor_name)
                     plot_widget.addLegend()
                     self.highlight_sensor(sensor_name.split()[0])
                 return
@@ -594,13 +590,36 @@ class DashboardApp(QMainWindow):
             # Retirer la surbrillance du capteur
             self.unhighlight_sensor(sensor_name)
         else:
-            sensor_group = sensor_name.split()[0][:-1]
-            if sensor_group in self.group_plots:
-                if sensor_name in self.group_plot_data[sensor_group]:
-                    self.group_plot_data[sensor_group].pop(sensor_name, None)
-
-            # Retirer la surbrillance du capteur
+            # Correction : utiliser le nom complet (avec matched part) pour la suppression dans les groupes
+            self.remove_sensor_curve_from_group(sensor_name)
             self.unhighlight_sensor(sensor_name)
+
+    def remove_sensor_curve_from_group(self, sensor_name):
+        # Correction : supprimer toutes les courbes associées à ce capteur (avec ou sans matched part)
+        # sensor_name peut être "EMG1" ou "EMG1 (Biceps)"
+        # On doit supprimer toutes les clés qui commencent par le nom de base (ex: "EMG1")
+        sensor_group = sensor_name.split()[0][:-1]
+        if sensor_group in self.group_plots:
+            plot_widget = self.group_plots[sensor_group]
+            # Supprimer toutes les courbes dont le nom commence par sensor_name.split()[0]
+            base_sensor = sensor_name.split()[0]
+            # Supprimer les courbes du plot
+            items_to_remove = []
+            for item in plot_widget.listDataItems():
+                # item.name() peut être None si pas de nom, donc on vérifie
+                if hasattr(item, 'name') and item.name():
+                    # On retire si le nom commence par le nom de base du capteur (ex: "EMG1")
+                    if item.name().startswith(base_sensor):
+                        items_to_remove.append(item)
+            for item in items_to_remove:
+                plot_widget.removeItem(item)
+            # Supprimer les références dans group_plot_data
+            keys_to_remove = []
+            for k in self.group_plot_data[sensor_group]:
+                if k.split()[0] == base_sensor:
+                    keys_to_remove.append(k)
+            for k in keys_to_remove:
+                del self.group_plot_data[sensor_group][k]
 
     def highlight_sensor(self, sensor_name):
         # Mettre en surbrillance le capteur sélectionné
@@ -686,7 +705,7 @@ class DashboardApp(QMainWindow):
                             self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
                             self.group_plot_data[sensor_group][sensor_name][-1] = packet["pMMG"][index]
 
-                        plot_widget.plot(self.group_plot_data[sensor_group][sensor_name], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
+                        plot_widget.plot(self.group_plot_data[sensor_group][sensor_name], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][sensor_num - 1], width=2), name=sensor_name)
 
                 plot_widget.addLegend()
 
@@ -809,10 +828,10 @@ class DashboardApp(QMainWindow):
                     sensor_num = int(''.join(filter(str.isdigit, sensor_name)))
                     if sensor_name.startswith("EMG"):
                         index = sensor_num - 1
-                        plot_widget.plot(self.recorded_data["EMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
+                        plot_widget.plot(self.recorded_data["EMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][sensor_num - 1], width=2), name=sensor_name)
                     elif sensor_name.startswith("pMMG"):
                         index = sensor_num - 1
-                        plot_widget.plot(self.recorded_data["pMMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'k', 'w'][sensor_num - 1], width=2), name=sensor_name)
+                        plot_widget.plot(self.recorded_data["pMMG"][index], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][sensor_num - 1], width=2), name=sensor_name)
 
             plot_widget.addLegend()
 
