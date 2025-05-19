@@ -218,11 +218,6 @@ class DashboardApp(QMainWindow):
         self.reset_view_button.clicked.connect(self.reset_model_view)
         right_panel.addWidget(self.reset_view_button)
 
-        # Ajouter le bouton "Load 3D Model"
-        self.load_model_button = QPushButton("Load 3D Model")
-        self.load_model_button.clicked.connect(self.load_external_model)
-        right_panel.addWidget(self.load_model_button)
-
         # Ajouter le bouton "Configure Sensor Mapping" en bas à droite
         self.config_button = QPushButton("Configure Sensor Mapping")
         self.config_button.setStyleSheet("font-size: 14px; padding: 8px 20px;")
@@ -388,7 +383,6 @@ class DashboardApp(QMainWindow):
         # Appliquer les styles aux boutons
         self.animate_button.setStyleSheet(animate_button_style)
         self.reset_view_button.setStyleSheet(reset_view_button_style)
-        self.load_model_button.setStyleSheet(button_style)
         self.config_button.setStyleSheet(config_button_style)
         self.connect_button.setStyleSheet(button_style)
         self.record_button.setStyleSheet(record_button_style)
@@ -1016,34 +1010,8 @@ class DashboardApp(QMainWindow):
             'head': 'Head',
             'neck': 'Neck',
             'torso': 'Torso',
-            'left_shoulder': 'Left Shoulder',
-            'right_shoulder': 'Right Shoulder',
-            'left_elbow': 'Left Elbow',
-            'right_elbow': 'Right Elbow',
-            'left_hand': 'Left Hand',
-            'right_hand': 'Right Hand',
-            'hip': 'Hip',
-            'left_knee': 'Left Knee',
-            'right_knee': 'Right Knee',
-            'left_foot': 'Left Foot',
-            'right_foot': 'Right Foot'
         }
         return mapping.get(model_part, model_part)
-
-    def load_external_model(self):
-        """Charger un modèle 3D externe"""
-        from PyQt5.QtWidgets import QFileDialog
-        
-        # Ouvrir un dialogue de sélection de fichier
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Load 3D Model", "", 
-            "3D Model Files (*.obj *.stl *.3ds);;All Files (*)"
-        )
-        
-        if file_path:
-            success = self.model_3d_widget.load_external_model(file_path)
-            if not success:
-                QMessageBox.warning(self, "Error", f"Failed to load model from {file_path}")
 
     def save_mappings(self):
         """Save sensor mappings to a JSON file"""
