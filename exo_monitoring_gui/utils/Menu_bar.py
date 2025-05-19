@@ -460,17 +460,32 @@ class MainBar:
         self.show_metadata_action.setEnabled(False)
 
     def _all_false_or_true(self, boold):
-        self.create_subject_action.setEnabled(boold)
-        self.load_subject_action.setEnabled(boold)
-        self.save_subject_action.setEnabled(boold)
-        self.save_subject_as_action.setEnabled(boold)
-        self.load_existing_trial.setEnabled(boold)
-        self.Save_current_trial.setEnabled(boold)
-        self.Save_current_trial_as.setEnabled(boold)
-        self.Save_current_plotas_image.setEnabled(boold)
-        self.show_metadata_action.setEnabled(boold)
-        self.exit_action.setEnabled(boold)
+        for attr_name in [
+            "create_subject_action",
+            "load_subject_action",
+            "save_subject_action",
+            "save_subject_as_action",
+            "load_existing_trial",
+            "Save_current_trial",
+            "Save_current_trial_as",
+            "Save_current_plotas_image",
+            "show_metadata_action",
+            "exit_action"
+        ]:
+            action = getattr(self, attr_name, None)
+            if action is not None:
+                action.setEnabled(boold)
+
 
     def _save_and_saveas_closed(self):
         self.save_subject_action.setEnabled(False)
         self.save_subject_as_action.setEnabled(False)
+
+    def clear_plot(self):
+        print("clear plot")
+
+    def refresh_the_connected_systeme(self):
+        print("refresh_the_connected_systeme")
+    
+    def request_h5_file(self):
+        print("request_h5_file")

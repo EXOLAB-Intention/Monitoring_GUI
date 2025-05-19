@@ -95,6 +95,8 @@ class DashboardApp(QMainWindow):
         self.setMinimumSize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
 
+       
+
         self.simulator = SensorSimulator()
         self.recording = False  # Ajouter l'attribut recording
         self.recording_stopped = False  # Ajoute ceci juste après
@@ -111,7 +113,43 @@ class DashboardApp(QMainWindow):
         self.load_mappings()  # Charger les mappages sauvegardés au démarrage
         self.main_bar_re = self.some_method()
         self.main_bar_re._create_menubar()
-    
+        self.main_bar_re._all_false_or_true(False)
+        
+        creation = self.some_method()
+
+        self.clear_plot = creation._create_action(
+            "&Clear plot",
+            lambda: creation.clear_plot(),
+            "Ctrl+N",
+            tip="Clear the current plot"
+        )
+
+        self.refresh_the_connected_systeme = creation._create_action(
+            "Refresh the connected system",
+            lambda: creation.refresh_the_connected_systeme(),
+            "Ctrl+O",
+            tip="Refresh the connected system"
+            )
+
+        self.request_h5_file = creation._create_action(
+            "&Request .h5 file transfer",
+            lambda: creation.request_h5_file(),
+            "Ctrl+S",
+            tip="Request in a .h5 file transfer"
+        )
+
+        menubar = self.menuBar()
+        
+        Edit = menubar.addMenu('&Edit')
+
+        Edit.addAction(self.clear_plot)
+        Edit.addAction(self.refresh_the_connected_systeme)
+        Edit.addAction(self.request_h5_file)
+
+        self.clear_plot.setEnabled(False)
+        self.refresh_the_connected_systeme.setEnabled(False)
+        self.request_h5_file.setEnabled(False)
+        
     def some_method(self):
         from utils.Menu_bar import MainBar
         return MainBar(self)
@@ -782,6 +820,9 @@ class DashboardApp(QMainWindow):
         """)
         self.record_button.setEnabled(False)  # Désactiver le bouton
         self.show_recorded_data()
+        self.clear_plot.setEnabled(True)
+        self.refresh_the_connected_systeme.setEnabled(True)
+        self.request_h5_file.setEnabled(True)
 
     def show_recorded_data(self):
         # Afficher les données enregistrées sur les graphiques existants
