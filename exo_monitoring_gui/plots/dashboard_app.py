@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QMenuBar, QComboBox, QMessageBox, QRadioButton, QButtonGroup, QGroupBox, QTableWidget, QTableWidgetItem, QMenu, QAction
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QBrush, QCursor
 from PyQt5.QtWidgets import QScrollArea
 import pyqtgraph as pg
@@ -25,7 +25,153 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Ajouter l'import du model_3d_viewer et du dialogue de mapping
 from plots.model_3d_viewer import Model3DWidget
 from plots.sensor_dialogue import SensorMappingDialog
-from data_generator.sensor_simulator import SensorSimulator
+# Supprimer l'importation du simulateur et ajouter les imports nécessaires pour Ethernet
+# from data_generator.sensor_simulator import SensorSimulator
+import socket
+import struct
+import threading
+from utils.ethernet_receiver import recv_all, decode_packet, decode_config
+
+# Classe pour exécuter le serveur Ethernet dans un thread séparé
+class EthernetServerThread(QThread):
+    connection_ready = pyqtSignal(tuple)  # Émet (client_socket, addr) quand un client se connecte
+    server_error = pyqtSignal(str)        # Émet un message d'erreur
+    server_started = pyqtSignal()         # Émet un signal quand le serveur démarre
+
+    def __init__(self, listen_ip='0.0.0.0', listen_port=5001):
+        super().__init__()
+        self.listen_ip = listen_ip
+        self.listen_port = listen_port
+        self.server_socket = None
+        self.running = False
+
+    def run(self):
+        try:
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.server_socket.bind((self.listen_ip, self.listen_port))
+            self.server_socket.listen(1)
+            self.running = True
+            
+            print(f"[INFO] Server started on {self.listen_ip}:{self.listen_port}")
+            self.server_started.emit()
+            
+            while self.running:
+                try:
+                    # Attendre un client avec un timeout pour pouvoir vérifier self.running périodiquement
+                    self.server_socket.settimeout(1.0)
+                    try:
+                        client_socket, addr = self.server_socket.accept()
+                        print(f"[INFO] Client connected from {addr}")
+                        # Émettre le signal avec les informations du client
+                        self.connection_ready.emit((client_socket, addr))
+                        # Une fois qu'un client est connecté, on peut attendre la fin du thread
+                        # car le dashboard ne gère qu'un client à la fois
+                        break
+                    except socket.timeout:
+                        # Le timeout a expiré, vérifier si on doit toujours attendre
+                        continue
+                except Exception as e:
+                    if self.running:  # Seulement émettre si ce n'est pas une fermeture volontaire
+                        self.server_error.emit(f"Error accepting client: {str(e)}")
+                    break
+                
+        except Exception as e:
+            self.server_error.emit(f"Server error: {str(e)}")
+        finally:
+            self.cleanup()
+
+    def stop(self):
+        self.running = False
+        self.cleanup()
+        self.wait()  # Attendre que le thread se termine
+
+    def cleanup(self):
+        if self.server_socket:
+            try:
+                self.server_socket.close()
+            except:
+                pass
+            self.server_socket = None
+
+# Classe pour traiter l'initialisation du client dans un thread séparé
+class ClientInitThread(QThread):
+    init_success = pyqtSignal(dict, int)  # Émet config et packet_size en cas de succès
+    init_error = pyqtSignal(str)          # Émet un message d'erreur
+
+    def __init__(self, client_socket):
+        super().__init__()
+        self.client_socket = client_socket
+        
+    def run(self):
+        try:
+            # --- 1) Lire l'en-tête des longueurs (4 octets) ---
+            hdr = recv_all(self.client_socket, 4)
+            len_pmmg, len_fsr, len_imu, len_emg = struct.unpack('>4B', hdr)
+            total_ids = len_pmmg + len_fsr + len_imu + len_emg
+
+            # --- 2) Lire exactement les octets des ID ---
+            id_bytes = recv_all(self.client_socket, total_ids)
+
+            # --- 3) Lire le CRC de 4 octets ---
+            crc_bytes = recv_all(self.client_socket, 4)
+            recv_crc = struct.unpack('>I', crc_bytes)[0]
+            
+            # --- 4) Décoder chaque liste d'ID ---
+            offset = 0
+            pmmg_ids = list(id_bytes[offset:offset+len_pmmg]); offset += len_pmmg
+            fsr_ids = list(id_bytes[offset:offset+len_fsr]); offset += len_fsr
+            raw_imu_ids = list(id_bytes[offset:offset+len_imu]); offset += len_imu
+            emg_ids = list(id_bytes[offset:offset+len_emg])
+
+            # Traitement des IDs IMU - un IMU a 4 valeurs (w,x,y,z)
+            num_imus = len(raw_imu_ids) // 4
+            if num_imus > 0:
+                imu_ids = []
+                for i in range(num_imus):
+                    # Extraire l'ID de l'IMU à partir du premier octet de chaque groupe de 4
+                    imu_id = raw_imu_ids[i*4]
+                    imu_ids.append(imu_id)
+                    print(f"[INFO] IMU {i+1} détecté avec ID {imu_id} (composantes w,x,y,z)")
+            else:
+                imu_ids = []
+                print("[INFO] Aucun IMU détecté")
+
+            sensor_config = {
+                'pmmg_ids': pmmg_ids,
+                'fsr_ids': fsr_ids,
+                'imu_ids': imu_ids,
+                'raw_imu_ids': raw_imu_ids,
+                'emg_ids': emg_ids,
+                'len_pmmg': len_pmmg,
+                'len_fsr': len_fsr,
+                'len_imu': len_imu,
+                'len_emg': len_emg,
+                'num_imus': num_imus
+            }
+
+            # --- 5) Calculer la taille du paquet de données ---
+            packet_size = (
+                4 +                            # timestamp
+                len(pmmg_ids)*2 +              # pmmg
+                len(fsr_ids)*2 +               # fsr
+                len(imu_ids)*4*2 +             # imu (4 valeurs × int16)
+                len(emg_ids)*2 +               # emg
+                5 +                            # buttons
+                4 +                            # joystick
+                4                              # CRC
+            )
+            
+            # Émettre le signal de succès avec la configuration et la taille du paquet
+            self.init_success.emit(sensor_config, packet_size)
+            
+        except Exception as e:
+            self.init_error.emit(f"Failed to initialize client: {str(e)}")
+            try:
+                if self.client_socket:
+                    self.client_socket.close()
+            except:
+                pass
 
 class DashboardApp(QMainWindow):
     def __init__(self):
@@ -95,10 +241,24 @@ class DashboardApp(QMainWindow):
         self.setMinimumSize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
 
-        self.simulator = SensorSimulator()
+        # Supprimer l'initialisation du simulateur et ajouter les variables Ethernet
+        # self.simulator = SensorSimulator()
+        # Variables pour le serveur et le client Ethernet
+        self.server_thread = None
+        self.client_socket = None
+        self.sensor_config = None
+        self.packet_size = 0
+        self.is_server_running = False
+
         self.recording = False  # Ajouter l'attribut recording
         self.recording_stopped = False  # Ajoute ceci juste après
-        self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}  # Ajouter l'attribut recorded_data
+        
+        # Initialisation prudente des structures de données pour l'enregistrement
+        self.recorded_data = {
+            "EMG": [[] for _ in range(8)],   # 8 EMGs max
+            "IMU": [[] for _ in range(1)],   # Initialisé avec 1 IMU, sera mis à jour lors de la connexion
+            "pMMG": [[] for _ in range(8)]   # 8 pMMGs max
+        }
 
         # Initialiser les mappages de capteurs
         self.emg_mappings = {}
@@ -403,26 +563,212 @@ class DashboardApp(QMainWindow):
         self.display_mode_group.buttonClicked.connect(self.on_display_mode_changed)
 
     def connect_sensors(self):
-        # Connecter les capteurs et les afficher en vert
+        """Démarrer le serveur Ethernet si ce n'est pas déjà fait et mettre à jour l'affichage des capteurs."""
+        if not self.is_server_running:
+            # Démarrer le serveur Ethernet dans un thread séparé
+            try:
+                self.server_thread = EthernetServerThread()
+                self.server_thread.connection_ready.connect(self.on_client_connected)
+                self.server_thread.server_error.connect(self.on_server_error)
+                self.server_thread.server_started.connect(self.on_server_started)
+                self.server_thread.start()
+                
+                # Mettre à jour l'interface pour montrer que le serveur démarre
+                self.connect_button.setText("Starting...")
+                self.connect_button.setEnabled(False)  # Désactiver pendant le démarrage
+            except Exception as e:
+                QMessageBox.critical(self, "Server Error", f"Could not start Ethernet server: {str(e)}")
+        else:
+            # Si le serveur est déjà en cours d'exécution, tenter de l'arrêter
+            self.stop_ethernet_server()
+            self.connect_button.setText("Connect")
+            # Remettre les capteurs en gris (déconnecté)
+            for i in range(self.connected_systems.topLevelItemCount()):
+                group_item = self.connected_systems.topLevelItem(i)
+                for j in range(group_item.childCount()):
+                    sensor_item = group_item.child(j)
+                    sensor_item.setForeground(0, QBrush(QColor("gray")))
+    
+    def on_server_started(self):
+        """Appelé quand le serveur Ethernet a démarré avec succès."""
+        self.is_server_running = True
+        self.connect_button.setText("Waiting for device...")
+        QMessageBox.information(self, "Server Started", 
+                               "Ethernet server started successfully. Waiting for device connection...")
+
+    def on_client_connected(self, client_info):
+        """Appelé quand un client se connecte au serveur Ethernet."""
+        client_socket, addr = client_info
+        self.client_socket = client_socket
+        
+        # Initialiser le client dans un thread séparé pour éviter de bloquer l'UI
+        self.client_init_thread = ClientInitThread(client_socket)
+        self.client_init_thread.init_success.connect(self.on_client_init_success)
+        self.client_init_thread.init_error.connect(self.on_client_init_error)
+        self.client_init_thread.start()
+        
+        # Mettre à jour l'interface pour montrer qu'on initialise la connexion
+        self.connect_button.setText("Initializing...")
+
+    def on_client_init_success(self, sensor_config, packet_size):
+        """Appelé quand l'initialisation du client a réussi."""
+        self.sensor_config = sensor_config
+        self.packet_size = packet_size
+        
+        # Mettre à jour l'interface pour montrer les capteurs connectés
+        self.update_sensor_tree_from_config()
+        
+        # Réinitialiser les structures de données pour correspondre aux capteurs connectés
+        num_imus = self.sensor_config.get('num_imus', 0)
+        self.recorded_data["IMU"] = [[] for _ in range(max(1, num_imus))]  # Au moins 1 pour éviter les erreurs
+        
+        # Mettre à jour l'état du bouton
+        self.connect_button.setText("Disconnect")
+        self.connect_button.setEnabled(True)
+        
+        # Activer le bouton d'enregistrement
+        self.record_button.setEnabled(True)
+        
+        # Afficher un message de succès
+        len_emg = len(self.sensor_config.get('emg_ids', []))
+        num_imus = self.sensor_config.get('num_imus', 0)
+        len_pmmg = len(self.sensor_config.get('pmmg_ids', []))
+        
+        QMessageBox.information(self, "Connection Success", 
+                               f"Connecté au dispositif ! Détecté {len_emg} EMG, {num_imus} IMU, {len_pmmg} pMMG.")
+
+    def on_client_init_error(self, error_msg):
+        """Appelé en cas d'erreur lors de l'initialisation du client."""
+        print(f"[ERROR] {error_msg}")
+        if self.client_socket:
+            try:
+                self.client_socket.close()
+            except:
+                pass
+            self.client_socket = None
+        
+        self.connect_button.setText("Connect")
+        self.connect_button.setEnabled(True)
+        QMessageBox.critical(self, "Connection Error", error_msg)
+
+    def on_server_error(self, error_msg):
+        """Appelé en cas d'erreur du serveur Ethernet."""
+        print(f"[ERROR] {error_msg}")
+        self.connect_button.setText("Connect")
+        self.connect_button.setEnabled(True)
+        self.is_server_running = False
+        QMessageBox.critical(self, "Server Error", error_msg)
+
+    def stop_ethernet_server(self):
+        """Arrête le serveur Ethernet et nettoie les ressources."""
+        if self.server_thread and self.server_thread.isRunning():
+            self.server_thread.stop()
+            self.server_thread = None
+        
+        if self.client_socket:
+            try:
+                self.client_socket.close()
+            except:
+                pass
+            self.client_socket = None
+        
+        self.is_server_running = False
+        self.sensor_config = None
+        self.packet_size = 0
+        print("[INFO] Ethernet server stopped.")
+
+    def update_sensor_tree_from_config(self):
+        """Met à jour l'arbre des capteurs (self.connected_systems) 
+        basé sur la configuration reçue (self.sensor_config)."""
+        if not self.sensor_config:
+            return
+
+        # D'abord, on cache tous les capteurs pour ne réafficher que ceux configurés
         for i in range(self.connected_systems.topLevelItemCount()):
             group_item = self.connected_systems.topLevelItem(i)
             for j in range(group_item.childCount()):
-                sensor_item = group_item.child(j)
-                sensor_item.setHidden(False)
-                sensor_item.setForeground(0, QBrush(QColor("green")))  # Vert pour connecté
+                group_item.child(j).setHidden(True)
 
-    def show_sensors(self):
-        # Afficher les capteurs et les connecter
-        for i in range(self.connected_systems.topLevelItemCount()):
-            group_item = self.connected_systems.topLevelItem(i)
-            for j in range(group_item.childCount()):
-                sensor_item = group_item.child(j)
-                sensor_item.setHidden(False)
-                sensor_item.setForeground(0, QBrush(QColor("green")))  # Vert pour connecté
+        # Mettre à jour EMG
+        emg_group_item = self.find_sensor_group_item("EMG Data")
+        if emg_group_item:
+            # Cacher d'abord tous les EMGs
+            for i in range(emg_group_item.childCount()):
+                emg_group_item.child(i).setHidden(True)
+                
+            # Actualiser uniquement les éléments EMG réellement connectés
+            num_emg_configured = len(self.sensor_config.get('emg_ids', []))
+            if num_emg_configured == 0:
+                print("[INFO] Aucun capteur EMG détecté")
+            else:
+                for i in range(min(num_emg_configured, emg_group_item.childCount())):
+                    sensor_id_from_config = self.sensor_config['emg_ids'][i]
+                    sensor_item = emg_group_item.child(i)
+                    sensor_item.setText(0, f"EMG{sensor_id_from_config}")
+                    sensor_item.setForeground(0, QBrush(QColor("green")))
+                    sensor_item.setHidden(False)
+                    print(f"[INFO] EMG {i+1} affiché: EMG{sensor_id_from_config}")
 
-        # Créer les graphiques de groupe si le mode est "Graphiques par groupe de capteurs" et qu'ils n'existent pas déjà
+        # Mettre à jour IMU
+        imu_group_item = self.find_sensor_group_item("IMU Data")
+        if imu_group_item:
+            num_imu_configured = len(self.sensor_config.get('imu_ids', []))
+            # Cacher d'abord tous les IMUs
+            for i in range(imu_group_item.childCount()):
+                imu_group_item.child(i).setHidden(True)
+                
+            # Afficher uniquement les IMUs détectés
+            for i in range(min(num_imu_configured, imu_group_item.childCount())):
+                sensor_id_from_config = self.sensor_config['imu_ids'][i]
+                sensor_item = imu_group_item.child(i)
+                sensor_item.setText(0, f"IMU{sensor_id_from_config}")
+                sensor_item.setForeground(0, QBrush(QColor("green")))
+                sensor_item.setHidden(False)
+                print(f"[INFO] IMU {i+1} affiché: IMU{sensor_id_from_config}")
+
+        # Mettre à jour pMMG
+        pmmg_group_item = self.find_sensor_group_item("pMMG Data")
+        if pmmg_group_item and self.sensor_config.get('pmmg_ids'):
+            # Cacher d'abord tous les pMMGs
+            for i in range(pmmg_group_item.childCount()):
+                pmmg_group_item.child(i).setHidden(True)
+                
+            # Actualiser uniquement les éléments pMMG réellement connectés
+            num_pmmg_configured = len(self.sensor_config.get('pmmg_ids', []))
+            if num_pmmg_configured == 0:
+                print("[INFO] Aucun capteur pMMG détecté")
+            else:
+                for i in range(min(num_pmmg_configured, pmmg_group_item.childCount())):
+                    sensor_id_from_config = self.sensor_config['pmmg_ids'][i]
+                    sensor_item = pmmg_group_item.child(i)
+                    sensor_item.setText(0, f"pMMG{sensor_id_from_config}")
+                    sensor_item.setForeground(0, QBrush(QColor("green")))
+                    sensor_item.setHidden(False)
+                    print(f"[INFO] pMMG {i+1} affiché: pMMG{sensor_id_from_config}")
+
+        # Pour appliquer les mappages (nom des parties du corps)
+        self.refresh_sensor_tree()
+  
+        # Créer les graphiques de groupe si mode "Graphiques par groupe" et pas déjà existants
         if self.group_sensor_mode.isChecked() and not self.group_plots:
             self.create_group_plots()
+
+    def find_sensor_group_item(self, group_name):
+        """Trouve un item de groupe de capteurs par son nom."""
+        for i in range(self.connected_systems.topLevelItemCount()):
+            item = self.connected_systems.topLevelItem(i)
+            if item.text(0) == group_name:
+                return item
+        return None
+
+    def show_sensors(self):
+        # Méthode désormais redondante avec update_sensor_tree_from_config
+        if not self.client_socket or not self.sensor_config:
+            print("[INFO] No sensor data available. Connect to sensors first.")
+            return
+        
+        # Si on a des données de capteurs, on les affiche
+        self.update_sensor_tree_from_config()
 
     def create_group_plots(self):
         # Vérifier si les graphiques de groupe existent déjà
@@ -638,70 +984,260 @@ class DashboardApp(QMainWindow):
     def update_data(self):
         # Mettre à jour les données des graphiques en temps réel
         if self.recording:
-            packet = self.simulator.generate_packet()
-
-            # Enregistrer les données dans self.recorded_data
-            for i in range(8):
-                self.recorded_data["EMG"][i].append(packet["EMG"][i])
-                self.recorded_data["pMMG"][i].append(packet["pMMG"][i])
-
-            for i in range(6):
-                self.recorded_data["IMU"][i].append(packet["IMU"][i])
-
-            # Mettre à jour le modèle 3D avec les données IMU
-            if "IMU" in packet:
-                for i, quaternion in enumerate(packet["IMU"]):
-                    imu_id = i + 1  # IMU IDs start at 1
-                    if imu_id <= 6:  # Nous n'utilisons que 6 IMUs dans notre mapping
-                        self.model_3d_widget.apply_imu_data(imu_id, quaternion)
-
-            for sensor_name, plot_widget in self.plots.items():
-                if sensor_name.startswith("EMG"):
-                    index = int(sensor_name[3]) - 1
-                    self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
-                    self.plot_data[sensor_name][-1] = packet["EMG"][index]
-                    plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
-                elif sensor_name.startswith("pMMG"):
-                    index = int(sensor_name[4]) - 1
-                    self.plot_data[sensor_name] = np.roll(self.plot_data[sensor_name], -1)
-                    self.plot_data[sensor_name][-1] = packet["pMMG"][index]
-                    plot_widget.plot(self.plot_data[sensor_name], clear=True, pen=pg.mkPen('b', width=2))
-                elif sensor_name.startswith("IMU"):
-                    index = int(sensor_name[3]) - 1
-                    quaternion = packet["IMU"][index]
-                    plot_widget.clear()
-                    for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                        self.plot_data[f"{sensor_name}_{axis}"] = np.roll(self.plot_data.get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
-                        self.plot_data[f"{sensor_name}_{axis}"][-1] = quaternion[i]
-                        plot_widget.plot(self.plot_data[f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
-
-                    plot_widget.addLegend()
-
-            for sensor_group, plot_widget in self.group_plots.items():
-                plot_widget.clear()
-                for sensor_name, data in self.group_plot_data[sensor_group].items():
-                    if sensor_name.startswith("IMU"):
-                        index = int(sensor_name[3]) - 1
-                        quaternion = packet["IMU"][index]
-                        for i, axis in enumerate(['w', 'x', 'y', 'z']):
-                            self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"] = np.roll(self.group_plot_data[sensor_group].get(f"{sensor_name}_{axis}", np.zeros(100)), -1)
-                            self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"][-1] = quaternion[i]
-                            plot_widget.plot(self.group_plot_data[sensor_group][f"{sensor_name}_{axis}"], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=f"{sensor_name}_{axis}")
+            # Récupérer les données depuis Ethernet au lieu du simulateur
+            if self.client_socket and self.sensor_config and self.packet_size > 0:
+                try:
+                    # Lire un paquet de données et le décoder
+                    data_packet = recv_all(self.client_socket, self.packet_size)
+                    packet = decode_packet(data_packet, self.sensor_config)
+                    
+                    # Vérification CRC et filtrage des données potentiellement corrompues
+                    if not packet['crc_valid']:
+                        
+                        print("[WARNING] Invalid CRC for data packet. Checking data validity...")
+                        
+                        # Compteur de paquets corrompus consécutifs
+                        if not hasattr(self, 'corrupted_packets_count'):
+                            self.corrupted_packets_count = 0
+                        self.corrupted_packets_count += 1
+                        
+                        # Si trop de paquets corrompus consécutifs, on considère que c'est une erreur grave
+                        if self.corrupted_packets_count > 5:
+                            print("[ERROR] Too many corrupted packets in a row. Data may be unreliable.")
+                            self.corrupted_packets_count = 0  # Réinitialiser pour la prochaine tentative
+                            return
+                        
+                        # Filtrage supplémentaire des données suspectes
+                        if self._contains_invalid_data(packet):
+                            print("[WARNING] Packet contains invalid data. Skipping.")
+                            return
                     else:
-                        # Extraire le numéro du capteur en ignorant les "matched parts"
-                        sensor_num = int(''.join(filter(str.isdigit, sensor_name)))
-                        if sensor_name.startswith("EMG"):
-                            index = sensor_num - 1
-                            self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
-                            self.group_plot_data[sensor_group][sensor_name][-1] = packet["EMG"][index]
-                        elif sensor_name.startswith("pMMG"):
-                            index = sensor_num - 1
-                            self.group_plot_data[sensor_group][sensor_name] = np.roll(self.group_plot_data[sensor_group][sensor_name], -1)
-                            self.group_plot_data[sensor_group][sensor_name][-1] = packet["pMMG"][index]
+                        # Réinitialiser le compteur de paquets corrompus quand on reçoit un paquet valide
+                        self.corrupted_packets_count = 0
 
-                        plot_widget.plot(self.group_plot_data[sensor_group][sensor_name], pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][sensor_num - 1], width=2), name=sensor_name)
-
-                plot_widget.addLegend()
+                    # Enregistrer les données
+                    # Pour chaque type de capteur, nous devons mapper les données reçues (basées sur les IDs du serveur)
+                    # aux index attendus par l'interface (0-7 pour EMG et pMMG, 0-5 pour IMU)
+                    
+                    # Mapper les données EMG - Adapter pour les IDs spécifiques (25, 26, 27, etc.)
+                    if 'emg' in packet and packet['emg']:
+                        for i, emg_id in enumerate(self.sensor_config.get('emg_ids', [])):
+                            if i < len(packet['emg']) and i < len(self.recorded_data["EMG"]):
+                                value = packet['emg'][i]
+                                # Vérification de validité avant d'enregistrer
+                                if -10.0 <= value <= 10.0:  # Plage valide typique pour EMG
+                                    self.recorded_data["EMG"][i].append(value)
+                    
+                    # Mapper les données pMMG
+                    if 'pmmg' in packet and packet['pmmg']:
+                        for i, pmmg_id in enumerate(self.sensor_config.get('pmmg_ids', [])):
+                            if i < len(packet['pmmg']) and i < len(self.recorded_data["pMMG"]):
+                                value = packet['pmmg'][i]
+                                # Vérification de validité avant d'enregistrer
+                                if -10.0 <= value <= 10.0:  # Plage valide typique pour pMMG
+                                    self.recorded_data["pMMG"][i].append(value)
+                    
+                    # Mapper les données IMU
+                    if 'imu' in packet and packet['imu']:
+                        for i, imu_id in enumerate(self.sensor_config.get('imu_ids', [])):
+                            if i < len(packet['imu']) and i < len(self.recorded_data["IMU"]):
+                                quaternion = packet['imu'][i]
+                                # Vérification de validité du quaternion
+                                if self._is_valid_quaternion(quaternion):
+                                    self.recorded_data["IMU"][i].append(quaternion)
+                                    
+                                    # Mettre à jour le modèle 3D avec les données IMU
+                                    # Un IMU contient 4 valeurs (wxyz), ce n'est pas 4 IMUs différents
+                                    try:
+                                        self.model_3d_widget.apply_imu_data(imu_id, quaternion)
+                                    except Exception as e:
+                                        print(f"Error updating 3D model: {e}")
+                    
+                    # Mettre à jour les graphiques individuels
+                    for sensor_name_key, plot_widget in self.plots.items():
+                        # sensor_name_key est "EMG25", "IMU5", etc.
+                        sensor_type = ''.join(filter(str.isalpha, sensor_name_key))  # EMG, IMU, pMMG
+                        sensor_num_str = ''.join(filter(str.isdigit, sensor_name_key))
+                        if not sensor_num_str: continue  # Ignorer si pas de numéro
+                        
+                        # Trouver l'ID du capteur
+                        sensor_id = int(sensor_num_str)
+                        
+                        # Trouver l'index correspondant dans les données reçues
+                        if sensor_type == "EMG":
+                            try:
+                                if sensor_id in self.sensor_config['emg_ids']:
+                                    data_index = self.sensor_config['emg_ids'].index(sensor_id)
+                                    if data_index < len(packet['emg']):
+                                        value = packet['emg'][data_index]
+                                        if -10.0 <= value <= 10.0:  # Vérifier la validité
+                                            self.plot_data[sensor_name_key] = np.roll(self.plot_data[sensor_name_key], -1)
+                                            self.plot_data[sensor_name_key][-1] = value
+                                            plot_widget.plot(self.plot_data[sensor_name_key], clear=True, pen=pg.mkPen('b', width=2))
+                            except (ValueError, KeyError, IndexError):
+                                pass
+                        elif sensor_type == "pMMG":
+                            try:
+                                if 'pmmg_ids' in self.sensor_config and sensor_id in self.sensor_config['pmmg_ids']:
+                                    data_index = self.sensor_config['pmmg_ids'].index(sensor_id)
+                                    if data_index < len(packet['pmmg']):
+                                        value = packet['pmmg'][data_index]
+                                        if -10.0 <= value <= 10.0:  # Vérifier la validité
+                                            self.plot_data[sensor_name_key] = np.roll(self.plot_data[sensor_name_key], -1)
+                                            self.plot_data[sensor_name_key][-1] = value
+                                            plot_widget.plot(self.plot_data[sensor_name_key], clear=True, pen=pg.mkPen('b', width=2))
+                            except (ValueError, KeyError, IndexError):
+                                pass
+                        elif sensor_type == "IMU":
+                            try:
+                                if sensor_id in self.sensor_config['imu_ids']:
+                                    data_index = self.sensor_config['imu_ids'].index(sensor_id)
+                                    if data_index < len(packet['imu']):
+                                        quaternion = packet['imu'][data_index]
+                                        if self._is_valid_quaternion(quaternion):
+                                            plot_widget.clear()
+                                            for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                                                plot_data_key = f"{sensor_name_key}_{axis}"
+                                                # S'assurer que la clé existe dans self.plot_data
+                                                if plot_data_key not in self.plot_data:
+                                                    self.plot_data[plot_data_key] = np.zeros(100)
+                                                self.plot_data[plot_data_key] = np.roll(self.plot_data[plot_data_key], -1)
+                                                self.plot_data[plot_data_key][-1] = quaternion[i]
+                                                plot_widget.plot(self.plot_data[plot_data_key], pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), name=axis)
+                                            plot_widget.addLegend()
+                            except (ValueError, KeyError, IndexError):
+                                pass
+                    
+                    # Mettre à jour les graphiques par groupe
+                    for sensor_group_name, plot_widget in self.group_plots.items():
+                        plot_widget.clear()
+                        for full_sensor_name_ui, data_array_np in self.group_plot_data[sensor_group_name].items():
+                            sensor_base = full_sensor_name_ui.split()[0]  # Prendre juste "EMG25", pas "EMG25 (Biceps)"
+                            sensor_type = ''.join(filter(str.isalpha, sensor_base))
+                            sensor_num_str = ''.join(filter(str.isdigit, sensor_base))
+                            if not sensor_num_str: continue
+                            sensor_id = int(sensor_num_str)
+                            
+                            if sensor_type == "EMG" and sensor_group_name == "EMG":
+                                try:
+                                    if sensor_id in self.sensor_config['emg_ids']:
+                                        data_index = self.sensor_config['emg_ids'].index(sensor_id)
+                                        if data_index < len(packet['emg']):
+                                            value = packet['emg'][data_index]
+                                            if -10.0 <= value <= 10.0:  # Vérifier la validité
+                                                self.group_plot_data[sensor_group_name][full_sensor_name_ui] = np.roll(self.group_plot_data[sensor_group_name][full_sensor_name_ui], -1)
+                                                self.group_plot_data[sensor_group_name][full_sensor_name_ui][-1] = value
+                                                # Déterminer la couleur
+                                                ui_idx = sensor_id % 8  # Utiliser modulo pour s'assurer que l'index est dans la plage
+                                                colors = ['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w']
+                                                plot_widget.plot(self.group_plot_data[sensor_group_name][full_sensor_name_ui], 
+                                                            pen=pg.mkPen(colors[ui_idx], width=2), 
+                                                            name=full_sensor_name_ui)
+                                except (ValueError, KeyError, IndexError):
+                                    pass
+                            elif sensor_type == "pMMG" and sensor_group_name == "pMMG":
+                                try:
+                                    if 'pmmg_ids' in self.sensor_config and sensor_id in self.sensor_config['pmmg_ids']:
+                                        data_index = self.sensor_config['pmmg_ids'].index(sensor_id)
+                                        if data_index < len(packet['pmmg']):
+                                            value = packet['pmmg'][data_index]
+                                            if -10.0 <= value <= 10.0:  # Vérifier la validité
+                                                self.group_plot_data[sensor_group_name][full_sensor_name_ui] = np.roll(self.group_plot_data[sensor_group_name][full_sensor_name_ui], -1)
+                                                self.group_plot_data[sensor_group_name][full_sensor_name_ui][-1] = value
+                                                ui_idx = sensor_id % 8
+                                                color_idx = ui_idx
+                                                colors = ['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w']
+                                                plot_widget.plot(self.group_plot_data[sensor_group_name][full_sensor_name_ui], 
+                                                            pen=pg.mkPen(colors[color_idx], width=2), 
+                                                            name=full_sensor_name_ui)
+                                except (ValueError, KeyError, IndexError):
+                                    pass
+                            elif sensor_type == "IMU" and sensor_base.startswith("IMU"):
+                                try:
+                                    if sensor_id in self.sensor_config['imu_ids']:
+                                        data_index = self.sensor_config['imu_ids'].index(sensor_id)
+                                        if data_index < len(packet['imu']):
+                                            quaternion = packet['imu'][data_index]
+                                            if self._is_valid_quaternion(quaternion):
+                                                for i, axis in enumerate(['w', 'x', 'y', 'z']):
+                                                    axis_key = f"{full_sensor_name_ui}_{axis}"
+                                                    if axis_key not in self.group_plot_data[sensor_group_name]:
+                                                        self.group_plot_data[sensor_group_name][axis_key] = np.zeros(100)
+                                                    self.group_plot_data[sensor_group_name][axis_key] = np.roll(self.group_plot_data[sensor_group_name][axis_key], -1)
+                                                    self.group_plot_data[sensor_group_name][axis_key][-1] = quaternion[i]
+                                                    plot_widget.plot(self.group_plot_data[sensor_group_name][axis_key], 
+                                                                pen=pg.mkPen(['r', 'g', 'b', 'y'][i], width=2), 
+                                                                name=f"{full_sensor_name_ui}_{axis}")
+                                except (ValueError, KeyError, IndexError):
+                                    pass
+                        plot_widget.addLegend()
+                        
+                except ConnectionResetError:
+                    print("[ERROR] Connection reset by peer.")
+                    self.client_socket = None
+                    self.connect_button.setText("Connect")
+                    QMessageBox.warning(self, "Connection Lost", "Connection to the device was reset.")
+                except struct.error as e:
+                    # Problème de décodage de structure, probablement un paquet malformé
+                    print(f"[ERROR] Struct unpacking error: {e}. Packet size may be incorrect.")
+                    # Optionnel: tenter de resynchroniser en lisant quelques octets supplémentaires
+                    try:
+                        # Lire quelques octets pour tenter de se resynchroniser
+                        extra_bytes = self.client_socket.recv(16, socket.MSG_DONTWAIT)
+                        print(f"[INFO] Read {len(extra_bytes)} extra bytes to try to resynchronize.")
+                    except:
+                        pass
+                except socket.timeout:
+                    print("[WARNING] Socket timeout while receiving data.")
+                except Exception as e:
+                    print(f"[ERROR] Failed to receive/process data: {e}")
+            else:
+                # L'utilisateur est en mode enregistrement mais sans connexion Ethernet valide
+                if self.recording and not self.client_socket:
+                    print("[WARNING] Recording active but no Ethernet connection.")
+                pass
+    
+    def _contains_invalid_data(self, packet):
+        """Vérifie si un paquet contient des données manifestement invalides"""
+        # Vérifier les EMG
+        for value in packet['emg']:
+            if not isinstance(value, (int, float)) or abs(value) > 10.0:
+                return True
+                
+        # Vérifier les pMMG
+        for value in packet['pmmg']:
+            if not isinstance(value, (int, float)) or abs(value) > 10.0:
+                return True
+                
+        # Vérifier les IMU (quaternions)
+        for i, quaternion in enumerate(packet['imu']):
+            if not self._is_valid_quaternion(quaternion):
+                print(f"[DEBUG] IMU {i} quaternion invalide: {quaternion}")
+                return True
+                
+        return False
+        
+    def _is_valid_quaternion(self, quaternion):
+        """Vérifie si un quaternion est valide"""
+        # Vérifier que le quaternion est une liste ou un tuple de 4 éléments
+        if not isinstance(quaternion, (list, tuple)) or len(quaternion) != 4:
+            print(f"[DEBUG] Format quaternion invalide: {type(quaternion)}, longueur: {len(quaternion) if hasattr(quaternion, '__len__') else 'N/A'}")
+            return False
+            
+        # Les composantes d'un quaternion doivent être des nombres
+        for i, component in enumerate(quaternion):
+            if not isinstance(component, (int, float)):
+                print(f"[DEBUG] Composante {i} non numérique: {type(component)}")
+                return False
+                
+        # On accepte presque toutes les valeurs, en vérifiant juste qu'elles ne sont pas aberrantes
+        # Les quaternions peuvent être non normalisés selon l'implémentation matérielle
+        for i, component in enumerate(quaternion):
+            if abs(component) > 100.0:  # Valeurs très éloignées suggèrent des données corrompues
+                print(f"[DEBUG] Valeur aberrante dans quaternion: composante {i} = {component}")
+                return False
+                
+        return True
 
     def on_display_mode_changed(self):
         if hasattr(self, 'recording') and self.recording:
@@ -749,7 +1285,21 @@ class DashboardApp(QMainWindow):
     def start_recording(self):
         self.recording = True
         self.recording_stopped = False
-        self.recorded_data = {"EMG": [[] for _ in range(8)], "IMU": [[] for _ in range(6)], "pMMG": [[] for _ in range(8)]}
+        
+        # Déterminer le nombre correct d'IMUs depuis la configuration
+        num_imus = getattr(self.sensor_config, 'num_imus', 0) if self.sensor_config else 0
+        if num_imus == 0:
+            print("[WARNING] Aucun IMU détecté, initialisation avec 1 IMU par défaut")
+            num_imus = 1  # Au moins un pour éviter les problèmes
+            
+        # Initialiser les structures de données pour l'enregistrement
+        self.recorded_data = {
+            "EMG": [[] for _ in range(8)],           # 8 EMGs max
+            "IMU": [[] for _ in range(num_imus)],    # Nombre réel d'IMUs
+            "pMMG": [[] for _ in range(8)]           # 8 pMMGs max
+        }
+        
+        print(f"[INFO] Début de l'enregistrement avec {num_imus} IMUs")
         self.record_button.setText("Record Stop")
 
     def stop_recording(self):
@@ -833,30 +1383,14 @@ class DashboardApp(QMainWindow):
         if self.recording:
             self.stop_recording()
         else:
+            # Vérifier si nous sommes connectés à un dispositif
+            if not self.client_socket and not self.is_server_running:
+                QMessageBox.warning(self, "Not Connected", 
+                                   "Please connect to a device before starting recording.")
+                return
+                
             if self.record_button.isEnabled():
-                self.connect_sensors()
                 self.start_recording()
-                # Style rouge pour le bouton d'arrêt d'enregistrement
-                self.record_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #f44336;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 8px 16px;
-                    color: white;
-                    font-size: 14px;
-                    font-weight: 500;
-                    text-align: center;
-                    min-width: 120px;
-                }
-                QPushButton:hover {
-                    background-color: #e53935;
-                }
-                QPushButton:pressed {
-                    background-color: #d32f2f;
-                }
-                """)
-
 
     def toggle_animation(self):
         """Toggle stickman walking animation."""
@@ -1112,6 +1646,10 @@ class DashboardApp(QMainWindow):
     def closeEvent(self, event):
         """Called when the application is closed"""
         self.save_mappings()  # Sauvegarder les mappages à la fermeture
+        
+        # Nettoyer les ressources du serveur Ethernet
+        self.stop_ethernet_server()
+        
         event.accept()
 
     def create_specific_tab(self, sensor_type, i):

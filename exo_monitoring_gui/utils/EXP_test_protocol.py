@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
-import threading
+# import threading
 
 
 # Use LaTeX font 
@@ -87,7 +87,7 @@ DataType = {
 ################### Class for Data Communication for USB CDC ###################
 
 class DataProtocol:
-    def __init__(self, hdf5_file_path=None):
+    def __init__(self):
         self.baudRate_USBCDC = 921600   # Can be changed
         self.serialPort = self.FindSerialPort()
         self.dataName = []
@@ -103,12 +103,12 @@ class DataProtocol:
         self.csvFile = None
         self.hdf5BaseName = './data'
         self.hdf5FileName = ''
-        self.hdf5_file_path = hdf5_file_path
         self.hdf5File = None
         self.labelingOn = False
         self.keyboard = 0               # 1: sit, 2: stand, 3: level walking... (for Labeling)
-    
 
+
+    
     def FindSerialPort(self):
         serialPort_list = serial.tools.list_ports.comports()
         for port in serialPort_list:
@@ -197,43 +197,39 @@ class DataProtocol:
     def OpenHDF5toWrite(self):
         counter = 1
         fileFormat = '.h5'
-        
-        if self.hdf5_file_path:
-            self.hdf5FileName = self.hdf5_file_path
-        else:
+        self.hdf5FileName = f"{self.hdf5BaseName}{counter}{fileFormat}"
+        while os.path.exists(self.hdf5FileName):
+            counter += 1
             self.hdf5FileName = f"{self.hdf5BaseName}{counter}{fileFormat}"
-            while os.path.exists(self.hdf5FileName):
-                counter += 1
-                self.hdf5FileName = f"{self.hdf5BaseName}{counter}{fileFormat}"
 
-        self.hdf5File = h5py.File(self.hdf5FileName,'a')
+        self.hdf5File = h5py.File(self.hdf5FileName,'w')
 
     def CreateHDF5Group(self):
-        self.sensor_grp = self.hdf5File.require_group("Sensor")
+        self.sensor_grp = self.hdf5File.create_group("Sensor")
 
-        self.time_grp = self.sensor_grp.require_group("Time")
-        self.time_data = self.time_grp.require_dataset("time", shape=(0, ), maxshape=(None, ), dtype='i')
+        self.time_grp = self.hdf5File.create_group("Sensor/Time")
+        self.time_data = self.time_grp.create_dataset("time", shape=(0, ), maxshape=(None, ), dtype='i')
 
-        self.imu_grp = self.sensor_grp.require_group("IMU") 
-        self.imu1_data = self.imu_grp.require_dataset("imu1", shape=(0, 4), maxshape=(None, 4), dtype='f')
-        self.imu2_data = self.imu_grp.require_dataset("imu2", shape=(0, 4), maxshape=(None, 4), dtype='f')
-        self.imu3_data = self.imu_grp.require_dataset("imu3", shape=(0, 4), maxshape=(None, 4), dtype='f')
-        self.imu4_data = self.imu_grp.require_dataset("imu4", shape=(0, 4), maxshape=(None, 4), dtype='f')
-        self.imu5_data = self.imu_grp.require_dataset("imu5", shape=(0, 4), maxshape=(None, 4), dtype='f')
-        self.imu6_data = self.imu_grp.require_dataset("imu6", shape=(0, 4), maxshape=(None, 4), dtype='f')
+        self.imu_grp = self.hdf5File.create_group("Sensor/IMU")
+        self.imu1_data = self.imu_grp.create_dataset("imu1", shape=(0, 4), maxshape=(None, 4), dtype='f')
+        self.imu2_data = self.imu_grp.create_dataset("imu2", shape=(0, 4), maxshape=(None, 4), dtype='f')
+        self.imu3_data = self.imu_grp.create_dataset("imu3", shape=(0, 4), maxshape=(None, 4), dtype='f')
+        self.imu4_data = self.imu_grp.create_dataset("imu4", shape=(0, 4), maxshape=(None, 4), dtype='f')
+        self.imu5_data = self.imu_grp.create_dataset("imu5", shape=(0, 4), maxshape=(None, 4), dtype='f')
+        self.imu6_data = self.imu_grp.create_dataset("imu6", shape=(0, 4), maxshape=(None, 4), dtype='f')
 
-        self.emg_grp = self.sensor_grp.require_group("EMG") 
-        self.emgL1_data = self.emg_grp.require_dataset("emgL1", shape=(0, ), maxshape=(None, ), dtype='f')
-        self.emgL2_data = self.emg_grp.require_dataset("emgL2", shape=(0, ), maxshape=(None, ), dtype='f')
-        self.emgL3_data = self.emg_grp.require_dataset("emgL3", shape=(0, ), maxshape=(None, ), dtype='f')
-        self.emgL4_data = self.emg_grp.require_dataset("emgL4", shape=(0, ), maxshape=(None, ), dtype='f')
-        self.emgR1_data = self.emg_grp.require_dataset("emgR1", shape=(0, ), maxshape=(None, ), dtype='f')
-        self.emgR2_data = self.emg_grp.require_dataset("emgR2", shape=(0, ), maxshape=(None, ), dtype='f')
-        self.emgR3_data = self.emg_grp.require_dataset("emgR3", shape=(0, ), maxshape=(None, ), dtype='f')
-        self.emgR4_data = self.emg_grp.require_dataset("emgR4", shape=(0, ), maxshape=(None, ), dtype='f')
+        self.emg_grp = self.hdf5File.create_group("Sensor/EMG")
+        self.emgL1_data = self.emg_grp.create_dataset("emgL1", shape=(0, ), maxshape=(None, ), dtype='f')
+        self.emgL2_data = self.emg_grp.create_dataset("emgL2", shape=(0, ), maxshape=(None, ), dtype='f')
+        self.emgL3_data = self.emg_grp.create_dataset("emgL3", shape=(0, ), maxshape=(None, ), dtype='f')
+        self.emgL4_data = self.emg_grp.create_dataset("emgL4", shape=(0, ), maxshape=(None, ), dtype='f')
+        self.emgR1_data = self.emg_grp.create_dataset("emgR1", shape=(0, ), maxshape=(None, ), dtype='f')
+        self.emgR2_data = self.emg_grp.create_dataset("emgR2", shape=(0, ), maxshape=(None, ), dtype='f')
+        self.emgR3_data = self.emg_grp.create_dataset("emgR3", shape=(0, ), maxshape=(None, ), dtype='f')
+        self.emgR4_data = self.emg_grp.create_dataset("emgR4", shape=(0, ), maxshape=(None, ), dtype='f')
 
-        self.label_group = self.sensor_grp.require_group("LABEL") 
-        self.label_data = self.label_group.require_dataset("label", shape=(0, ), maxshape=(None, ), dtype='i')
+        self.label_group = self.hdf5File.create_group("Sensor/LABEL")
+        self.label_data = self.label_group.create_dataset("label", shape=(0, ), maxshape=(None, ), dtype='i')
 
         self.mapping = {
                 'DS_TIMESTAMP'        : [self.time_data,0], 
@@ -351,7 +347,7 @@ class DataProtocol:
 
 
 
-    def ReadDataSequenceHDF5(self, startByte, endByte, terminateByte, dataSave, labelingOn):
+    def ReadDataSequenceHDF5(self, startByte, endByte, terminateByte, dataSave):
         try:
             while True:
                 startCheck = self.serialPort.read(1)
@@ -363,7 +359,7 @@ class DataProtocol:
                             temp = temp[:self.rxDataByte] 
                             self.ProcessRxData(temp)
                             self.ScalingRxData(self.decodedData)
-                            print(self.decodedData)
+                            print(self.decodedData)         # 시간 너무 오래걸리면 이 부분 주석처리
                                      
                             if dataSave:
                                 resized_set = set()         # resize 한 dset 저장용
@@ -408,158 +404,146 @@ class DataProtocol:
             self.hdf5File.close()
 
 
-    def PlotGraph(self, dataToShow):
-        data = pd.read_csv(self.csvFileName, header=0)
+    # def PlotGraph(self, dataToShow):
+    #     data = pd.read_csv(self.csvFileName, header=0)
 
-        plt.figure(figsize=(14,8), dpi=120)
-        plt.plot(data['Time[ms]'], data['EMG_Raw'], label='EMG_Raw', color='b')
-        plt.xlabel('Time[ms]', fontsize=15)
-        plt.ylabel('% MVIC', fontsize=15)
-        plt.ylim(-1, 1)
-        plt.title('Result of UART TEST', fontsize=25)
-        plt.grid(alpha=0.4)
-        plt.legend(loc=1, fontsize=15)
-        plt.savefig('UART_TEST_1NE.png')  
-        plt.show()
+    #     plt.figure(figsize=(14,8), dpi=120)
+    #     plt.plot(data['Time[ms]'], data['EMG_Raw'], label='EMG_Raw', color='b')
+    #     plt.xlabel('Time[ms]', fontsize=15)
+    #     plt.ylabel('% MVIC', fontsize=15)
+    #     plt.ylim(-1, 1)
+    #     plt.title('Result of UART TEST', fontsize=25)
+    #     plt.grid(alpha=0.4)
+    #     plt.legend(loc=1, fontsize=15)
+    #     plt.savefig('UART_TEST_1NE.png')  
+    #     plt.show()
 
 
-    def keyboard_listener(self):
-        while self.labelingOn:
-            self.keyboard = input()
+    # def keyboard_listener(self):
+    #     while self.labelingOn:
+    #         self.keyboard = input()
 
-    def ReadDataSequenceHDF5_labeling(self, startByte, endByte, terminateByte, dataSave):
-        self.labelingOn = True
-        threading.Thread(target=self.keyboard_listener, daemon=True).start()
+    # def ReadDataSequenceHDF5_labeling(self, startByte, endByte, terminateByte, dataSave):
+    #     self.labelingOn = True
+    #     threading.Thread(target=self.keyboard_listener, daemon=True).start()
 
-        try:
-            while True:
-                startCheck = self.serialPort.read(1)
-                if (startCheck == startByte):
-                    if self.serialPort.in_waiting >= (self.rxDataByte + 1):
-                        temp = self.serialPort.read(self.rxDataByte + 1)        # EOL
-                        if (temp[-1:] == endByte):
-                            self.decodedData = []                               # Reset the buffer
-                            temp = temp[:self.rxDataByte] 
-                            self.ProcessRxData(temp)
-                            self.ScalingRxData(self.decodedData)
-                            print(self.decodedData)
+    #     try:
+    #         while True:
+    #             startCheck = self.serialPort.read(1)
+    #             if (startCheck == startByte):
+    #                 if self.serialPort.in_waiting >= (self.rxDataByte + 1):
+    #                     temp = self.serialPort.read(self.rxDataByte + 1)        # EOL
+    #                     if (temp[-1:] == endByte):
+    #                         self.decodedData = []                               # Reset the buffer
+    #                         temp = temp[:self.rxDataByte] 
+    #                         self.ProcessRxData(temp)
+    #                         self.ScalingRxData(self.decodedData)
+    #                         print(self.decodedData)
                                         
-                            if dataSave:
-                                resized_set = set()         # resize 한 dset 저장용
+    #                         if dataSave:
+    #                             resized_set = set()         # resize 한 dset 저장용
 
-                                for i, name in enumerate(self.dataName):
-                                    if name in self.mapping:
-                                        dset, col_idx = self.mapping[name]
+    #                             for i, name in enumerate(self.dataName):
+    #                                 if name in self.mapping:
+    #                                     dset, col_idx = self.mapping[name]
 
-                                        if dset not in resized_set:
-                                            curr_len = dset.shape[0]
-                                            dset.resize((curr_len + 1), axis=0)
-                                            resized_set.add(dset)
-                                        else:
-                                            curr_len = dset.shape[0] - 1        # 이미 resize 했으면 바로 이전 row가 타겟
+    #                                     if dset not in resized_set:
+    #                                         curr_len = dset.shape[0]
+    #                                         dset.resize((curr_len + 1), axis=0)
+    #                                         resized_set.add(dset)
+    #                                     else:
+    #                                         curr_len = dset.shape[0] - 1        # 이미 resize 했으면 바로 이전 row가 타겟
 
-                                        if len(dset.shape) == 2:    # imu
-                                            dset[curr_len, col_idx] = self.decodedData[i]
-                                        else:                       # emg or time (1D)
-                                            dset[curr_len] = self.decodedData[i]     
+    #                                     if len(dset.shape) == 2:    # imu
+    #                                         dset[curr_len, col_idx] = self.decodedData[i]
+    #                                     else:                       # emg or time (1D)
+    #                                         dset[curr_len] = self.decodedData[i]     
 
-                                # Labeling part #
-                                dset_label = self.label_data
+    #                             # Labeling part #
+    #                             dset_label = self.label_data
 
-                                if dset_label not in resized_set:
-                                    curr_len_label = dset_label.shape[0]
-                                    dset_label.resize((curr_len_label + 1), axis=0)
-                                    resized_set.add(dset_label)
-                                else:
-                                    curr_len_label = dset_label.shape[0] - 1
-                                dset_label[curr_len_label] = self.keyboard
+    #                             if dset_label not in resized_set:
+    #                                 curr_len_label = dset_label.shape[0]
+    #                                 dset_label.resize((curr_len_label + 1), axis=0)
+    #                                 resized_set.add(dset_label)
+    #                             else:
+    #                                 curr_len_label = dset_label.shape[0] - 1
+    #                             dset_label[curr_len_label] = self.keyboard
 
                                        
 
-                        else:
-                            print("ERROR!!: Invalid Data is received")
+    #                     else:
+    #                         print("ERROR!!: Invalid Data is received")
 
-                elif (startCheck == terminateByte):
-                    self.serialPort.close()
-                    self.hdf5File.close()
-                    self.labelingOn = False
-                    print("Terminate DAQ")
-                    print("Data is saved")
-                    break                        
+    #             elif (startCheck == terminateByte):
+    #                 self.serialPort.close()
+    #                 self.hdf5File.close()
+    #                 self.labelingOn = False
+    #                 print("Terminate DAQ")
+    #                 print("Data is saved")
+    #                 break                        
 
-        except KeyboardInterrupt:
-            self.serialPort.close()
-            self.hdf5File.close()
-            print("Exit the program. Close the CSV file")
+    #     except KeyboardInterrupt:
+    #         self.serialPort.close()
+    #         self.hdf5File.close()
+    #         print("Exit the program. Close the CSV file")
 
             
-        except serial.SerialException as e:
-            print(f"SerialException: {e}")
+    #     except serial.SerialException as e:
+    #         print(f"SerialException: {e}")
 
-        finally:
-            self.serialPort.close()
-            self.hdf5File.close()
+    #     finally:
+    #         self.serialPort.close()
+    #         self.hdf5File.close()
 
 
-# def main(ars=None):
-#     ##########################################################################################################################################################
+def main(ars=None):
+    ##########################################################################################################################################################
 
-#     # Initialization #
-#     # Exemple si vous voulez utiliser un fichier spécifique :
-#     # output_directory = os.path.join(os.path.expanduser(\"~\"), \"Documents\", \"Monitoring-Data-Test\")
-#     # os.makedirs(output_directory, exist_ok=True)
-#     # specific_hdf5_path = os.path.join(output_directory, \"my_test_recording.h5\")
-#     # dataObj = DataProtocol(hdf5_file_path=specific_hdf5_path)
-    
-#     dataObj = DataProtocol() # Ou DataProtocol(hdf5_file_path=\"path/to/your/file.h5\")
-#     if dataObj.serialPort is None:
-#         print(\"Aucun port série STM3_Electronics détecté. Vérifiez la connexion et les pilotes.\")
-#         return # Quitter si aucun port n\'est trouvé
+    # Initialization #
+    dataObj = DataProtocol()
+    dataObj.ReadSensorDetection()
+    dataObj.ReadDataProtocol()
+    dataObj.ParseDataSet()
 
-#     dataObj.ReadSensorDetection()
-#     dataObj.ReadDataProtocol()
-#     dataObj.ParseDataSet()
+    ##########################################################################################################################################################
 
-#     ##########################################################################################################################################################
+    # [1] csv version #
+    # dataObj.OpenCSVtoWrite()
+    # dataObj.WriteCSVHeader()
+    # dataObj.ReadDataSequenceCSV(USB_CDC_START_DATA, USB_CDC_END_DATA, USB_CDC_TERMINATE_PYTHON, True)
 
-#     # [1] csv version #
-#     # dataObj.OpenCSVtoWrite()
-#     # dataObj.WriteCSVHeader()
-#     # dataObj.ReadDataSequenceCSV(USB_CDC_START_DATA, USB_CDC_END_DATA, USB_CDC_TERMINATE_PYTHON, True)
+    ##########################################################################################################################################################
 
-#     ##########################################################################################################################################################
+    # [2] h5 version #
+    dataObj.OpenHDF5toWrite()
+    dataObj.CreateHDF5Group()
+    dataObj.ReadDataSequenceHDF5(USB_CDC_START_DATA, USB_CDC_END_DATA, USB_CDC_TERMINATE_PYTHON, True)
 
-#     # [2] h5 version #
-#     dataObj.OpenHDF5toWrite()
-#     dataObj.CreateHDF5Group()
-#     dataObj.ReadDataSequenceHDF5(USB_CDC_START_DATA, USB_CDC_END_DATA, USB_CDC_TERMINATE_PYTHON, True, False) # Ajout de labelingOn=False
+    ##########################################################################################################################################################
 
-#     ##########################################################################################################################################################
+    # [3] h5 version with keyboard labeling #
+    # dataObj.OpenHDF5toWrite()
+    # dataObj.CreateHDF5Group()
+    # dataObj.ReadDataSequenceHDF5_labeling(USB_CDC_START_DATA, USB_CDC_END_DATA, USB_CDC_TERMINATE_PYTHON, True)
 
-#     # [3] h5 version with keyboard labeling #
-#     # dataObj.OpenHDF5toWrite()
-#     # dataObj.CreateHDF5Group()
-#     # dataObj.ReadDataSequenceHDF5_labeling(USB_CDC_START_DATA, USB_CDC_END_DATA, USB_CDC_TERMINATE_PYTHON, True)
+    ##########################################################################################################################################################
 
-#     ##########################################################################################################################################################
-
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':
+    main()
 
 
 
-# # data = pd.read_csv(csv_filename, header=0)
+# data = pd.read_csv(csv_filename, header=0)
 
-# # plt.figure(figsize=(14,8), dpi=120)
-# # plt.plot(data['Time[ms]'], data['EMG_Raw'], label='EMG_Raw', color='black')
-# # plt.plot(data['Time[ms]'], data['EMG_Processed'], label='EMG_Processed', color='r')
-# # plt.xlabel('Time[ms]', fontsize=15)
-# # plt.ylabel('% MVIC', fontsize=15)
-# # plt.ylim(-1, 1)
-# # plt.title('Result of UART TEST', fontsize=25)
-# # plt.grid(alpha=0.4)
-# # plt.legend(loc=1, fontsize=15)
-# # plt.savefig('UART_TEST_1NE.png')  
-# # plt.show()
-
-
+# plt.figure(figsize=(14,8), dpi=120)
+# plt.plot(data['Time[ms]'], data['EMG_Raw'], label='EMG_Raw', color='black')
+# plt.plot(data['Time[ms]'], data['EMG_Processed'], label='EMG_Processed', color='r')
+# plt.xlabel('Time[ms]', fontsize=15)
+# plt.ylabel('% MVIC', fontsize=15)
+# plt.ylim(-1, 1)
+# plt.title('Result of UART TEST', fontsize=25)
+# plt.grid(alpha=0.4)
+# plt.legend(loc=1, fontsize=15)
+# plt.savefig('UART_TEST_1NE.png')  
+# plt.show()
