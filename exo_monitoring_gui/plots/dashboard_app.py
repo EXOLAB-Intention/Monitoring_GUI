@@ -1,9 +1,3 @@
-'''
-Regler le probleme des capteur IMU qui ne saffiche pas dans le 2D Plot apres avoir appuyé sur record stop et en etant dans le mode plot par groupe de capteur
-'''
-
-
-
 import sys
 import os
 import time
