@@ -4,9 +4,9 @@
     "2": "biceps_r",
     "3": "biceps_r",
     "4": "right_foot",
-    "5": "deltoid_l",
     "7": "dorsalis_major_l",
-    "6": "torso"
+    "6": "torso",
+    "5": "deltoid_l"
   },
   "IMU": {
     "1": "torso",
