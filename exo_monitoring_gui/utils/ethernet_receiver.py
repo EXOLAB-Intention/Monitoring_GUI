@@ -4,6 +4,12 @@ import struct
 # === Configuration ===
 LISTEN_IP = '0.0.0.0'
 LISTEN_PORT = 5001
+li = []
+pmmg = None
+fsr = None
+emg = None
+imu = None
+# ======================
 
 def recv_all(sock, size):
     """Block until exactly `size` bytes have been received."""
@@ -181,7 +187,7 @@ def start_server():
         )
 
         
-
+        
         while True:
             data = recv_all(conn, packet_size)
             parsed = decode_packet(data, cfg)
@@ -214,9 +220,8 @@ def start_server():
             jx, jy = parsed['joystick']
             output += f"Joystick: X={jx},Y={jy}"
 
-            print(output)
-
-
+            li.append(output)
+        
     except Exception as e:
         print(f"[ERROR] {e}")
     finally:
