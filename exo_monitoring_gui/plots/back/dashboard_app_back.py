@@ -124,6 +124,7 @@ class DashboardAppBack:
         self.timer = QTimer() # Pas de self.ui ici, QTimer n'a pas besoin d'un parent direct pour fonctionner
         self.timer.timeout.connect(self.update_data)
         # self.timer.start(40) # Le démarrage du timer sera géré par l'UI
+        self.main_bar_re = self.some_method()
 
     def connect_sensors(self):
         if not self.is_server_running:
@@ -190,7 +191,11 @@ class DashboardAppBack:
         self.ui.connect_button.setText("Connect")
         self.ui.connect_button.setEnabled(True)
         QMessageBox.critical(self.ui, "Connection Error", error_msg)
-
+    
+    def some_method(self):
+        from utils.Menu_bar import MainBar
+        return MainBar(self)
+    
     def on_server_error(self, error_msg):
         print(f"[ERROR] {error_msg}")
         self.ui.connect_button.setText("Connect")
@@ -345,6 +350,8 @@ class DashboardAppBack:
         """) # Le style complet est dans l'UI
         self.ui.record_button.setEnabled(False)
         self.ui.show_recorded_data_on_plots(self.recorded_data) # L'UI gère l'affichage
+        self.main_bar_re.edit_Boleen(True)
+
 
     def toggle_recording(self):
         if self.recording:

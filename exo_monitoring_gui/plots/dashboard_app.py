@@ -97,7 +97,10 @@ class DashboardApp(QMainWindow):
         
         self.main_bar_re = self.some_method()
         self.main_bar_re._create_menubar()
-    
+        self.main_bar_re.edit_creation_date()
+        self.main_bar_re._all_false_or_true(False)
+        self.main_bar_re.edit_Boleen(False)
+
     def some_method(self):
         from utils.Menu_bar import MainBar
         return MainBar(self)
