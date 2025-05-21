@@ -1,16 +1,9 @@
 from PyQt5.QtWidgets import (
-    QDialog, QLabel, QLineEdit, QTextEdit, QPushButton, QMessageBox, QFileDialog, QApplication
-)
-from PyQt5.QtGui import  QIntValidator, QDoubleValidator
-from PyQt5.QtCore import  pyqtSignal
-from datetime import datetime
+    QDialog, QLabel, QLineEdit, QTextEdit, QPushButton, QMessageBox)
+from PyQt5.QtGui import QIntValidator, QDoubleValidator
+from PyQt5.QtCore import pyqtSignal
 from UI.widgets.image_drop_area import ImageDropArea
-from UI.review import Review
-from utils.hdf5_utils import load_metadata, save_metadata
-import os
-from plots.dashboard_app import DashboardApp
-from UI.experimenter_dialogue import ExperimenterDialog
-
+from UI.back.information_back import InformationBack
 
 class InformationWindow(QDialog):
     info_submitted = pyqtSignal(dict)
@@ -24,18 +17,13 @@ class InformationWindow(QDialog):
         self.input_fields = {}
         self.required_fields = ["Name", "Last Name", "Age", "Weight (kg)", "Height (cm)"]
         self.review_mode = review_mode
+        # Initialize InformationBack
+        self.information_back = InformationBack(self, subject_file, review_mode)
         self._setup_ui()
 
         if self.subject_file:
-            self._load_existing_data()
+            self.information_back._load_existing_data()
 
-    def closeEvent(self, event):
-            # Appeler la méthode closeEvent du parent si elle existe
-            if hasattr(self.parent(), 'closeEvent'):
-                self.parent().closeEvent(event)
-            else:
-                event.accept()
-                
     def _setup_ui(self):
         left_fields = [
             ("Name", 200, 100),
@@ -56,11 +44,11 @@ class InformationWindow(QDialog):
             label = QLabel(f"{placeholder}{'*' if placeholder in self.required_fields else ''}", self)
             label.setStyleSheet("font-size: 16px;")
 
-            if x == 200:  # Left column (Name, Last Name, etc.)
-                label.setGeometry(x - 115, y, 150, 30)  # Original geometry
-            else:  # Right column (Thigh length, etc. where x is 850)
-                label_width = 175  # Increased width for the label
-                label_x_pos = x - label_width - 2  # Position x of the label
+            if x == 200:
+                label.setGeometry(x - 115, y, 150, 30)
+            else:
+                label_width = 175
+                label_x_pos = x - label_width - 2
                 label.setGeometry(label_x_pos, y, label_width, 30)
 
             field = QLineEdit(self)
@@ -69,11 +57,9 @@ class InformationWindow(QDialog):
             field.setStyleSheet("font-size: 16px; padding: 8px;")
             self.input_fields[placeholder] = field
 
-            # Connect for required check
             if placeholder in self.required_fields:
-                field.textChanged.connect(self._check_required_fields)
+                field.textChanged.connect(self.information_back._check_required_fields)
 
-            # Set appropriate validators
             if placeholder == "Age":
                 field.setValidator(QIntValidator(0, 150, self))
             elif placeholder in ["Weight (kg)", "Height (cm)", "Thigh length (cm)", "Shank length (cm)",
@@ -82,191 +68,37 @@ class InformationWindow(QDialog):
                 validator.setNotation(QDoubleValidator.StandardNotation)
                 field.setValidator(validator)
 
-        # Description
         desc_label = QLabel("Description", self)
         desc_label.setGeometry(200, 390, 150, 30)
         self.input_fields["Description"] = QTextEdit(self)
         self.input_fields["Description"].setGeometry(200, 425, 400, 150)
 
-        # Image area
         self.image_area = ImageDropArea(self)
         self.image_area.setGeometry(700, 335, 640, 240)
 
-        # Required field note
         req_note = QLabel("* Required fields", self)
         req_note.setGeometry(200, 580, 200, 20)
         req_note.setStyleSheet("font-size: 14px; color: #f44336;")
 
-        # Buttons
         self.submit_button = QPushButton("Collect Data", self)
         self.submit_button.setGeometry(550, 600, 200, 50)
         self.submit_button.setEnabled(False)
-        self.submit_button.clicked.connect(self._collect_data)
-        self._set_button_style(self.submit_button, "#4CAF50", "#45a049", "#3d8b40", "#cccccc")
+        self.submit_button.clicked.connect(self.information_back._collect_data)
+        self.information_back._set_button_style(self.submit_button, "#4CAF50", "#45a049", "#3d8b40", "#cccccc")
 
         self.cancel_button = QPushButton("Cancel", self)
         self.cancel_button.setGeometry(780, 600, 200, 50)
         self.cancel_button.clicked.connect(self.close)
-        self._set_button_style(self.cancel_button, "#f44336", "#d32f2f", "#b71c1c", "#aaaaaa")
-
-    def _set_button_style(self, button, color, hover, pressed, disabled):
-        button.setStyleSheet(f"""
-            QPushButton {{
-                font-size: 16px;
-                padding: 10px;
-                background-color: {color};
-                color: white;
-                border: none;
-                border-radius: 5px;
-            }}
-            QPushButton:hover {{ background-color: {hover}; }}
-            QPushButton:pressed {{ background-color: {pressed}; }}
-            QPushButton:disabled {{ background-color: {disabled}; color: #666666; }}
-        """)
-
-    def _check_required_fields(self):
-        all_filled = all(self.input_fields[name].text().strip()
-                         for name in self.required_fields)
-        self.submit_button.setEnabled(all_filled)
-
-    def _load_existing_data(self):
-        try:
-            # data_from_file contiendra les clés au format "participant_nom", "participant_age", etc.
-            # et "participant_image_path" si une image est définie.
-            # image_file_path sera la valeur de "participant_image_path" ou None.
-            data_from_file, image_file_path = load_metadata(self.subject_file)
-            
-            if not data_from_file:
-                print(f"Avertissement : Aucune métadonnée de participant n'a été chargée depuis {self.subject_file}")
-                # Optionnel: Afficher un message à l'utilisateur si aucune donnée n'est trouvée
-                # QMessageBox.warning(self, "Chargement des données", f"Aucune métadonnée de participant trouvée dans le fichier {os.path.basename(self.subject_file)}.")
-
-            for field_display_key, widget in self.input_fields.items():
-                # field_display_key est "Name", "Last Name", "Age", "Weight (kg)", etc.
-                # Construire la clé attendue dans data_from_file (ex: "participant_name")
-                normalized_participant_key = f"participant_{field_display_key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
-                
-                if normalized_participant_key in data_from_file:
-                    value_to_set = data_from_file[normalized_participant_key]
-                    if isinstance(widget, QLineEdit):
-                        widget.setText(str(value_to_set))
-                    elif isinstance(widget, QTextEdit): # Pour le champ "Description"
-                        widget.setPlainText(str(value_to_set))
-
-            # Gérer le chemin de l'image. `image_file_path` est directement retourné par `load_metadata`
-            # et correspond à `data_from_file.get("participant_image_path")`
-            if image_file_path and os.path.exists(image_file_path):
-                self.image_area.load_image(image_file_path)
-            # else:
-                # self.image_area.clear_image() # Option pour réinitialiser si aucun chemin d'image
-
-            self._check_required_fields() # Mettre à jour l'état des boutons, etc.
-        except Exception as e:
-            import traceback
-            error_message = f"Erreur lors du chargement des données dans le formulaire : {str(e)}\n\n{traceback.format_exc()}"
-            QMessageBox.critical(self, "Erreur de chargement", error_message)
-            print(error_message)
-
-    def _get_form_data(self):
-        print("Collecting form data...")
-        """Helper method to collect and validate form data."""
-        for name in self.required_fields:
-            if not self.input_fields[name].text().strip():
-                QMessageBox.warning(self, "Missing Field", f"Please fill in '{name}'")
-                return None, False
-
-        data = {}
-        for key, widget in self.input_fields.items():
-            data[key] = widget.text() if isinstance(widget, QLineEdit) else widget.toPlainText()
-
-        image_path = self.image_area.get_image_path()
-        if image_path:
-            data["image_path"] = image_path
-
-        data["collection_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print("C'est bon !")
-        print(data)
-        return data, True
-
-    def _collect_data(self):
-        data, is_valid = self._get_form_data()
-        if not is_valid:
-            return
-
-        success = True
-        if self.subject_file:
-            success = save_metadata(self.subject_file, data)
-
-        if success:
-            QMessageBox.information(self, "Saved", "Information saved successfully.")
-            self.info_submitted.emit(data)
-            if self.review_mode:
-                for widget in QApplication.topLevelWidgets():
-                        if widget is not self:
-                            widget.close()
-                self.close() # Close InformationWindow if experimenter input is cancelled
-
-                review = Review(self, self.subject_file)
-                review.show()
-                return
-            else:
-                self.hide()
-                # Create and execute ExperimenterDialog
-                # Pass self.parent() which could be the main window or None
-                self.exp_dialog = ExperimenterDialog(self.parent())
-                self.exp_dialog.experimenter_name_submitted.connect(self._launch_dashboard_after_experimenter_input)
-                self.exp_dialog.closeEvent = self.parent().main_bar._save_and_saveas_closed() 
-                self.parent().modified = False
-                
-                # exec_() will show the dialog and block until it's closed
-                if self.exp_dialog.exec_() == QDialog.Accepted:
-                    # If accepted, _launch_dashboard_after_experimenter_input has been called
-                    # and it will handle closing InformationWindow (self.accept())
-                    pass
-                else:
-                    # ExperimenterDialog was cancelled or closed without submitting
-                    self.close() # Close InformationWindow if experimenter input is cancelled
-        else:
-            QMessageBox.critical(self, "Error", "Failed to save the information.")
+        self.information_back._set_button_style(self.cancel_button, "#f44336", "#d32f2f", "#b71c1c", "#aaaaaa")
 
     def _collect_data_notsave(self):
-        data, is_valid = self._get_form_data()
+        data, is_valid = self.information_back._get_form_data()
         if not is_valid:
             return
 
-        # The original _collect_data_notsave also saved metadata if subject_file exists.
-        # We keep this behavior. If it's truly "notsave", this part should be removed.
-        success = True
         if self.subject_file:
-            success = save_metadata(self.subject_file, data)
+            # Here you can add any logic that needs to be executed when collecting data without saving
+            pass
 
-        if success:
-            QMessageBox.information(self, "Saved", "Information saved successfully.")
-            # Original _collect_data_notsave also emitted info_submitted.
-            # If this method is just for saving without triggering the full workflow,
-            # this emission might need reconsideration based on its usage in main_window.py
-            self.info_submitted.emit(data)
-        else:
-            QMessageBox.critical(self, "Error", "Failed to save the information.")
-
-    def _launch_dashboard_after_experimenter_input(self, experimenter_name):
-        """Launches the DashboardApp after experimenter name is submitted."""
-        # experimenter_name is available here if needed for the dashboard
-        # For now, we just launch the dashboard.
-
-        # Store the dashboard instance on self to prevent garbage collection if it's not a top-level window by default
-        # QMainWindow instances usually manage their own lifecycle when shown.
-        self.dashboard_instance = DashboardApp()
-        self.dashboard_instance.showMaximized()
-
-        # Close each top-level widget except the dashboard instance
-        top_level_widgets = QApplication.topLevelWidgets()
-        for widget in top_level_widgets:
-            if widget != self.dashboard_instance:
-                widget.close()
-
-        # Optionally, you can bring the dashboard to the front
-        self.dashboard_instance.activateWindow()
-
-def createInformationWindow(parent=None, subject_file=None):
-    return InformationWindow(parent, subject_file)
+        QMessageBox.information(self, "Data Collected", "Data collected successfully without saving.")
+        self.info_submitted.emit(data)

@@ -7,11 +7,12 @@ import os
 from datetime import datetime
 from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata
+from UI.back.main_window_back import MainAppBack
 
 class MainBar:
     def __init__(self, main_app):
         self.main_app = main_app
-
+        self.main_app_back = MainAppBack(self.main_app)
 
     def create_new_subject(self):
         """Creates a new subject file and opens information window"""
@@ -58,7 +59,7 @@ class MainBar:
 
                 # Display information window to collect metadata
                 self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file)
-                self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
+                self.main_app.info_window.info_submitted.connect(self.main_app_back.update_subject_metadata)
                 self.create_subject_action.setEnabled(False)
                 self.load_subject_action.setEnabled(False)
                 self.load_existing_trial.setEnabled(False)
@@ -76,7 +77,7 @@ class MainBar:
                 self.main_app.info_window.show()
 
             except Exception as e:
-                self.main_app._show_error(f"Error creating subject file: {str(e)}")
+                self.main_app_back._show_error(f"Error creating subject file: {str(e)}")
 
     # Add other methods of MainBar here
 
@@ -121,7 +122,7 @@ class MainBar:
                             pass
 
                         self.main_app.info_window = InformationWindow(self.main_app, self.main_app.current_subject_file, review)
-                        self.main_app.info_window.info_submitted.connect(self.main_app.update_subject_metadata)
+                        self.main_app.info_window.info_submitted.connect(self.main_app_back.update_subject_metadata)
                         self.create_subject_action.setEnabled(False)
                         self.load_subject_action.setEnabled(False)
                         self.load_existing_trial.setEnabled(False)
@@ -139,11 +140,11 @@ class MainBar:
                         self.main_app.info_window.show()
 
                     else:
-                        self.main_app._show_error("Not a valid subject file. Missing required attributes.")
+                        self.main_app_back._show_error(self.main_app,"Not a valid subject file. Missing required attributes.")
                         return
 
             except Exception as e:
-                self.main_app._show_error(f"Error loading subject file: {str(e)}")
+                self.main_app_back._show_error(self.main_app,f"Error loading subject file: {str(e)}")
                 return
     
 
@@ -162,7 +163,7 @@ class MainBar:
             self.main_app.statusBar().showMessage(f"Saved to {os.path.basename(self.main_app.current_subject_file)}")
             return True
         except Exception as e:
-            self.main_app._show_error(f"Error saving subject: {str(e)}")
+            self.main_app_back._show_error(self.main_app,f"Error saving subject: {str(e)}")
             return False
 
     def save_subject_notsave(self):
@@ -177,7 +178,7 @@ class MainBar:
             self.main_app.statusBar().showMessage(f"Saved to {os.path.basename(self.main_app.current_subject_file)}")
             return True
         except Exception as e:
-            self.main_app._show_error(f"Error saving subject: {str(e)}")
+            self.main_app_back._show_error(self.main_app,f"Error saving subject: {str(e)}")
             return False
 
     def save_subject_as(self):
@@ -314,7 +315,7 @@ class MainBar:
                 metadata_dialog.exec_()
 
         except Exception as e:
-            self.main_app._show_error(f"Error displaying metadata: {str(e)}")
+            self.main_app_back._show_error(self.main_app,f"Error displaying metadata: {str(e)}")
 
     def show_about_dialog(self):
         """Show information about the software"""

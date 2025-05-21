@@ -10,6 +10,7 @@ from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata
 from utils.Menu_bar import MainBar
 from utils.style import _apply_styles
+from UI.back.main_window_back import MainAppBack
 
 class MainApp(QMainWindow):
     def __init__(self):
@@ -26,6 +27,7 @@ class MainApp(QMainWindow):
         self.setWindowTitle("Data Monitoring Software")
         self.setGeometry(50, 50, 1600, 900)  # More reasonable size
         self._setup_ui()
+        self.main_app_back = MainAppBack(self)
 
         # Create an instance of MainBar and pass self (MainApp instance)
         self.main_bar = MainBar(self)
@@ -37,7 +39,7 @@ class MainApp(QMainWindow):
 
         # Timer for auto-save (every 5 minutes)
         self.autosave_timer = QTimer()
-        self.autosave_timer.timeout.connect(self._autosave)
+        self.autosave_timer.timeout.connect(self.main_app_back._autosave)
         self.autosave_timer.start(300000)  # 5 minutes in milliseconds
 
         # Initialize actions
@@ -149,51 +151,3 @@ class MainApp(QMainWindow):
         self.progress_bar.setVisible(False)
         self.statusBar().addPermanentWidget(self.progress_bar)
 
-    def _show_error(self, message):
-        """Display an error message"""
-        QMessageBox.critical(self, "Error", message)
-        print(f"ERROR: {message}")
-
-    def _autosave(self):
-        """Automatically save current work if modified"""
-        if self.modified and self.current_subject_file:
-            try:
-                # Perform actual save operation
-                self.main_bar.save_subject()
-
-                # Update status bar with autosave info
-                self.statusBar().showMessage(f"Auto-saved to {os.path.basename(self.current_subject_file)}", 3000)
-
-                print(f"Auto-saved at {datetime.now().strftime('%H:%M:%S')}")
-            except Exception as e:
-                print(f"Error during auto-save: {str(e)}")
-
-    def update_subject_metadata(self, metadata):
-        """Update the subject metadata based on information provided"""
-        if not self.current_subject_file:
-            print("Error: No subject file is currently open")
-            return
-
-        try:
-            # Save metadata to the current file
-            save_metadata(self.current_subject_file, metadata)
-
-            # Update UI components if needed
-            self.modified = True
-
-            # Update status bar
-            self.statusBar().showMessage(f"Subject metadata updated for: {os.path.basename(self.current_subject_file)}")
-
-            # Additional processing if needed
-            if 'Name' in metadata and 'Last Name' in metadata:
-                subject_name = f"{metadata['Name']} {metadata['Last Name']}"
-                print(f"Subject information updated for: {subject_name}")
-                print(self.current_subject_file)
-
-            # The subject has been created, so we can enable relevant actions
-            self.main_bar.save_subject_action.setEnabled(True)
-            self.main_bar.save_subject_as_action.setEnabled(True)
-            self.main_bar.show_metadata_action.setEnabled(True)
-
-        except Exception as e:
-            self._show_error(f"Error updating subject metadata: {str(e)}")
