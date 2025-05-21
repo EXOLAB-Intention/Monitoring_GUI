@@ -1,109 +1,32 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 '''
-<<<<<<< HEAD
 Fix the issue where IMU sensors do not appear in the 2D Plot after pressing record stop and being in the plot mode by sensor group.
 '''
 import sys
 import os
 import numpy as np # Kept for np.zeros, np.roll
-=======
-Regler le probleme des capteur IMU qui ne saffiche pas dans le 2D Plot apres avoir appuyé sur record stop et en etant dans le mode plot par groupe de capteur
-'''
-import sys
-import os
-import numpy as np # Gardé pour np.zeros, np.roll
->>>>>>> parent of dd2313a (dash update opti)
-=======
-import sys
-import os
-import time
-import numpy as np
-import json
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
-import sys
-import os
-import time
-import numpy as np
-import json
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QComboBox, 
     QMessageBox, QRadioButton, QButtonGroup, QScrollArea
 )
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 from PyQt5.QtCore import Qt, QTimer # QThread, pyqtSignal are in the backend
 from PyQt5.QtGui import QColor, QBrush # QCursor is no longer directly used here
-=======
-from PyQt5.QtCore import Qt, QTimer # QThread, pyqtSignal sont dans le back
-from PyQt5.QtGui import QColor, QBrush # QCursor n'est plus utilisé directement ici
->>>>>>> parent of dd2313a (dash update opti)
-=======
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt5.QtGui import QColor, QBrush, QCursor
-from PyQt5.QtWidgets import QScrollArea
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt5.QtGui import QColor, QBrush, QCursor
-from PyQt5.QtWidgets import QScrollArea
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
 import pyqtgraph as pg
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 # Add the parent directory and backend folder to the path
-=======
-# Ajouter le chemin du répertoire parent et du dossier back
->>>>>>> parent of dd2313a (dash update opti)
-=======
-
-
-# Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
-
-
-# Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'back')))
 
 from plots.model_3d_viewer import Model3DWidget
 from plots.sensor_dialogue import SensorMappingDialog
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 # Import logic from the backend file
 from .back.dashboard_app_back import DashboardAppBack # EthernetServerThread, ClientInitThread are no longer directly used here
-=======
-# Importer la logique depuis le fichier back
-from .back.dashboard_app_back import DashboardAppBack # EthernetServerThread, ClientInitThread ne sont plus utilisés directement ici
->>>>>>> parent of dd2313a (dash update opti)
-=======
-=======
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-# Supprimer l'importation du simulateur et ajouter les imports nécessaires pour Ethernet
-# from data_generator.sensor_simulator import SensorSimulator
-import socket
-import struct
-import threading
-from utils.ethernet_receiver import recv_all, decode_packet, decode_config
-<<<<<<< HEAD
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
 
 
 class DashboardApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        # Style global de l'application
+        # Global application style
         self.setStyleSheet("""
             QMainWindow, QDialog {
                 background-color: #f5f5f5;
@@ -259,19 +182,10 @@ class DashboardApp(QMainWindow):
         self.config_button = QPushButton("Configure Sensor Mapping")
         self.config_button.setStyleSheet("font-size: 14px; padding: 8px 20px;")
         self.config_button.clicked.connect(self.open_sensor_mapping_dialog)
+        self.config_button.setEnabled(False)  # Disable the button by default
         right_panel.addWidget(self.config_button)
         self.default_config_button = QPushButton("Set Up Default Assignments")
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
         # Button styles (multi-line escaped strings)
-=======
-        # Styles des boutons (chaînes multilignes échappées)
->>>>>>> parent of dd2313a (dash update opti)
-=======
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
         self.default_config_button.setStyleSheet("""
             QPushButton {
                 background-color: #9C27B0;
@@ -293,6 +207,30 @@ class DashboardApp(QMainWindow):
         """)
         self.default_config_button.clicked.connect(self.setup_default_mappings)
         right_panel.addWidget(self.default_config_button)
+        
+        # Add a button for smart movement
+        self.motion_prediction_button = QPushButton("Enable Smart Movement")
+        self.motion_prediction_button.setStyleSheet("""
+            QPushButton {
+                background-color: #9C27B0;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #8E24AA;
+            }
+            QPushButton:pressed {
+                background-color: #7B1FA2;
+            }
+        """)
+        self.motion_prediction_button.clicked.connect(self.toggle_motion_prediction)
+        right_panel.addWidget(self.motion_prediction_button)
 
         content_layout.addLayout(left_panel, stretch=1)
         content_layout.addLayout(middle_panel, stretch=4)
@@ -583,10 +521,6 @@ class DashboardApp(QMainWindow):
             if plot_widget.legend is None: plot_widget.addLegend()
             self.highlight_sensor_item(sensor_name_base)
         else:
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
             if sensor_name_base in self.plots:
                 plot_widget = self.plots[sensor_name_base]
                 plot_widget.clear()
@@ -628,7 +562,6 @@ class DashboardApp(QMainWindow):
             for axis_l in ['w', 'x', 'y', 'z']:
                 self.backend.plot_data[f"{sensor_name_base}_{axis_l}"] = np.zeros(100)
         else:
->>>>>>> parent of dd2313a (dash update opti)
             self.backend.plot_data[sensor_name_base] = np.zeros(100)
         self.highlight_sensor_item(sensor_name_base)
         if is_group_mode_imu: self.highlighted_sensors.add(sensor_name_base)
@@ -745,11 +678,7 @@ class DashboardApp(QMainWindow):
                 if plot_widget.legend is None and self.backend.group_plot_data.get(group_type): plot_widget.addLegend()
 
     def on_display_mode_changed(self, button_clicked=None):
-<<<<<<< HEAD
         # button_clicked is not always provided, rely on isChecked()
-=======
-        # button_clicked n'est pas toujours fourni, se fier à isChecked()
->>>>>>> parent of dd2313a (dash update opti)
         is_now_single_mode = self.single_sensor_mode.isChecked()
         is_now_group_mode = self.group_sensor_mode.isChecked()
 
@@ -817,21 +746,6 @@ class DashboardApp(QMainWindow):
                 sensor_item = group_item.child(j_find_item_sensor)
                 if sensor_item.text(0).startswith(sensor_name_base): return sensor_item
         return None
-=======
-=======
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-            # Vérifier si nous sommes connectés à un dispositif
-            if not self.client_socket and not self.is_server_running:
-                QMessageBox.warning(self, "Not Connected", 
-                                   "Please connect to a device before starting recording.")
-                return
-                
-            if self.record_button.isEnabled():
-                self.start_recording()
-<<<<<<< HEAD
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
 
     def toggle_animation(self):
         is_walking = self.model_3d_widget.toggle_animation()
@@ -861,49 +775,14 @@ class DashboardApp(QMainWindow):
         if self._animation_step_counter_val >= self._anim_steps_count: self._reset_view_timer_obj.stop()
 
     def open_sensor_mapping_dialog(self):
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
         # Check if sensors are connected
         if not self.backend.sensor_config:
             QMessageBox.warning(self, "No Sensors", "Please connect sensors before configuring the mapping.")
             return
         
-=======
->>>>>>> parent of dd2313a (dash update opti)
         curr_maps = self.backend.get_current_mappings_for_dialog()
         dialog = SensorMappingDialog(self, curr_maps)
         dialog.mappings_updated.connect(self.backend.update_sensor_mappings)
-=======
-        """Ouvrir le dialogue de configuration des capteurs"""
-        # Récupérer les mappages actuels
-        current_mappings = {
-            'EMG': getattr(self, 'emg_mappings', {}), 
-            'IMU': self.model_3d_widget.get_current_mappings(),
-            'pMMG': getattr(self, 'pmmg_mappings', {})
-        }
-
-        dialog = SensorMappingDialog(self, current_mappings)
-        
-        # Connecter le signal aux méthodes de mise à jour
-        dialog.mappings_updated.connect(self.update_sensor_mappings)
-        
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
-        """Ouvrir le dialogue de configuration des capteurs"""
-        # Récupérer les mappages actuels
-        current_mappings = {
-            'EMG': getattr(self, 'emg_mappings', {}), 
-            'IMU': self.model_3d_widget.get_current_mappings(),
-            'pMMG': getattr(self, 'pmmg_mappings', {})
-        }
-
-        dialog = SensorMappingDialog(self, current_mappings)
-        
-        # Connecter le signal aux méthodes de mise à jour
-        dialog.mappings_updated.connect(self.update_sensor_mappings)
-        
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
         dialog.exec_()
 
     def refresh_sensor_tree_with_mappings(self, emg_mappings, pmmg_mappings):
@@ -932,9 +811,6 @@ class DashboardApp(QMainWindow):
         return {'head': 'Head', 'neck': 'Neck', 'torso': 'Torso'}.get(model_part_name, model_part_name.replace('_', ' ').title())
 
     def setup_default_mappings(self):
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
         # Check if sensors are connected
         if not self.backend.sensor_config:
             QMessageBox.warning(self, "No Sensors", "Please connect sensors before configuring the mapping.")
@@ -944,59 +820,8 @@ class DashboardApp(QMainWindow):
         dialog_def = SensorMappingDialog(self, curr_maps_def)
         dialog_def.mappings_updated.connect(self.backend.save_as_default_mappings)
         QMessageBox.information(self, "Default Assignments Setup", "Configure sensor mappings...\nThese will be saved as default.")
-=======
-        curr_maps_def = self.backend.get_current_mappings_for_dialog()
-        dialog_def = SensorMappingDialog(self, curr_maps_def)
-        dialog_def.mappings_updated.connect(self.backend.save_as_default_mappings)
-        QMessageBox.information(self, "Default Assignments Setup", "Configure sensor mappings...\
-These will be saved as default.")
->>>>>>> parent of dd2313a (dash update opti)
         dialog_def.exec_()
-=======
-=======
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-        """Permet à l'utilisateur de définir ses propres assignations par défaut"""
-        # Récupérer les mappages actuels
-        current_mappings = {
-            'EMG': getattr(self, 'emg_mappings', {}), 
-            'IMU': self.model_3d_widget.get_current_mappings(),
-            'pMMG': getattr(self, 'pmmg_mappings', {})
-<<<<<<< HEAD
-=======
-        }
 
-        # Afficher un dialogue pour configurer les mappages par défaut
-        dialog = SensorMappingDialog(self, current_mappings)
-        
-        # Connecter le signal pour mettre à jour les mappages
-        dialog.mappings_updated.connect(self.save_as_default_mappings)
-        
-        # Afficher un message pour expliquer la fonction
-        QMessageBox.information(
-           
-            self, 
-            "Default Assignments Setup",
-            "Configure your sensor mappings as you prefer.\n"
-            "These settings will be saved as the default configuration for future use."
-        )
-        
-        dialog.exec_()
-
-    def save_as_default_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
-        """Sauvegarder les mappages actuels comme configuration par défaut"""
-        # Mettre à jour les mappages actuels
-        self.update_sensor_mappings(emg_mappings, imu_mappings, pmmg_mappings)
-        
-        # Sauvegarder les mappages comme configuration par défaut
-        default_mappings = {
-            'EMG': emg_mappings,
-            'IMU': imu_mappings,
-            'pMMG': pmmg_mappings
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-        }
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-
-<<<<<<< HEAD
     def apply_imu_mappings(self, imu_mappings_apply):
         for imu_id_apply, body_part_apply in imu_mappings_apply.items():
             self.model_3d_widget.map_imu_to_body_part(int(imu_id_apply), body_part_apply)
@@ -1006,9 +831,7 @@ These will be saved as default.")
         self.backend.cleanup_on_close()
         event_close.accept()
 
-<<<<<<< HEAD
     def toggle_motion_prediction(self):
-<<<<<<< HEAD
         """Enable or disable smart movement prediction."""
         # Change button appearance during processing
         self.motion_prediction_button.setEnabled(False)
@@ -1026,22 +849,10 @@ These will be saved as default.")
                 min-width: 120px;
             }
         """)
-=======
-    def closeEvent(self, event):
-        """Called when the application is closed"""
-        self.save_mappings()  # Sauvegarder les mappages à la fermeture
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
-    def closeEvent(self, event):
-        """Called when the application is closed"""
-        self.save_mappings()  # Sauvegarder les mappages à la fermeture
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
         
-        # Nettoyer les ressources du serveur Ethernet
-        self.stop_ethernet_server()
+        # Allow UI to refresh
+        QApplication.processEvents()
         
-<<<<<<< HEAD
-<<<<<<< HEAD
         # Perform the action
         is_enabled = self.model_3d_widget.toggle_motion_prediction()
         
@@ -1090,18 +901,6 @@ These will be saved as default.")
             """)
         
         self.motion_prediction_button.setEnabled(True)
-=======
-        """Active ou désactive la prédiction intelligente des mouvements."""
-        is_enabled = self.model_3d_widget.toggle_motion_prediction()
-        self.motion_prediction_button.setText(
-            "Disable Smart Movement" if is_enabled else "Enable Smart Movement")
->>>>>>> parent of dd2313a (dash update opti)
-=======
-        event.accept()
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
-=======
-        event.accept()
->>>>>>> parent of 3b28475 (Merge branch 'main' of https://github.com/EXOLAB-Intention/Monitoring_GUI)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
