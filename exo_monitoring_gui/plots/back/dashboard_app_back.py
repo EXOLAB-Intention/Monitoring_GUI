@@ -10,10 +10,10 @@ import socket
 import struct
 import threading
 
-# Add the parent directory of data_generator to PYTHONPATH
+# Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from utils.ethernet_receiver import recv_all, decode_packet
-from plots.model_3d_viewer import Model3DWidget # Keep for 3D logic
+from plots.model_3d_viewer import Model3DWidget # Garder pour la logique 3D
 
 class EthernetServerThread(QThread):
     connection_ready = pyqtSignal(tuple)
@@ -86,7 +86,7 @@ class ClientInitThread(QThread):
             total_ids = len_pmmg + len_fsr + len_imu + len_emg
             id_bytes = recv_all(self.client_socket, total_ids)
             crc_bytes = recv_all(self.client_socket, 4)
-            # recv_crc = struct.unpack('>I', crc_bytes)[0] # CRC not used for now
+            # recv_crc = struct.unpack('>I', crc_bytes)[0] # CRC non utilisé pour l'instant
             
             offset = 0
             pmmg_ids = list(id_bytes[offset:offset+len_pmmg]); offset += len_pmmg
@@ -100,9 +100,9 @@ class ClientInitThread(QThread):
                 for i in range(num_imus):
                     imu_id = raw_imu_ids[i*4]
                     imu_ids.append(imu_id)
-                    print(f"[INFO] IMU {i+1} detected with ID {imu_id} (components w,x,y,z)")
+                    print(f"[INFO] IMU {i+1} détecté avec ID {imu_id} (composantes w,x,y,z)")
             else:
-                print("[INFO] No IMU detected")
+                print("[INFO] Aucun IMU détecté")
 
             sensor_config = {
                 'pmmg_ids': pmmg_ids,
@@ -140,7 +140,7 @@ class ClientInitThread(QThread):
 
 class DashboardAppBack:
     def __init__(self, ui):
-        self.ui = ui  # Reference to the user interface (DashboardApp)
+        self.ui = ui  # Référence à l'interface utilisateur (DashboardApp)
         self.server_thread = None
         self.client_socket = None
         self.sensor_config = None
@@ -155,12 +155,12 @@ class DashboardAppBack:
         }
         self.emg_mappings = {}
         self.pmmg_mappings = {}
-        self.plot_data = {} # For real-time data of individual plots
-        self.group_plot_data = {} # For real-time data of grouped plots
+        self.plot_data = {} # Pour les données en temps réel des graphiques individuels
+        self.group_plot_data = {} # Pour les données en temps réel des graphiques groupés
 
-        self.timer = QTimer() # No self.ui here, QTimer does not need a direct parent to work
+        self.timer = QTimer() # Pas de self.ui ici, QTimer n'a pas besoin d'un parent direct pour fonctionner
         self.timer.timeout.connect(self.update_data)
-        # self.timer.start(40) # Timer start will be managed by the UI
+        # self.timer.start(40) # Le démarrage du timer sera géré par l'UI
 
     def connect_sensors(self):
         if not self.is_server_running:
@@ -177,7 +177,7 @@ class DashboardAppBack:
         else:
             self.stop_ethernet_server()
             self.ui.connect_button.setText("Connect")
-            self.ui.reset_sensor_display() # UI handles tree update
+            self.ui.reset_sensor_display() # L'UI gère la mise à jour de l'arbre
 
     def on_server_started(self):
         self.is_server_running = True
@@ -199,7 +199,7 @@ class DashboardAppBack:
         self.sensor_config = sensor_config
         self.packet_size = packet_size
         
-        self.ui.update_sensor_tree_from_config(self.sensor_config) # UI updates the tree
+        self.ui.update_sensor_tree_from_config(self.sensor_config) # L'UI met à jour l'arbre
         
         num_imus = self.sensor_config.get('num_imus', 0)
         self.recorded_data["IMU"] = [[] for _ in range(max(1, num_imus))]
@@ -208,17 +208,12 @@ class DashboardAppBack:
         self.ui.connect_button.setEnabled(True)
         self.ui.record_button.setEnabled(True)
         
-        # Enable configuration buttons
-        self.ui.config_button.setEnabled(True)
-        self.ui.default_config_button.setEnabled(True)
-        
         len_emg = len(self.sensor_config.get('emg_ids', []))
         num_imus = self.sensor_config.get('num_imus', 0)
         len_pmmg = len(self.sensor_config.get('pmmg_ids', []))
         
-        # Show connection success message
         QMessageBox.information(self.ui, "Connection Success", 
-                               f"Connected to device! Detected {len_emg} EMG, {num_imus} IMU, {len_pmmg} pMMG.")
+                               f"Connecté au dispositif ! Détecté {len_emg} EMG, {num_imus} IMU, {len_pmmg} pMMG.")
 
     def on_client_init_error(self, error_msg):
         print(f"[ERROR] {error_msg}")
@@ -255,11 +250,6 @@ class DashboardAppBack:
         self.is_server_running = False
         self.sensor_config = None
         self.packet_size = 0
-        
-        # Disable configuration buttons when disconnected
-        self.ui.config_button.setEnabled(False)
-        self.ui.default_config_button.setEnabled(False)
-        
         print("[INFO] Ethernet server stopped.")
         self.ui.reset_sensor_display()
 
@@ -286,7 +276,7 @@ class DashboardAppBack:
                     else:
                         self.corrupted_packets_count = 0
 
-                    # Recording data
+                    # Enregistrement des données
                     if 'emg' in packet and packet['emg']:
                         for i, emg_id in enumerate(self.sensor_config.get('emg_ids', [])):
                             if i < len(packet['emg']) and i < len(self.recorded_data["EMG"]):
@@ -308,13 +298,13 @@ class DashboardAppBack:
                                 if self._is_valid_quaternion(quaternion):
                                     self.recorded_data["IMU"][i].append(quaternion)
                                     try:
-                                        # Updating the 3D model must be done via the UI
+                                        # La mise à jour du modèle 3D doit se faire via l'UI
                                         self.ui.model_3d_widget.apply_imu_data(imu_id, quaternion)
                                     except Exception as e:
                                         print(f"Error updating 3D model: {e}")
                     
-                    # Updating plots (handled by the UI)
-                    self.ui.update_live_plots(packet) # New method in the UI
+                    # Mise à jour des graphiques (gérée par l'UI)
+                    self.ui.update_live_plots(packet) # Nouvelle méthode dans l'UI
                                         
                 except ConnectionResetError:
                     print("[ERROR] Connection reset by peer.")
@@ -343,20 +333,20 @@ class DashboardAppBack:
             if not isinstance(value, (int, float)) or abs(value) > 10.0: return True
         for i, quaternion in enumerate(packet.get('imu', [])):
             if not self._is_valid_quaternion(quaternion):
-                print(f"[DEBUG] IMU {i} invalid quaternion: {quaternion}")
+                print(f"[DEBUG] IMU {i} quaternion invalide: {quaternion}")
                 return True
         return False
         
     def _is_valid_quaternion(self, quaternion):
         if not isinstance(quaternion, (list, tuple)) or len(quaternion) != 4:
-            print(f"[DEBUG] Invalid quaternion format: {type(quaternion)}, length: {len(quaternion) if hasattr(quaternion, '__len__') else 'N/A'}")
+            print(f"[DEBUG] Format quaternion invalide: {type(quaternion)}, longueur: {len(quaternion) if hasattr(quaternion, '__len__') else 'N/A'}")
             return False
         for i, component in enumerate(quaternion):
             if not isinstance(component, (int, float)):
-                print(f"[DEBUG] Component {i} not numeric: {type(component)}")
+                print(f"[DEBUG] Composante {i} non numérique: {type(component)}")
                 return False
             if abs(component) > 100.0:
-                print(f"[DEBUG] Outlier value in quaternion: component {i} = {component}")
+                print(f"[DEBUG] Valeur aberrante dans quaternion: composante {i} = {component}")
                 return False
         return True
 
@@ -366,7 +356,7 @@ class DashboardAppBack:
         
         num_imus = self.sensor_config.get('num_imus', 0) if self.sensor_config else 0
         if num_imus == 0:
-            print("[WARNING] No IMU detected, initializing with 1 default IMU")
+            print("[WARNING] Aucun IMU détecté, initialisation avec 1 IMU par défaut")
             num_imus = 1
             
         self.recorded_data = {
@@ -375,23 +365,23 @@ class DashboardAppBack:
             "pMMG": [[] for _ in range(8)]
         }
         
-        print(f"[INFO] Starting recording with {num_imus} IMUs")
+        print(f"[INFO] Début de l'enregistrement avec {num_imus} IMUs")
         self.ui.record_button.setText("Record Stop")
-        self.timer.start(40) # Start the timer here
+        self.timer.start(40) # Démarrer le timer ici
 
     def stop_recording(self):
         self.recording = False
         self.recording_stopped = True
-        self.timer.stop() # Stop the timer here
+        self.timer.stop() # Arrêter le timer ici
         self.ui.record_button.setText("Record Start")
         self.ui.record_button.setStyleSheet("""
         QPushButton {
             background-color: #4caf50; /* ... styles ... */
         } 
-        /* ... other styles ... */
-        """) # Full style is in the UI
+        /* ... autres styles ... */
+        """) # Le style complet est dans l'UI
         self.ui.record_button.setEnabled(False)
-        self.ui.show_recorded_data_on_plots(self.recorded_data) # UI handles display
+        self.ui.show_recorded_data_on_plots(self.recorded_data) # L'UI gère l'affichage
 
     def toggle_recording(self):
         if self.recording:
@@ -401,12 +391,12 @@ class DashboardAppBack:
                 QMessageBox.warning(self.ui, "Not Connected", 
                                    "Please connect to a device before starting recording.")
                 return
-            if self.ui.record_button.isEnabled(): # Check if the button is active in the UI
+            if self.ui.record_button.isEnabled(): # Vérifier si le bouton est actif dans l'UI
                 self.start_recording()
 
-    # Mapping management methods (save, load, default) remain here as they are purely logical
+    # Les méthodes de gestion des mappings (save, load, default) restent ici car elles sont purement logiques
     def save_mappings(self):
-        # Use self.ui.model_3d_widget to access IMU mappings
+        # Utiliser self.ui.model_3d_widget pour accéder aux mappings IMU
         mappings = {
             'EMG': self.emg_mappings,
             'IMU': self.ui.model_3d_widget.get_current_mappings(),
@@ -416,7 +406,7 @@ class DashboardAppBack:
         for sensor_type, mapping in mappings.items():
             serializable_mappings[sensor_type] = {str(k): v for k, v in mapping.items()}
         
-        filepath = os.path.join(os.path.dirname(__file__), '../sensor_mappings.json') # Adjust path
+        filepath = os.path.join(os.path.dirname(__file__), '../sensor_mappings.json') # Ajuster le chemin
         try:
             with open(filepath, 'w') as f:
                 json.dump(serializable_mappings, f, indent=2)
@@ -426,7 +416,7 @@ class DashboardAppBack:
 
 
     def load_mappings(self):
-        filepath = os.path.join(os.path.dirname(__file__), '../sensor_mappings.json') # Adjust path
+        filepath = os.path.join(os.path.dirname(__file__), '../sensor_mappings.json') # Ajuster le chemin
         if os.path.exists(filepath):
             try:
                 with open(filepath, 'r') as f:
@@ -438,11 +428,11 @@ class DashboardAppBack:
                     self.pmmg_mappings = {int(k): v for k, v in mappings['pMMG'].items()}
                     
                 if 'IMU' in mappings:
-                    # Updating the 3D model must go through the UI
+                    # La mise à jour du modèle 3D doit passer par l'UI
                     self.ui.apply_imu_mappings({int(k): v for k, v in mappings['IMU'].items()})
 
-                # Ask the UI to refresh the sensor tree
-                self.ui.refresh_sensor_tree_with_mappings(self.emg_mappings, self.pmmg_mappings) # New method in the UI
+                # Demander à l'UI de rafraîchir l'arbre des capteurs
+                self.ui.refresh_sensor_tree_with_mappings(self.emg_mappings, self.pmmg_mappings) # Nouvelle méthode dans l'UI
                 print(f"Mappings loaded from {filepath}")
                 return True
             except Exception as e:
@@ -450,14 +440,14 @@ class DashboardAppBack:
         return False
 
     def update_sensor_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
-        """Update sensor mappings after dialog closure"""
-        # Update IMU mappings via UI
+        """Mettre à jour les mappages de capteurs après fermeture du dialogue"""
+        # Mettre à jour les mappages IMU via l'UI
         self.ui.apply_imu_mappings(imu_mappings)
         
         self.emg_mappings = emg_mappings
         self.pmmg_mappings = pmmg_mappings
         
-        # Update mappings in 3D model via UI
+        # Mettre à jour les mappages dans le modèle 3D via l'UI
         self.ui.model_3d_widget.model_viewer.set_emg_mapping(emg_mappings)
         self.ui.model_3d_widget.model_viewer.set_pmmg_mapping(pmmg_mappings)
         
@@ -465,7 +455,6 @@ class DashboardAppBack:
         self.save_mappings()
 
     def get_current_mappings_for_dialog(self):
-        """Get current mappings for the sensor dialog"""
         return {
             'EMG': self.emg_mappings,
             'IMU': self.ui.model_3d_widget.get_current_mappings(),
@@ -473,7 +462,7 @@ class DashboardAppBack:
         }
 
     def save_as_default_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
-        self.update_sensor_mappings(emg_mappings, imu_mappings, pmmg_mappings) # Updates and saves current mappings
+        self.update_sensor_mappings(emg_mappings, imu_mappings, pmmg_mappings) # Met à jour et sauvegarde les mappings courants
         
         default_mappings = {
             'EMG': emg_mappings,
@@ -484,7 +473,7 @@ class DashboardAppBack:
         for sensor_type, mapping in default_mappings.items():
             serializable_mappings[sensor_type] = {str(k): v for k, v in mapping.items()}
         
-        filepath = os.path.join(os.path.dirname(__file__), '../default_sensor_mappings.json') # Adjust path
+        filepath = os.path.join(os.path.dirname(__file__), '../default_sensor_mappings.json') # Ajuster le chemin
         try:
             with open(filepath, 'w') as f:
                 json.dump(serializable_mappings, f, indent=2)
