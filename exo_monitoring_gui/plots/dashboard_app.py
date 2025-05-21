@@ -1,32 +1,32 @@
 '''
-Regler le probleme des capteur IMU qui ne saffiche pas dans le 2D Plot apres avoir appuyé sur record stop et en etant dans le mode plot par groupe de capteur
+Fix the issue where IMU sensors do not appear in the 2D Plot after pressing record stop and being in the plot mode by sensor group.
 '''
 import sys
 import os
-import numpy as np # Gardé pour np.zeros, np.roll
+import numpy as np # Kept for np.zeros, np.roll
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QComboBox, 
     QMessageBox, QRadioButton, QButtonGroup, QScrollArea
 )
-from PyQt5.QtCore import Qt, QTimer # QThread, pyqtSignal sont dans le back
-from PyQt5.QtGui import QColor, QBrush # QCursor n'est plus utilisé directement ici
+from PyQt5.QtCore import Qt, QTimer # QThread, pyqtSignal are in the backend
+from PyQt5.QtGui import QColor, QBrush # QCursor is no longer directly used here
 import pyqtgraph as pg
 
-# Ajouter le chemin du répertoire parent et du dossier back
+# Add the parent directory and backend folder to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'back')))
 
 from plots.model_3d_viewer import Model3DWidget
 from plots.sensor_dialogue import SensorMappingDialog
-# Importer la logique depuis le fichier back
-from .back.dashboard_app_back import DashboardAppBack # EthernetServerThread, ClientInitThread ne sont plus utilisés directement ici
+# Import logic from the backend file
+from .back.dashboard_app_back import DashboardAppBack # EthernetServerThread, ClientInitThread are no longer directly used here
 
 
 class DashboardApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        # Style global de l'application
+        # Global application style
         self.setStyleSheet("""
             QMainWindow, QDialog {
                 background-color: #f5f5f5;
@@ -182,9 +182,10 @@ class DashboardApp(QMainWindow):
         self.config_button = QPushButton("Configure Sensor Mapping")
         self.config_button.setStyleSheet("font-size: 14px; padding: 8px 20px;")
         self.config_button.clicked.connect(self.open_sensor_mapping_dialog)
+        self.config_button.setEnabled(False)  # Disable the button by default
         right_panel.addWidget(self.config_button)
         self.default_config_button = QPushButton("Set Up Default Assignments")
-        # Styles des boutons (chaînes multilignes échappées)
+        # Button styles (multi-line escaped strings)
         self.default_config_button.setStyleSheet("""
             QPushButton {
                 background-color: #9C27B0;
@@ -206,6 +207,30 @@ class DashboardApp(QMainWindow):
         """)
         self.default_config_button.clicked.connect(self.setup_default_mappings)
         right_panel.addWidget(self.default_config_button)
+        
+        # Add a button for smart movement
+        self.motion_prediction_button = QPushButton("Enable Smart Movement")
+        self.motion_prediction_button.setStyleSheet("""
+            QPushButton {
+                background-color: #9C27B0;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #8E24AA;
+            }
+            QPushButton:pressed {
+                background-color: #7B1FA2;
+            }
+        """)
+        self.motion_prediction_button.clicked.connect(self.toggle_motion_prediction)
+        right_panel.addWidget(self.motion_prediction_button)
 
         content_layout.addLayout(left_panel, stretch=1)
         content_layout.addLayout(middle_panel, stretch=4)
@@ -653,7 +678,7 @@ class DashboardApp(QMainWindow):
                 if plot_widget.legend is None and self.backend.group_plot_data.get(group_type): plot_widget.addLegend()
 
     def on_display_mode_changed(self, button_clicked=None):
-        # button_clicked n'est pas toujours fourni, se fier à isChecked()
+        # button_clicked is not always provided, rely on isChecked()
         is_now_single_mode = self.single_sensor_mode.isChecked()
         is_now_group_mode = self.group_sensor_mode.isChecked()
 
@@ -750,6 +775,11 @@ class DashboardApp(QMainWindow):
         if self._animation_step_counter_val >= self._anim_steps_count: self._reset_view_timer_obj.stop()
 
     def open_sensor_mapping_dialog(self):
+        # Check if sensors are connected
+        if not self.backend.sensor_config:
+            QMessageBox.warning(self, "No Sensors", "Please connect sensors before configuring the mapping.")
+            return
+        
         curr_maps = self.backend.get_current_mappings_for_dialog()
         dialog = SensorMappingDialog(self, curr_maps)
         dialog.mappings_updated.connect(self.backend.update_sensor_mappings)
@@ -781,11 +811,15 @@ class DashboardApp(QMainWindow):
         return {'head': 'Head', 'neck': 'Neck', 'torso': 'Torso'}.get(model_part_name, model_part_name.replace('_', ' ').title())
 
     def setup_default_mappings(self):
+        # Check if sensors are connected
+        if not self.backend.sensor_config:
+            QMessageBox.warning(self, "No Sensors", "Please connect sensors before configuring the mapping.")
+            return
+        
         curr_maps_def = self.backend.get_current_mappings_for_dialog()
         dialog_def = SensorMappingDialog(self, curr_maps_def)
         dialog_def.mappings_updated.connect(self.backend.save_as_default_mappings)
-        QMessageBox.information(self, "Default Assignments Setup", "Configure sensor mappings...\
-These will be saved as default.")
+        QMessageBox.information(self, "Default Assignments Setup", "Configure sensor mappings...\nThese will be saved as default.")
         dialog_def.exec_()
 
     def apply_imu_mappings(self, imu_mappings_apply):
@@ -798,10 +832,75 @@ These will be saved as default.")
         event_close.accept()
 
     def toggle_motion_prediction(self):
-        """Active ou désactive la prédiction intelligente des mouvements."""
+        """Enable or disable smart movement prediction."""
+        # Change button appearance during processing
+        self.motion_prediction_button.setEnabled(False)
+        self.motion_prediction_button.setText("Processing...")
+        self.motion_prediction_button.setStyleSheet("""
+            QPushButton {
+                background-color: #777777;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+        """)
+        
+        # Allow UI to refresh
+        QApplication.processEvents()
+        
+        # Perform the action
         is_enabled = self.model_3d_widget.toggle_motion_prediction()
-        self.motion_prediction_button.setText(
-            "Disable Smart Movement" if is_enabled else "Enable Smart Movement")
+        
+        # Update button appearance based on result
+        if is_enabled:
+            self.motion_prediction_button.setText("Smart Movement: ACTIVE")
+            self.motion_prediction_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #4CAF50;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    color: white;
+                    font-size: 14px;
+                    font-weight: 500;
+                    text-align: center;
+                    min-width: 120px;
+                }
+                QPushButton:hover {
+                    background-color: #43A047;
+                }
+                QPushButton:pressed {
+                    background-color: #388E3C;
+                }
+            """)
+        else:
+            self.motion_prediction_button.setText("Smart Movement: INACTIVE")
+            self.motion_prediction_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #9C27B0;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    color: white;
+                    font-size: 14px;
+                    font-weight: 500;
+                    text-align: center;
+                    min-width: 120px;
+                }
+                QPushButton:hover {
+                    background-color: #8E24AA;
+                }
+                QPushButton:pressed {
+                    background-color: #7B1FA2;
+                }
+            """)
+        
+        self.motion_prediction_button.setEnabled(True)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

@@ -16,25 +16,25 @@ class MappingBadgesWidget(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         
-        # Définir l'ordre anatomique des parties du corps (de la tête aux pieds)
+        # Define anatomical order of body parts (from head to feet)
         anatomical_order = [
-            # Tête et cou
+            # Head and neck
             'head', 'neck',
-            # Torse
+            # Torso
             'torso',
-            # Bras gauche
+            # Left arm
             'deltoid_l', 'biceps_l', 'forearm_l', 'dorsalis_major_l', 'pectorals_l', 'left_hand',
-            # Bras droit
+            # Right arm
             'deltoid_r', 'biceps_r', 'forearm_r', 'dorsalis_major_r', 'pectorals_r', 'right_hand',
-            # Bassin
+            # Pelvis
             'hip',
-            # Jambe gauche
+            # Left leg
             'glutes_l', 'quadriceps_l', 'ishcio_hamstrings_l', 'calves_l', 'left_foot',
-            # Jambe droite
+            # Right leg
             'glutes_r', 'quadriceps_r', 'ishcio_hamstrings_r', 'calves_r', 'right_foot'
         ]
         
-        # Fonction pour convertir le nom du modèle en nom UI plus lisible
+        # Function to convert model name to more readable UI name
         def get_display_name(part):
             part_names = {
                 'head': 'Head', 
@@ -66,21 +66,21 @@ class MappingBadgesWidget(QWidget):
             }
             return part_names.get(part, part.capitalize())
         
-        # Créer un dictionnaire regroupant les capteurs par partie du corps
+        # Create a dictionary grouping sensors by body part
         body_part_sensors = {}
         for sid, part in mappings.items():
             if part not in body_part_sensors:
                 body_part_sensors[part] = []
             body_part_sensors[part].append(sid)
         
-        # Ajouter les parties dans l'ordre anatomique
+        # Add parts in anatomical order
         for part in anatomical_order:
             if part in body_part_sensors:
                 h = QHBoxLayout()
                 part_label = QLabel(f"<b>{get_display_name(part)}</b>")
                 h.addWidget(part_label)
                 
-                # Ajouter les capteurs pour cette partie
+                # Add sensors for this part
                 for sid in sorted(body_part_sensors[part]):
                     typ = None
                     if str(sid).startswith("I"):
@@ -105,7 +105,7 @@ class MappingBadgesWidget(QWidget):
                 
                 layout.addLayout(h)
         
-        # Ajouter les parties qui ne sont pas dans notre ordre prédéfini (au cas où)
+        # Add parts not in predefined order (just in case)
         for part in body_part_sensors:
             if part not in anatomical_order:
                 h = QHBoxLayout()
@@ -140,21 +140,20 @@ class MappingBadgesWidget(QWidget):
 
     def _color(self, typ):
         return {
-            "IMU": "#00CC33",   # Vert comme dans model_3d_viewer.py
-            "EMG": "#CC3300",   # Rouge comme dans model_3d_viewer.py
-            "pMMG": "#0033CC"   # Bleu comme dans model_3d_viewer.py
+            "IMU": "#00CC33",   # Green as in model_3d_viewer.py
+            "EMG": "#CC3300",   # Red as in model_3d_viewer.py
+            "pMMG": "#0033CC"   # Blue as in model_3d_viewer.py
         }.get(typ, "#888")
 
 class SimplifiedMappingDialog(QDialog):
-    """Interface simplifiée avec onglets pour le mapping des capteurs"""
+    """Simplified interface with tabs for sensor mapping"""
     mappings_updated = pyqtSignal(dict, dict, dict)  # EMG, IMU, pMMG mappings
     
     def __init__(self, parent=None, current_mappings=None):
         super().__init__(parent)
-        self.setWindowTitle("Configuration des capteurs sur le modèle 3D")
-        # Augmenter significativement la taille de la fenêtre
-        self.resize(1200, 900)  # Augmenté de 1000x700 à 1200x900
-        self.setMinimumSize(1100, 800)  # Augmenté de 900x650 à 1100x800
+        self.setWindowTitle("Sensor Configuration on 3D Model")
+        self.resize(1200, 900)  # Increased from 1000x700 to 1200x900
+        self.setMinimumSize(1100, 800)  # Increased from 900x650 to 1100x800
         
         # Store current mappings
         self.current_mappings = current_mappings or {
@@ -190,7 +189,7 @@ class SimplifiedMappingDialog(QDialog):
         # Create tab widget
         self.tab_widget = QTabWidget()
         
-        # Style des onglets - ajoutez ceci juste après la création du widget tab_widget
+        # Style tabs
         self.tab_widget.setStyleSheet("""
             QTabWidget::pane {
                 border: 1px solid #d0d0d0;
@@ -579,7 +578,7 @@ class SimplifiedMappingDialog(QDialog):
         layout = QVBoxLayout()
         
         # Header
-        header = QLabel(f"{sensor_type} Sensor Configuration")  # Changed from French
+        header = QLabel(f"{sensor_type} Sensor Configuration")
         header.setFont(QFont("Arial", 12, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
         layout.addWidget(header)
@@ -599,7 +598,7 @@ class SimplifiedMappingDialog(QDialog):
         control_layout = QVBoxLayout()
         
         # Instructions
-        instructions = QLabel(f"Assign {sensor_type} sensors to different body parts")  # Changed from French
+        instructions = QLabel(f"Assign {sensor_type} sensors to different body parts")
         instructions.setWordWrap(True)
         control_layout.addWidget(instructions)
         
@@ -625,8 +624,21 @@ class SimplifiedMappingDialog(QDialog):
         
         body_parts = ["-- Not assigned --"] + upper_body + lower_body
         
-        for i in range(1, num_sensors + 1):
-            label = QLabel(f"{sensor_type} {i}")
+        # Determine sensor IDs to use based on type
+        sensor_ids = []
+        if sensor_type == "IMU" and self.detected_sensors and 'imu_ids' in self.detected_sensors:
+            sensor_ids = self.detected_sensors['imu_ids']
+        elif sensor_type == "EMG" and self.detected_sensors and 'emg_ids' in self.detected_sensors:
+            sensor_ids = self.detected_sensors['emg_ids']
+        elif sensor_type == "pMMG" and self.detected_sensors and 'pmmg_ids' in self.detected_sensors:
+            sensor_ids = self.detected_sensors['pmmg_ids']
+        else:
+            # Fallback if no sensors detected
+            sensor_ids = list(range(1, num_sensors + 1))
+        
+        # Create controls for each detected sensor ID
+        for i, sensor_id in enumerate(sensor_ids):
+            label = QLabel(f"{sensor_type} {sensor_id}")
             label.setStyleSheet(f"color: {self._get_color_for_type(sensor_type)};")
             
             combo = QComboBox()
@@ -651,7 +663,6 @@ class SimplifiedMappingDialog(QDialog):
                     height: 14px;
                 }
                 QComboBox::down-arrow:on {
-                    /* shift the arrow when popup is open */
                     top: 1px;
                     left: 1px;
                 }
@@ -663,18 +674,18 @@ class SimplifiedMappingDialog(QDialog):
                     padding: 2px;
                 }
             """)
-            combo.currentTextChanged.connect(lambda text, s=sensor_type, id=i: self.on_combo_changed(s, id, text))
+            combo.currentTextChanged.connect(lambda text, s=sensor_type, id=sensor_id: self.on_combo_changed(s, id, text))
             
-            control_grid.addWidget(label, i-1, 0)
-            control_grid.addWidget(combo, i-1, 1)
+            control_grid.addWidget(label, i, 0)
+            control_grid.addWidget(combo, i, 1)
             
-            self.sensor_combos[sensor_type][i] = combo
+            self.sensor_combos[sensor_type][sensor_id] = combo
         
         control_layout.addLayout(control_grid)
         control_layout.addStretch()
         
         # Reset button for this sensor type
-        reset_button = QPushButton(f"Reset {sensor_type}")  # Changed from French
+        reset_button = QPushButton(f"Reset {sensor_type}")
         reset_button.clicked.connect(lambda: self.reset_sensor_type(sensor_type))
         control_layout.addWidget(reset_button)
         
@@ -689,11 +700,34 @@ class SimplifiedMappingDialog(QDialog):
         return tab
 
     def update_sensor_list(self, sensor_type):
-        """Mettre à jour la liste des capteurs disponibles en fonction du type sélectionné"""
+        """Update the list of available sensors based on type and detected sensors"""
         self.sensor_id_combo.clear()
-        num_sensors = 8 if sensor_type in ["EMG", "pMMG"] else 6  # IMU a 6 capteurs, les autres 8
-        for i in range(1, num_sensors + 1):
-            self.sensor_id_combo.addItem(f"{i}")
+        
+        # Check if detected_sensors is properly initialized
+        if not hasattr(self, 'detected_sensors'):
+            self.detected_sensors = {}
+        
+        # Limit to detected sensors
+        has_detected_sensors = False
+        
+        if sensor_type == "IMU" and self.detected_sensors and 'imu_ids' in self.detected_sensors and self.detected_sensors['imu_ids']:
+            for imu_id in self.detected_sensors['imu_ids']:
+                self.sensor_id_combo.addItem(f"{imu_id}")
+            has_detected_sensors = True
+        elif sensor_type == "EMG" and self.detected_sensors and 'emg_ids' in self.detected_sensors and self.detected_sensors['emg_ids']:
+            for emg_id in self.detected_sensors['emg_ids']:
+                self.sensor_id_combo.addItem(f"{emg_id}")
+            has_detected_sensors = True
+        elif sensor_type == "pMMG" and self.detected_sensors and 'pmmg_ids' in self.detected_sensors and self.detected_sensors['pmmg_ids']:
+            for pmmg_id in self.detected_sensors['pmmg_ids']:
+                self.sensor_id_combo.addItem(f"{pmmg_id}")
+            has_detected_sensors = True
+        
+        # Fallback to standard behavior if no sensors detected
+        if not has_detected_sensors:
+            num_sensors = 8 if sensor_type in ["EMG", "pMMG"] else 6
+            for i in range(1, num_sensors + 1):
+                self.sensor_id_combo.addItem(f"{i}")
 
     def manual_assign(self):
         """Manually assign a sensor from the general tab"""
@@ -732,7 +766,7 @@ class SimplifiedMappingDialog(QDialog):
         return {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}.get(typ, "#888")
 
     def load_current_mappings(self):
-        """Charge les mappings actuels dans les combos"""
+        """Load current mappings into combos"""
         for sensor_type, mappings in self.current_mappings.items():
             if sensor_type not in self.sensor_combos:
                 continue
@@ -745,7 +779,7 @@ class SimplifiedMappingDialog(QDialog):
                     if index >= 0:
                         combo.setCurrentIndex(index)
         
-        # Mettre à jour tous les modèles 3D
+        # Update all 3D models
         for sensor_id, body_part in self.current_mappings["IMU"].items():
             self.general_model.map_imu_to_body_part(sensor_id, body_part)
             self.imu_model.map_imu_to_body_part(sensor_id, body_part)
@@ -768,7 +802,7 @@ class SimplifiedMappingDialog(QDialog):
         self.update_badges()
 
     def update_badges(self):
-        """Mettre à jour l'affichage des badges"""
+        """Update the badge display"""
         old_badges = self.scroll_badges.widget()
         if old_badges:
             old_badges.deleteLater()
@@ -868,32 +902,32 @@ class SimplifiedMappingDialog(QDialog):
 
     def reset_to_default(self):
         """Reset all mappings to default values"""
-        # Essayer de charger les mappages par défaut personnalisés
+        # Try to load custom default mappings
         filepath = os.path.join(os.path.dirname(__file__), 'default_sensor_mappings.json')
         if os.path.exists(filepath):
             try:
                 with open(filepath, 'r') as f:
                     default_mappings = json.load(f)
                 
-                # Convertir les clés string en int
+                # Convert string keys to int
                 for sensor_type in ['EMG', 'IMU', 'pMMG']:
                     if sensor_type in default_mappings:
                         self.current_mappings[sensor_type] = {int(k): v for k, v in default_mappings[sensor_type].items()}
                 
                 QMessageBox.information(self, "Reset", "All mappings have been reset to your custom default values.")
             except Exception as e:
-                # Utiliser les mappages par défaut du système en cas d'erreur
+                # Use system defaults if there's an error
                 self._use_system_defaults()
         else:
-            # Utiliser les mappages par défaut du système s'il n'y a pas de fichier personnalisé
+            # Use system defaults if no custom file exists
             self._use_system_defaults()
         
-        # Mettre à jour l'interface utilisateur
+        # Update the UI
         self.load_current_mappings()
         self.update_badges()
 
     def _use_system_defaults(self):
-        """Utilise les mappages par défaut du système"""
+        """Use system default mappings"""
         default_mappings = {
             'EMG': {
                 1: 'biceps_l',
@@ -919,7 +953,7 @@ class SimplifiedMappingDialog(QDialog):
         QMessageBox.information(self, "Reset", "All mappings have been reset to system default values.")
 
     def _convert_model_part_to_ui(self, model_part):
-        """Convertit les noms des parties du modèle 3D vers des noms plus lisibles pour l'UI."""
+        """Convert model part names to more readable UI names."""
         mapping = {
             'head': 'Head', 
             'neck': 'Neck',
@@ -992,8 +1026,21 @@ class SimplifiedMappingDialog(QDialog):
         return mapping.get(ui_name, ui_name.lower().replace(' ', '_'))
 
 
-# Renommer la classe existante pour éviter les conflits
-SensorMappingDialog = SimplifiedMappingDialog
+class SensorMappingDialog(SimplifiedMappingDialog):
+    def __init__(self, parent=None, current_mappings=None):
+        # Initialize detected_sensors BEFORE calling the parent constructor
+        self.detected_sensors = {}
+        
+        # Get detected sensors from parent
+        if parent and hasattr(parent, 'backend') and hasattr(parent.backend, 'sensor_config'):
+            self.detected_sensors = parent.backend.sensor_config or {}
+        
+        # Now call the parent constructor
+        super().__init__(parent, current_mappings)
+        
+        self.setWindowTitle("Sensor Configuration on 3D Model")
+        self.resize(1200, 900)
+        self.setMinimumSize(1100, 800)
 
 if __name__ == '__main__':
     # For testing
