@@ -1,8 +1,6 @@
 import h5py
 import os
 from datetime import datetime
-import numpy as np
-import re
 
 def load_metadata(subject_file):
     """Load metadata from an HDF5 file.
@@ -173,94 +171,3 @@ def extract_group_data(file_path, group_name):
             raise ValueError(f"Le groupe '{group_name}' est introuvable dans 'Sensor'.")
 
         return read_group(target_group)
-
-
-
-
-
-def generate_hdf5_from_raw_data(raw_data, pmmg_ids, fsr_ids, imu_ids, emg_ids, output_path="output.h5"):
-
-    raw_data = [
-    "[sensor_ts=40 ms | recv_ts=40 ms] IMU5=(w=-0.7031,x=0.0088,y=0.0164,z=-0.7106) EMG25=0.949 EMG26=0.919 EMG27=0.935 EMG28=0.932 EMG29=0.938 EMG30=0.921 EMG32=0.979 Buttons: A=0 B=0 X=0 Y=0 OK=0 Joystick: X=0,Y=0",
-    "[sensor_ts=90 ms | recv_ts=89 ms] IMU5=(w=-0.7027,x=0.0085,y=0.0163,z=-0.7111) EMG25=0.949 EMG26=0.918 EMG27=0.935 EMG28=0.931 EMG29=0.936 EMG30=0.926 EMG32=0.978 Buttons: A=0 B=0 X=0 Y=0 OK=0 Joystick: X=0,Y=0",
-    "[sensor_ts=140 ms | recv_ts=141 ms] EMG26=0.920 EMG28=0.934 EMG32=0.980 FSR1=0.8 PMMG1=0.12"
-    ]
-    
-    pmmg_ids = [1, 2]
-    fsr_ids = [1, 2]
-    imu_ids = [5, 6]
-    emg_ids = [25, 26, 27, 28, 29, 30, 32]
-
-    sensor_ids = {
-        'pmmg_ids': pmmg_ids,
-        'fsr_ids': fsr_ids,
-        'imu_ids': imu_ids,
-        'emg_ids': emg_ids
-    }
-
-    emg_data = {f"emg{id}": [] for id in sensor_ids['emg_ids']}
-    imu_data = {f"imu{id}": [] for id in sensor_ids['imu_ids']}
-    pmmg_data = {f"pmmg{id}": [] for id in sensor_ids['pmmg_ids']}
-    fsr_data = {f"fsr{id}": [] for id in sensor_ids['fsr_ids']}
-    timestamps = []
-
-    ts_regex = re.compile(r"sensor_ts=(\d+)\s*ms")
-    emg_regex = re.compile(r"EMG(\d+)=([0-9.]+)")
-    imu_regex = re.compile(r"IMU(\d+)=\(w=([-0-9.]+),x=([-0-9.]+),y=([-0-9.]+),z=([-0-9.]+)\)")
-
-    for line in raw_data:
-        ts_match = ts_regex.search(line)
-        if not ts_match:
-            continue
-        timestamps.append(int(ts_match.group(1)))
-
-        for match in emg_regex.finditer(line):
-            id = int(match.group(1))
-            val = float(match.group(2))
-            key = f"emg{id}"
-            if key in emg_data:
-                emg_data[key].append(val)
-
-        for match in imu_regex.finditer(line):
-            id = int(match.group(1))
-            values = [float(match.group(i)) for i in range(2, 6)]
-            key = f"imu{id}"
-            if key in imu_data:
-                imu_data[key].append(values)
-
-    for d in [emg_data, imu_data, pmmg_data, fsr_data]:
-        for key in d:
-            if len(d[key]) == 0:
-                if key.startswith("imu"):
-                    d[key] = np.empty((0, 4), dtype=np.float32)
-                else:
-                    d[key] = np.empty((0,), dtype=np.float32)
-            else:
-                d[key] = np.array(d[key], dtype=np.float32)
-
-    timestamps = np.array(timestamps, dtype=np.int32)
-    labels = np.empty((0,), dtype=np.int32)
-
-    # Ouvre en mode 'a' pour ne pas écraser tout le fichier
-    with h5py.File(output_path, "a") as f:
-        # Supprime le groupe Sensor s'il existe
-        if "Sensor" in f:
-            del f["Sensor"]
-
-        sensor_group = f.create_group("Sensor")
-
-        for group_name, group_data in [
-            ("EMG", emg_data),
-            ("IMU", imu_data),
-            ("PMMG", pmmg_data),
-            ("FSR", fsr_data)
-        ]:
-            g = sensor_group.create_group(group_name)
-            for name, data in group_data.items():
-                g.create_dataset(name, data=data)
-
-        sensor_group.create_group("LABEL").create_dataset("label", data=labels, dtype=np.int32)
-        sensor_group.create_group("Time").create_dataset("time", data=timestamps, dtype=np.int32)
-
-    print(f"HDF5 file saved to {output_path} (Sensor group updated, metadata preserved)")
-

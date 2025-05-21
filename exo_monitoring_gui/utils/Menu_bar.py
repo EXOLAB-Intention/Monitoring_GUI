@@ -6,7 +6,7 @@ import h5py
 import os
 from datetime import datetime
 from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, save_metadata, generate_hdf5_from_raw_data
+from utils.hdf5_utils import load_metadata, save_metadata
 
 class MainBar:
     def __init__(self, main_app):
@@ -487,6 +487,5 @@ class MainBar:
     def refresh_the_connected_systeme(self):
         print("refresh_the_connected_systeme")
     
-    def request_h5_file(self, li, pmmg, fsr, imu, emg, current_file):
+    def request_h5_file(self):
         print("request_h5_file")
-        generate_hdf5_from_raw_data(li, pmmg, fsr, imu, emg, current_file)

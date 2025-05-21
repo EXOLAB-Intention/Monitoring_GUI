@@ -256,7 +256,7 @@ class InformationWindow(QDialog):
 
         # Store the dashboard instance on self to prevent garbage collection if it's not a top-level window by default
         # QMainWindow instances usually manage their own lifecycle when shown.
-        self.dashboard_instance = DashboardApp(self)
+        self.dashboard_instance = DashboardApp()
         self.dashboard_instance.showMaximized()
 
         # Close each top-level widget except the dashboard instance

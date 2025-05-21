@@ -24,7 +24,7 @@ from plots.sensor_dialogue import SensorMappingDialog
 import socket
 import struct
 import threading
-from utils.ethernet_receiver import recv_all, decode_packet, decode_config, li, pmmg, fsr, imu, emg
+from utils.ethernet_receiver import recv_all, decode_packet, decode_config
 
 # Classe pour exécuter le serveur Ethernet dans un thread séparé
 class EthernetServerThread(QThread):
@@ -168,7 +168,7 @@ class ClientInitThread(QThread):
                 pass
 
 class DashboardApp(QMainWindow):
-    def __init__(self, parent=None):
+    def __init__(self):
         super().__init__()
         # Style global de l'application
         self.setStyleSheet("""
@@ -235,8 +235,6 @@ class DashboardApp(QMainWindow):
         self.setMinimumSize(1400, 800)
         self.setStyleSheet("background-color: white; color: black;")
 
-        self.parent = parent
-        self.current_file = self.parent.subject_file
         # Supprimer l'initialisation du simulateur et ajouter les variables Ethernet
         # self.simulator = SensorSimulator()
         # Variables pour le serveur et le client Ethernet
@@ -248,44 +246,7 @@ class DashboardApp(QMainWindow):
 
         self.recording = False  # Ajouter l'attribut recording
         self.recording_stopped = False  # Ajoute ceci juste après
-        self.main_bar_re = self.some_method()
-        self.main_bar_re._create_menubar()
-    
-        self.clear_plot = self.main_bar_re._create_action(
-            "&Clear the plot",
-            lambda: self.main_bar_re.clear_plot(),
-            "Ctrl+M",
-            tip="Clear the plot"
-        )
-
-        self.refresh_the_connected_systeme = self.main_bar_re._create_action(
-            "&Refresh the connected systeme",
-            lambda: self.main_bar_re.refresh_the_connected_systeme(),
-            "Ctrl+M",
-            tip="Refresh the connected systeme"
-        )
-
-        self.request_h5_file = self.main_bar_re._create_action(
-            "&Request a .h5 file",
-            lambda: self.main_bar_re.request_h5_file(*request_valus(self), self.current_file),
-            "Ctrl+M",
-            tip="Request a .h5 file"
-        )
-        menubar = self.menuBar()
-
-        edit_menu = menubar.addMenu('&Edit')
-        edit_menu.addAction(self.clear_plot)
-        edit_menu.addAction(self.refresh_the_connected_systeme)
-        edit_menu.addAction(self.request_h5_file)
-
-        def request_valus(self):
-            from utils.ethernet_receiver import li, pmmg, fsr, imu, emg
-            return li, pmmg, fsr, imu, emg
         
-        self.request_h5_file.setEnabled(False)  # Désactiver le bouton au départ
-        self.clear_plot.setEnabled(False)  # Désactiver le bouton au départ
-        self.refresh_the_connected_systeme.setEnabled(False)  # Désactiver le bouton au départ
-
         # Initialisation prudente des structures de données pour l'enregistrement
         self.recorded_data = {
             "EMG": [[] for _ in range(8)],   # 8 EMGs max
@@ -302,7 +263,9 @@ class DashboardApp(QMainWindow):
         self.timer.timeout.connect(self.update_data)
         self.timer.start(40)  # Mettre à jour les données toutes les 40 ms
         self.load_mappings()  # Charger les mappages sauvegardés au démarrage
-
+        self.main_bar_re = self.some_method()
+        self.main_bar_re._create_menubar()
+    
     def some_method(self):
         from utils.Menu_bar import MainBar
         return MainBar(self)
@@ -1363,9 +1326,6 @@ class DashboardApp(QMainWindow):
         """)
         self.record_button.setEnabled(False)  # Désactiver le bouton
         self.show_recorded_data()
-        self.request_h5_file.setEnabled(True)  # Désactiver le bouton au départ
-        self.clear_plot.setEnabled(True)  # Désactiver le bouton au départ
-        self.refresh_the_connected_systeme.setEnabled(True)  # Désactiver le bouton au départ
 
     def show_recorded_data(self):
         # Afficher les données enregistrées sur les graphiques existants
