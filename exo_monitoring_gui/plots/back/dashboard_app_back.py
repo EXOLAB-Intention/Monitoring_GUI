@@ -12,7 +12,7 @@ import threading
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from utils.ethernet_receiver import recv_all, decode_packet
+from utils.ethernet_receiver import recv_all, decode_packet, receive_initial_config
 from plots.model_3d_viewer import Model3DWidget # Garder pour la logique 3D
 
 class EthernetServerThread(QThread):
@@ -81,55 +81,18 @@ class ClientInitThread(QThread):
         
     def run(self):
         try:
-            hdr = recv_all(self.client_socket, 4)
-            len_pmmg, len_fsr, len_imu, len_emg = struct.unpack('>4B', hdr)
-            total_ids = len_pmmg + len_fsr + len_imu + len_emg
-            id_bytes = recv_all(self.client_socket, total_ids)
-            crc_bytes = recv_all(self.client_socket, 4)
-            # recv_crc = struct.unpack('>I', crc_bytes)[0] # CRC non utilisé pour l'instant
-            
-            offset = 0
-            pmmg_ids = list(id_bytes[offset:offset+len_pmmg]); offset += len_pmmg
-            fsr_ids = list(id_bytes[offset:offset+len_fsr]); offset += len_fsr
-            raw_imu_ids = list(id_bytes[offset:offset+len_imu]); offset += len_imu
-            emg_ids = list(id_bytes[offset:offset+len_emg])
-
-            num_imus = len(raw_imu_ids) // 4
-            imu_ids = []
-            if num_imus > 0:
-                for i in range(num_imus):
-                    imu_id = raw_imu_ids[i*4]
-                    imu_ids.append(imu_id)
-                    print(f"[INFO] IMU {i+1} détecté avec ID {imu_id} (composantes w,x,y,z)")
-            else:
-                print("[INFO] Aucun IMU détecté")
-
-            sensor_config = {
-                'pmmg_ids': pmmg_ids,
-                'fsr_ids': fsr_ids,
-                'imu_ids': imu_ids,
-                'raw_imu_ids': raw_imu_ids,
-                'emg_ids': emg_ids,
-                'len_pmmg': len_pmmg,
-                'len_fsr': len_fsr,
-                'len_imu': len_imu,
-                'len_emg': len_emg,
-                'num_imus': num_imus
-            }
-
-            packet_size = (
-                4 +
-                len(pmmg_ids)*2 +
-                len(fsr_ids)*2 +
-                len(imu_ids)*4*2 +
-                len(emg_ids)*2 +
-                5 +
-                4 +
-                4
-            )
-            
+            # Appel de la fonction centralisée pour obtenir la configuration et la taille du paquet
+            sensor_config, packet_size = receive_initial_config(self.client_socket)
             self.init_success.emit(sensor_config, packet_size)
             
+        except ConnectionError as e: # Gérer spécifiquement la déconnexion
+            self.init_error.emit(f"Client disconnected during initialization: {str(e)}")
+            # Assurez-vous que le socket est fermé s'il existe encore
+            try:
+                if self.client_socket:
+                    self.client_socket.close()
+            except:
+                pass # Ignorer les erreurs lors de la fermeture
         except Exception as e:
             self.init_error.emit(f"Failed to initialize client: {str(e)}")
             try:

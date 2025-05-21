@@ -102,7 +102,71 @@ def decode_packet(data, cfg):
         'crc_valid': valid_crc
     }
 
+def receive_initial_config(sock):
+    """
+    Receives and decodes the initial sensor configuration packet from the client.
+    This includes sensor ID lists and calculates the expected data packet size.
+    """
+    # --- 1) Read the 4-byte lengths header ---
+    # This header indicates the number of IDs for each sensor type that will follow.
+    hdr = recv_all(sock, 4)
+    len_pmmg, len_fsr, len_imu_components, len_emg = struct.unpack('>4B', hdr)
+    total_ids_length = len_pmmg + len_fsr + len_imu_components + len_emg
 
+    # --- 2) Read exactly the ID bytes ---
+    # These are the actual IDs for each sensor.
+    id_bytes = recv_all(sock, total_ids_length)
+
+    # --- 3) Read the 4-byte CRC for the configuration message ---
+    # Note: The dashboard app currently doesn't validate this CRC.
+    # This could be enhanced to return CRC status if needed.
+    _ = recv_all(sock, 4) # crc_bytes
+
+    # --- 4) Decode each ID list ---
+    offset = 0
+    pmmg_ids = list(id_bytes[offset:offset+len_pmmg]); offset += len_pmmg
+    fsr_ids  = list(id_bytes[offset:offset+len_fsr]);  offset += len_fsr
+    # raw_imu_ids contains IDs for each component (w,x,y,z) of each IMU.
+    # So, len_imu_components is 4 * number_of_IMUs.
+    raw_imu_ids = list(id_bytes[offset:offset+len_imu_components]); offset += len_imu_components
+    emg_ids  = list(id_bytes[offset:offset+len_emg])
+
+    # Determine the number of IMU devices and their primary IDs.
+    # Each IMU has 4 components; we typically use the ID of the first component
+    # as the identifier for the IMU device.
+    num_imus = len(raw_imu_ids) // 4
+    imu_ids = [] # This will store the principal ID for each IMU device.
+    if num_imus > 0:
+        for i in range(num_imus):
+            imu_ids.append(raw_imu_ids[i*4])
+
+    sensor_config = {
+        'pmmg_ids': pmmg_ids,
+        'fsr_ids':  fsr_ids,
+        'imu_ids':  imu_ids,       # List of main IDs for each IMU, used by decode_packet
+        'raw_imu_ids': raw_imu_ids, # Full list of IMU component IDs
+        'emg_ids':  emg_ids,
+        'len_pmmg': len_pmmg,     # Number of pMMG sensors
+        'len_fsr':  len_fsr,      # Number of FSR sensors
+        'len_imu':  len_imu_components, # Total number of IMU component IDs (num_imus * 4)
+        'len_emg':  len_emg,      # Number of EMG sensors
+        'num_imus': num_imus      # Number of IMU devices
+    }
+
+    # --- 5) Compute data-packet size based on the number of active sensors ---
+    # This calculation is crucial for correctly reading subsequent data packets.
+    packet_size = (
+        4 +                             # timestamp (uint32)
+        len(pmmg_ids)*2 +               # pMMG data (int16 per channel)
+        len(fsr_ids)*2 +                # FSR data (int16 per channel)
+        len(imu_ids)*4*2 +              # IMU data (4 * int16 per IMU unit)
+        len(emg_ids)*2 +                # EMG data (int16 per channel)
+        5 +                             # buttons (5 * uint8)
+        4 +                             # joystick (2 * int16)
+        4                               # CRC (uint32)
+    )
+    
+    return sensor_config, packet_size
 
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
