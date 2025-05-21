@@ -268,7 +268,6 @@ class DashboardApp(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_data)
         self.timer.start(40)  # Mettre à jour les données toutes les 40 ms
-        self.load_mappings()  # Charger les mappages sauvegardés au démarrage
         self.main_bar_re = self.some_method()
         self.main_bar_re._create_menubar()
     
@@ -407,6 +406,30 @@ class DashboardApp(QMainWindow):
         """)
         self.default_config_button.clicked.connect(self.setup_default_mappings)
         right_panel.addWidget(self.default_config_button)
+
+        # Ajouter un nouveau bouton pour contrôler la prédiction de mouvement
+        self.motion_prediction_button = QPushButton("Enable Smart Movement")
+        self.motion_prediction_button.setStyleSheet("""
+            QPushButton {
+                background-color: #9C27B0;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #8E24AA;
+            }
+            QPushButton:pressed {
+                background-color: #7B1FA2;
+            }
+        """)
+        self.motion_prediction_button.clicked.connect(self.toggle_motion_prediction)
+        right_panel.addWidget(self.motion_prediction_button)
 
         # Ajout des panneaux gauche / centre / droite
         content_layout.addLayout(left_panel, stretch=1)  # Réduire la largeur de la section "Connected Systems"
@@ -1564,35 +1587,9 @@ class DashboardApp(QMainWindow):
         with open(filepath, 'w') as f:
             json.dump(serializable_mappings, f, indent=2)
 
-    def load_mappings(self):
-        """Load sensor mappings from a JSON file"""
-        filepath = os.path.join(os.path.dirname(__file__), 'sensor_mappings.json')
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r') as f:
-                    mappings = json.load(f)
-                
-                # Convert string keys back to integers
-                if 'EMG' in mappings:
-                    self.emg_mappings = {int(k): v for k, v in mappings['EMG'].items()}
-                if 'pMMG' in mappings:
-                    self.pmmg_mappings = {int(k): v for k, v in mappings['pMMG'].items()}
-                    
-                # Update IMU mappings directly
-                if 'IMU' in mappings:
-                    for imu_id, body_part in {int(k): v for k, v in mappings['IMU'].items()}.items():
-                        self.model_3d_widget.map_imu_to_body_part(imu_id, body_part)
-                
-                # Refresh the UI to reflect loaded mappings
-                self.refresh_sensor_tree()
-                return True
-            except Exception as e:
-                print(f"Error loading mappings: {e}")
-        return False
-
     def setup_default_mappings(self):
         """Permet à l'utilisateur de définir ses propres assignations par défaut"""
-        # Récupérer les mappages actuels
+        # Récupérer les mappages actuels (qui peuvent être vides)
         current_mappings = {
             'EMG': getattr(self, 'emg_mappings', {}), 
             'IMU': self.model_3d_widget.get_current_mappings(),
@@ -1660,6 +1657,12 @@ class DashboardApp(QMainWindow):
             font-size: 14px;
             padding: 3px;
         """)
+
+    def toggle_motion_prediction(self):
+        """Active ou désactive la prédiction intelligente des mouvements."""
+        is_enabled = self.model_3d_widget.toggle_motion_prediction()
+        self.motion_prediction_button.setText(
+            "Disable Smart Movement" if is_enabled else "Enable Smart Movement")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
