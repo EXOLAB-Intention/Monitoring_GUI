@@ -24,7 +24,7 @@ from plots.sensor_dialogue import SensorMappingDialog
 import socket
 import struct
 import threading
-from utils.ethernet_receiver import recv_all, decode_packet, decode_config, li, pmmg, fsr, imu, emg
+from utils.ethernet_receiver import recv_all, decode_packet, decode_config
 
 # Classe pour exécuter le serveur Ethernet dans un thread séparé
 class EthernetServerThread(QThread):
@@ -279,8 +279,8 @@ class DashboardApp(QMainWindow):
         edit_menu.addAction(self.request_h5_file)
 
         def request_valus(self):
-            from utils.ethernet_receiver import li, pmmg, fsr, imu, emg
-            return li, pmmg, fsr, imu, emg
+            from utils.ethernet_receiver import li, pmmg_l, fsr_l, imu_l, emg_l
+            return li, pmmg_l, fsr_l, imu_l, emg_l
         
         self.request_h5_file.setEnabled(False)  # Désactiver le bouton au départ
         self.clear_plot.setEnabled(False)  # Désactiver le bouton au départ

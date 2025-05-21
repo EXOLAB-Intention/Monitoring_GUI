@@ -5,10 +5,10 @@ import struct
 LISTEN_IP = '0.0.0.0'
 LISTEN_PORT = 5001
 li = []
-pmmg = None
-fsr = None
-emg = None
-imu = None
+pmmg_l = None
+fsr_l = None
+emg_l = None
+imu_l = None
 # ======================
 
 def recv_all(sock, size):
@@ -23,6 +23,7 @@ def recv_all(sock, size):
 
 def decode_config(data):
     """Decode the initial SensorConfig packet."""
+    global pmmg_l, fsr_l, emg_l, imu_l
     # Channel counts: pmmg, fsr, imu, emg (uint8 each)
     pmmg, fsr, imu, emg = struct.unpack('>4B', data[0:4])
     # CRC check (uint32)
@@ -34,6 +35,10 @@ def decode_config(data):
     num_actual_imus = imu // 4
     
     print(f"[INFO] Received SensorConfig: {pmmg} pMMG, {fsr} FSR, {imu} IMU values ({num_actual_imus} IMUs), {emg} EMG")
+    pmmg_l = pmmg
+    fsr_l = fsr
+    emg_l = emg
+    imu_l = num_actual_imus
     return {
         'pmmg': pmmg,
         'fsr': fsr,

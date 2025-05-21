@@ -186,8 +186,8 @@ def generate_hdf5_from_raw_data(raw_data, pmmg_ids, fsr_ids, imu_ids, emg_ids, o
     "[sensor_ts=140 ms | recv_ts=141 ms] EMG26=0.920 EMG28=0.934 EMG32=0.980 FSR1=0.8 PMMG1=0.12"
     ]
     
-    pmmg_ids = [1, 2]
-    fsr_ids = [1, 2]
+    pmmg_ids = []
+    fsr_ids = []
     imu_ids = [5, 6]
     emg_ids = [25, 26, 27, 28, 29, 30, 32]
 
