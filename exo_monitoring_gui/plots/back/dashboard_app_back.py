@@ -12,7 +12,7 @@ import threading
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from utils.ethernet_receiver import recv_all, decode_packet, TRIAL_END_MARKER
+from utils.ethernet_receiver import recv_all, decode_packet
 from plots.model_3d_viewer import Model3DWidget # Garder pour la logique 3D
 
 class EthernetServerThread(QThread):
@@ -294,31 +294,13 @@ class DashboardAppBack:
         if self.recording:
             if self.client_socket and self.sensor_config and self.packet_size > 0:
                 try:
-                    # Lire le premier octet pour vérifier le TRIAL_END_MARKER
-                    first_byte = self.client_socket.recv(1)
-                    if not first_byte:
-                        raise ConnectionError("Client disconnected (recv returned empty)")
-
-                    if first_byte == TRIAL_END_MARKER:
-                        print("[INFO] Trial end marker received by DashboardAppBack.")
-                        self.handle_trial_end()
-                        return # Arrêter le traitement pour ce cycle
-
-                    # Lire le reste du paquet
-                    if self.packet_size <= 1:
-                        print(f"[ERROR] Invalid packet_size {self.packet_size} in DashboardAppBack, cannot read rest of packet.")
-                        # Gérer l'erreur, peut-être déconnecter ou afficher un message
+                    # Lire le paquet complet directement
+                    if self.packet_size <= 0:
+                        print(f"[ERROR] Invalid packet_size {self.packet_size} in DashboardAppBack, cannot read packet.")
                         self.handle_connection_error("Invalid packet size detected")
                         return
                         
-                    remaining_bytes_to_read = self.packet_size - 1
-                    if remaining_bytes_to_read < 0:
-                        print(f"[ERROR] Negative remaining bytes ({remaining_bytes_to_read}) in DashboardAppBack. Packet size: {self.packet_size}")
-                        self.handle_connection_error("Invalid packet calculation detected")
-                        return
-
-                    rest_of_packet = recv_all(self.client_socket, remaining_bytes_to_read)
-                    data_packet = first_byte + rest_of_packet
+                    data_packet = recv_all(self.client_socket, self.packet_size)
                     
                     packet = decode_packet(data_packet, self.sensor_config)
                     
@@ -330,6 +312,7 @@ class DashboardAppBack:
                         if self.corrupted_packets_count > 5:
                             print("[ERROR] Too many corrupted packets in a row. Data may be unreliable.")
                             self.corrupted_packets_count = 0
+                            # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
                             return
                         if self._contains_invalid_data(packet):
                             print("[WARNING] Packet contains invalid data. Skipping.")
@@ -368,14 +351,7 @@ class DashboardAppBack:
                     
                     # Mise à jour des graphiques (gérée par l'UI)
                     self.ui.update_live_plots(packet) # Nouvelle méthode dans l'UI
-                                        
-                    self.ui.reset_sensor_display()
-                    self.ui.connect_button.setText("Connect")
-                    self.ui.connect_button.setEnabled(True)
-                    self.ui.record_button.setEnabled(False) # Désactiver l'enregistrement si déconnecté
-                    if self.recording: # Si on enregistrait, arrêter proprement
-                        self.stop_recording()
-                    QMessageBox.warning(self.ui, "Connection Lost", f"Connection to the device was lost or trial ended: {reason}")
+
                 except ConnectionResetError:
                     print("[ERROR] Connection reset by peer.")
                     self.handle_connection_error("Connection reset by peer")
@@ -384,15 +360,16 @@ class DashboardAppBack:
                     self.handle_connection_error("Connection aborted by software in your host machine")
                 except socket.timeout:
                     print("[WARNING] Socket timeout while receiving data.")
-                    # Optionnel: Gérer le timeout, peut-être compter les timeouts et déconnecter après N tentatives
+                    # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
+                    return
                 except struct.error as e:
                     print(f"[ERROR] Struct unpacking error: {e}. Packet size may be incorrect.")
-                    # Essayer de vider le buffer ou se reconnecter ? Pour l'instant, on signale l'erreur.
-                    self.handle_connection_error(f"Data packet structure error: {e}")
+                    # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
+                    return
                 except Exception as e:
                     print(f"[ERROR] Failed to receive/process data: {e}")
-                    # Gérer d'autres erreurs potentielles, peut-être déconnecter
-                    self.handle_connection_error(f"Generic error during data processing: {e}")
+                    # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
+                    return
             else:
                 if self.recording and not self.client_socket:
                     print("[WARNING] Recording active but no Ethernet connection.")
@@ -404,20 +381,16 @@ class DashboardAppBack:
             if not isinstance(value, (int, float)) or abs(value) > 10.0: return True
         for i, quaternion in enumerate(packet.get('imu', [])):
             if not self._is_valid_quaternion(quaternion):
-                print(f"[DEBUG] IMU {i} quaternion invalide: {quaternion}")
                 return True
         return False
         
     def _is_valid_quaternion(self, quaternion):
         if not isinstance(quaternion, (list, tuple)) or len(quaternion) != 4:
-            print(f"[DEBUG] Format quaternion invalide: {type(quaternion)}, longueur: {len(quaternion) if hasattr(quaternion, '__len__') else 'N/A'}")
             return False
         for i, component in enumerate(quaternion):
             if not isinstance(component, (int, float)):
-                print(f"[DEBUG] Composante {i} non numérique: {type(component)}")
                 return False
             if abs(component) > 100.0:
-                print(f"[DEBUG] Valeur aberrante dans quaternion: composante {i} = {component}")
                 return False
         return True
 
@@ -569,38 +542,6 @@ class DashboardAppBack:
         self.save_mappings()
         self.stop_ethernet_server()
 
-    def handle_trial_end(self):
-        """Gère la réception du marqueur de fin d'essai."""
-        if self.recording:
-            self.stop_recording()
-            QMessageBox.information(self.ui, "Trial Ended", "Trial ended and recording stopped.")
-        else:
-            QMessageBox.information(self.ui, "Trial Ended", "Trial ended by device.")
-        
-        # Fermer le socket client actuel et réinitialiser l'état
-        if self.client_socket:
-            try:
-                self.client_socket.close()
-            except Exception as e:
-                print(f"[WARNING] Error closing client socket on trial end: {e}")
-            self.client_socket = None
-        
-        self.sensor_config = None
-        self.packet_size = 0
-        self.ui.connect_button.setText("Connect") # Permettre une nouvelle connexion
-        self.ui.connect_button.setEnabled(True)
-        self.ui.record_button.setEnabled(False)
-        self.ui.reset_sensor_display() # Effacer l'arbre des capteurs, etc.
-        
-        if hasattr(self, 'main_bar_re') and self.main_bar_re is not None:
-            if hasattr(self.main_bar_re, 'edit_Boleen'):
-                try:
-                    self.main_bar_re.edit_Boleen(True)
-                except Exception as e:
-                    print(f"Error calling edit_Boleen: {e}")
-        
-        print("[INFO] Client disconnected due to trial end. Ready for new connection.")
-
     def handle_connection_error(self, reason="Unknown error"):
         """Gère les erreurs de connexion et la déconnexion."""
         print(f"[ERROR] Handling connection error: {reason}")
@@ -626,4 +567,3 @@ class DashboardAppBack:
 
         self.ui.reset_sensor_display()
         QMessageBox.warning(self.ui, "Connection Problem", f"Disconnected from device: {reason}")
-

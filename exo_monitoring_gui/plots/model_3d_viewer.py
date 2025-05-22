@@ -703,11 +703,14 @@ class Model3DViewer(QGLWidget):
                 return False
             
             # Check data validity
-            if not isinstance(quaternion_data, (list, np.ndarray)):
-                print(f"Warning: Quaternion data for IMU {imu_id} is not a list or numpy array.")
-                return False
+            if not isinstance(quaternion_data, (list, tuple, np.ndarray)):
+                # Silently convert to list if possible
+                try:
+                    quaternion_data = list(quaternion_data)
+                except:
+                    return False
+            
             if len(quaternion_data) != 4:
-                print(f"Warning: Quaternion data for IMU {imu_id} does not have 4 components.")
                 return False
 
             # Normalize the quaternion to ensure correct rotation
