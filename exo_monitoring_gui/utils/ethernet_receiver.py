@@ -141,9 +141,7 @@ def start_server():
                     first = conn.recv(1)
                     if not first:
                         raise ConnectionError("Client disconnected")
-                    if first == TRIAL_END_MARKER:
-                        print("[INFO] Trial end marker received")
-                        break
+                  
                     
                     if packet_size <= 1:
                         print(f"[ERROR] Invalid packet size {packet_size} in start_server. Cannot read rest of packet.")
