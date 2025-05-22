@@ -490,3 +490,41 @@ class MainBar:
     
     def request_h5_file(self):
         print("request_h5_file")
+
+    def edit_creation_date(self):
+        # Edit menu
+        menubar = self.main_app.menuBar()
+
+        edit_menu = menubar.addMenu('&Edit')
+
+        # Edit menu actions
+        self.clear_plot_action = self._create_action(
+            "&Clear Plot",
+            lambda: self.clear_plot(),
+            "Ctrl+P",
+            tip="Clear the current plot"
+        )
+
+        self.refresh_connected_system_action = self._create_action(
+            "&Refresh Connected System",
+            lambda: self.refresh_the_connected_systeme(),
+            "Ctrl+R",
+            tip="Refresh the connected system"
+        )
+
+        self.request_h5_file_action = self._create_action(
+            "&Request H5 File",
+            lambda: self.request_h5_file(),
+            "Ctrl+H",
+            tip="Request an H5 file"
+        )
+
+        # Add actions to edit menu
+        edit_menu.addAction(self.clear_plot_action)
+        edit_menu.addAction(self.refresh_connected_system_action)
+        edit_menu.addAction(self.request_h5_file_action)
+
+    def edit_Boleen(self, boleen):
+        self.clear_plot_action.setEnabled(boleen)
+        self.refresh_connected_system_action.setEnabled(boleen)
+        self.request_h5_file_action.setEnabled(boleen)

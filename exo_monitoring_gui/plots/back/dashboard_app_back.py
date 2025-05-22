@@ -12,7 +12,7 @@ import threading
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from utils.ethernet_receiver import recv_all, decode_packet, receive_initial_config
+from utils.ethernet_receiver import recv_all, decode_packet, TRIAL_END_MARKER
 from plots.model_3d_viewer import Model3DWidget # Garder pour la logique 3D
 
 class EthernetServerThread(QThread):
@@ -81,25 +81,94 @@ class ClientInitThread(QThread):
         
     def run(self):
         try:
-            # Appel de la fonction centralisée pour obtenir la configuration et la taille du paquet
-            sensor_config, packet_size = receive_initial_config(self.client_socket)
+            # Logique d'initialisation (précédemment dans receive_initial_config_from_client)
+            # Cette logique est basée sur la section MOD02 de start_server du user
+            while True: # Boucle pour la config avec retry CRC
+                hdr = recv_all(self.client_socket, 4) # lp, lf, li, le lengths
+                len_pmmg, len_fsr, len_imu_components, len_emg = struct.unpack('>4B', hdr)
+                total_ids_to_read = len_pmmg + len_fsr + len_imu_components + len_emg
+
+                ids_data = recv_all(self.client_socket, total_ids_to_read)
+                
+                crc_bytes = recv_all(self.client_socket, 4)
+                received_config_crc = struct.unpack('>I', crc_bytes)[0]
+                
+                calculated_config_crc = (sum(hdr) + sum(ids_data)) & 0xFFFFFFFF
+                
+                if received_config_crc != calculated_config_crc:
+                    print("[ERROR] ClientInitThread: SensorConfig CRC mismatch, retrying...")
+                    # Dans un contexte de thread, un simple continue peut boucler rapidement
+                    # S'assurer que le client a une chance de renvoyer ou gérer le timeout
+                    # Pour l'instant, on suppose que recv_all lèvera une exception en cas de problème majeur
+                    time.sleep(0.1) # Petite pause pour éviter de surcharger en cas de boucle rapide
+                    continue 
+                print("[INFO] ClientInitThread: SensorConfig CRC OK.")
+                break # CRC OK, sortir de la boucle de config
+
+            # Décodage des IDs (comme dans MOD02)
+            offset = 0
+            pmmg_ids    = list(ids_data[offset:offset+len_pmmg]); offset += len_pmmg
+            fsr_ids     = list(ids_data[offset:offset+len_fsr]);  offset += len_fsr
+            raw_imu_ids = list(ids_data[offset:offset+len_imu_components]); offset += len_imu_components
+            emg_ids     = list(ids_data[offset:offset+len_emg])
+
+            num_imus = len(raw_imu_ids) // 4
+            imu_ids = [] 
+            if num_imus > 0:
+                for i in range(num_imus):
+                    imu_id = raw_imu_ids[i*4]
+                    imu_ids.append(imu_id)
+                    # Le print détaillé des IMUs est déjà fait dans la config originale, 
+                    # on peut le garder léger ici ou le supprimer pour le ClientInitThread
+                    print(f"[INFO] ClientInitThread: IMU {i+1} (ID {imu_id}) detected.") 
+            else:
+                print("[INFO] ClientInitThread: No IMUs detected from config.")
+
+            sensor_config = {
+                'pmmg_ids': pmmg_ids,
+                'fsr_ids':  fsr_ids,
+                'imu_ids':  imu_ids,       
+                'emg_ids':  emg_ids,
+                'raw_imu_ids': raw_imu_ids, 
+                'len_pmmg': len_pmmg,
+                'len_fsr':  len_fsr,
+                'len_imu':  len_imu_components, 
+                'len_emg':  len_emg,
+                'num_imus': num_imus
+            }
+            # Utiliser un format de log similaire à celui de start_server pour la config
+            print(f"[INFO] ClientInitThread: Received SensorConfig: { {k: v for k,v in sensor_config.items() if k in ['pmmg_ids', 'fsr_ids', 'imu_ids', 'emg_ids']} }")
+
+            # Calcul de la taille des paquets (comme dans MOD02)
+            packet_size = (
+                4 +                             # timestamp (uint32)
+                len(pmmg_ids)*2 +               # pMMG data (int16 per channel)
+                len(fsr_ids)*2 +                # FSR data (int16 per channel)
+                len(imu_ids)*4*2 +              # IMU data (4 components * int16 per IMU unit)
+                len(emg_ids)*2 +                # EMG data (int16 per channel)
+                5 +                             # buttons (5 * uint8)
+                4 +                             # joystick (2 * int16)
+                4                               # CRC (uint32)
+            )
+            print(f"[INFO] ClientInitThread: Calculated data packet size: {packet_size}")
             self.init_success.emit(sensor_config, packet_size)
             
-        except ConnectionError as e: # Gérer spécifiquement la déconnexion
-            self.init_error.emit(f"Client disconnected during initialization: {str(e)}")
-            # Assurez-vous que le socket est fermé s'il existe encore
+        except ConnectionError as e: 
+            error_msg = f"Client disconnected during initialization: {str(e)}"
+            print(f"[ERROR] {error_msg}")
+            self.init_error.emit(error_msg)
             try:
                 if self.client_socket:
                     self.client_socket.close()
-            except:
-                pass # Ignorer les erreurs lors de la fermeture
+            except: pass
         except Exception as e:
-            self.init_error.emit(f"Failed to initialize client: {str(e)}")
+            error_msg = f"Failed to initialize client: {str(e)}"
+            print(f"[ERROR] {error_msg}")
+            self.init_error.emit(error_msg)
             try:
                 if self.client_socket:
                     self.client_socket.close()
-            except:
-                pass
+            except: pass
 
 class DashboardAppBack:
     def __init__(self, ui):
@@ -124,6 +193,7 @@ class DashboardAppBack:
         self.timer = QTimer() # Pas de self.ui ici, QTimer n'a pas besoin d'un parent direct pour fonctionner
         self.timer.timeout.connect(self.update_data)
         # self.timer.start(40) # Le démarrage du timer sera géré par l'UI
+        self.main_bar_re = self.some_method()
 
     def connect_sensors(self):
         if not self.is_server_running:
@@ -188,7 +258,11 @@ class DashboardAppBack:
         self.ui.connect_button.setText("Connect")
         self.ui.connect_button.setEnabled(True)
         QMessageBox.critical(self.ui, "Connection Error", error_msg)
-
+    
+    def some_method(self):
+        from utils.Menu_bar import MainBar
+        return MainBar(self)
+    
     def on_server_error(self, error_msg):
         print(f"[ERROR] {error_msg}")
         self.ui.connect_button.setText("Connect")
@@ -219,7 +293,32 @@ class DashboardAppBack:
         if self.recording:
             if self.client_socket and self.sensor_config and self.packet_size > 0:
                 try:
-                    data_packet = recv_all(self.client_socket, self.packet_size)
+                    # Lire le premier octet pour vérifier le TRIAL_END_MARKER
+                    first_byte = self.client_socket.recv(1)
+                    if not first_byte:
+                        raise ConnectionError("Client disconnected (recv returned empty)")
+
+                    if first_byte == TRIAL_END_MARKER:
+                        print("[INFO] Trial end marker received by DashboardAppBack.")
+                        self.handle_trial_end()
+                        return # Arrêter le traitement pour ce cycle
+
+                    # Lire le reste du paquet
+                    if self.packet_size <= 1:
+                        print(f"[ERROR] Invalid packet_size {self.packet_size} in DashboardAppBack, cannot read rest of packet.")
+                        # Gérer l'erreur, peut-être déconnecter ou afficher un message
+                        self.handle_connection_error("Invalid packet size detected")
+                        return
+                        
+                    remaining_bytes_to_read = self.packet_size - 1
+                    if remaining_bytes_to_read < 0:
+                        print(f"[ERROR] Negative remaining bytes ({remaining_bytes_to_read}) in DashboardAppBack. Packet size: {self.packet_size}")
+                        self.handle_connection_error("Invalid packet calculation detected")
+                        return
+
+                    rest_of_packet = recv_all(self.client_socket, remaining_bytes_to_read)
+                    data_packet = first_byte + rest_of_packet
+                    
                     packet = decode_packet(data_packet, self.sensor_config)
                     
                     if not packet['crc_valid']:
@@ -261,28 +360,38 @@ class DashboardAppBack:
                                     try:
                                         # La mise à jour du modèle 3D doit se faire via l'UI
                                         self.ui.model_3d_widget.apply_imu_data(imu_id, quaternion)
+                                    except AttributeError: # model_3d_widget might not be ready
+                                        print(f"[WARNING] model_3d_widget not available for IMU update.")
                                     except Exception as e:
                                         print(f"Error updating 3D model: {e}")
                     
                     # Mise à jour des graphiques (gérée par l'UI)
                     self.ui.update_live_plots(packet) # Nouvelle méthode dans l'UI
                                         
+                    self.ui.reset_sensor_display()
+                    self.ui.connect_button.setText("Connect")
+                    self.ui.connect_button.setEnabled(True)
+                    self.ui.record_button.setEnabled(False) # Désactiver l'enregistrement si déconnecté
+                    if self.recording: # Si on enregistrait, arrêter proprement
+                        self.stop_recording()
+                    QMessageBox.warning(self.ui, "Connection Lost", f"Connection to the device was lost or trial ended: {reason}")
                 except ConnectionResetError:
                     print("[ERROR] Connection reset by peer.")
-                    self.client_socket = None
-                    self.ui.connect_button.setText("Connect")
-                    QMessageBox.warning(self.ui, "Connection Lost", "Connection to the device was reset.")
-                except struct.error as e:
-                    print(f"[ERROR] Struct unpacking error: {e}. Packet size may be incorrect.")
-                    try:
-                        extra_bytes = self.client_socket.recv(16, socket.MSG_DONTWAIT)
-                        print(f"[INFO] Read {len(extra_bytes)} extra bytes to try to resynchronize.")
-                    except:
-                        pass
+                    self.handle_connection_error("Connection reset by peer")
+                except ConnectionAbortedError:
+                    print("[ERROR] Connection aborted.")
+                    self.handle_connection_error("Connection aborted by software in your host machine")
                 except socket.timeout:
                     print("[WARNING] Socket timeout while receiving data.")
+                    # Optionnel: Gérer le timeout, peut-être compter les timeouts et déconnecter après N tentatives
+                except struct.error as e:
+                    print(f"[ERROR] Struct unpacking error: {e}. Packet size may be incorrect.")
+                    # Essayer de vider le buffer ou se reconnecter ? Pour l'instant, on signale l'erreur.
+                    self.handle_connection_error(f"Data packet structure error: {e}")
                 except Exception as e:
                     print(f"[ERROR] Failed to receive/process data: {e}")
+                    # Gérer d'autres erreurs potentielles, peut-être déconnecter
+                    self.handle_connection_error(f"Generic error during data processing: {e}")
             else:
                 if self.recording and not self.client_socket:
                     print("[WARNING] Recording active but no Ethernet connection.")
@@ -343,6 +452,8 @@ class DashboardAppBack:
         """) # Le style complet est dans l'UI
         self.ui.record_button.setEnabled(False)
         self.ui.show_recorded_data_on_plots(self.recorded_data) # L'UI gère l'affichage
+        self.main_bar_re.edit_Boleen(True)
+
 
     def toggle_recording(self):
         if self.recording:
@@ -451,4 +562,54 @@ class DashboardAppBack:
     def cleanup_on_close(self):
         self.save_mappings()
         self.stop_ethernet_server()
+
+    def handle_trial_end(self):
+        """Gère la réception du marqueur de fin d'essai."""
+        if self.recording:
+            self.stop_recording()
+            QMessageBox.information(self.ui, "Trial Ended", "Trial ended and recording stopped.")
+        else:
+            QMessageBox.information(self.ui, "Trial Ended", "Trial ended by device.")
+        
+        # Fermer le socket client actuel et réinitialiser l'état
+        if self.client_socket:
+            try:
+                self.client_socket.close()
+            except Exception as e:
+                print(f"[WARNING] Error closing client socket on trial end: {e}")
+            self.client_socket = None
+        
+        self.sensor_config = None
+        self.packet_size = 0
+        self.ui.connect_button.setText("Connect") # Permettre une nouvelle connexion
+        self.ui.connect_button.setEnabled(True)
+        self.ui.record_button.setEnabled(False)
+        self.ui.reset_sensor_display() # Effacer l'arbre des capteurs, etc.
+        print("[INFO] Client disconnected due to trial end. Ready for new connection.")
+
+    def handle_connection_error(self, reason="Unknown error"):
+        """Gère les erreurs de connexion et la déconnexion."""
+        print(f"[ERROR] Handling connection error: {reason}")
+        if self.client_socket:
+            try:
+                self.client_socket.close()
+            except:
+                pass
+            self.client_socket = None
+
+        self.sensor_config = None
+        self.packet_size = 0
+        # Pas besoin de modifier is_server_running ici car le serveur écoute toujours
+        self.ui.connect_button.setText("Connect")
+        self.ui.connect_button.setEnabled(True)
+        self.ui.record_button.setEnabled(False)
+        if self.recording: # Si on enregistrait, arrêter proprement
+            self.timer.stop()
+            self.recording = False
+            self.ui.record_button.setText("Record Start")
+            # Réinitialiser le style via l'UI si nécessaire, ex: self.ui.set_record_button_style_start()
+            print("[INFO] Recording stopped due to connection error.")
+
+        self.ui.reset_sensor_display()
+        QMessageBox.warning(self.ui, "Connection Problem", f"Disconnected from device: {reason}")
 
