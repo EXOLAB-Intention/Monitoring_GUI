@@ -699,8 +699,22 @@ class Model3DViewer(QGLWidget):
             body_part_name = self.get_body_part_for_sensor('IMU', imu_id)
             
             if not body_part_name or body_part_name not in self.body_parts:
-                print(f"Warning: IMU ID {imu_id} not mapped or body part '{body_part_name}' unknown.")
-                return False
+                # Si aucun mapping n'est trouvé, utiliser un mapping par défaut basé sur l'ID IMU
+                # Cela permet de visualiser les mouvements même sans configuration explicite
+                default_mappings = {
+                    1: 'head',
+                    2: 'left_hand',
+                    3: 'right_hand', 
+                    4: 'torso',
+                    17: 'left_hand',
+                    21: 'right_hand'
+                }
+                if imu_id in default_mappings and default_mappings[imu_id] in self.body_parts:
+                    body_part_name = default_mappings[imu_id]
+                    print(f"Using default mapping for IMU {imu_id}: {body_part_name}")
+                else:
+                    print(f"Warning: IMU ID {imu_id} not mapped or body part unknown.")
+                    return False
             
             # Check data validity
             if not isinstance(quaternion_data, (list, tuple, np.ndarray)):
@@ -716,8 +730,40 @@ class Model3DViewer(QGLWidget):
             # Normalize the quaternion to ensure correct rotation
             norm_quat = normalize_quaternion(np.array(quaternion_data))
             
-            # Apply the normalized quaternion to the body part
-            self.body_parts[body_part_name]['rot'] = norm_quat
+            # Correction du système de coordonnées si nécessaire
+            # Certains IMU utilisent des systèmes de coordonnées différents
+            # Par exemple, si l'axe Z pointe vers le haut dans l'IMU mais vers l'avant dans le modèle
+            # Cette transformation peut être ajustée selon le fabricant de l'IMU
+            
+            # Exemple de transformation pour aligner les systèmes de coordonnées
+            # Cette transformation suppose que:
+            # - L'axe X de l'IMU est l'axe X du modèle
+            # - L'axe Y de l'IMU est l'axe Z du modèle
+            # - L'axe Z de l'IMU est l'axe Y inversé du modèle
+            
+            # Décommentez et ajustez ces lignes selon votre système de coordonnées IMU
+            # w, x, y, z = norm_quat
+            # norm_quat = np.array([w, x, z, -y])  # Réorganisation des axes
+            
+            # Appliquer un filtre passe-bas pour lisser les mouvements
+            # Cela réduit les tremblements et rend les mouvements plus naturels
+            if body_part_name in self.body_parts:
+                current_rot = self.body_parts[body_part_name]['rot']
+                alpha = 0.2  # Facteur de lissage (0 = pas de changement, 1 = utiliser uniquement la nouvelle valeur)
+                
+                # Interpolation linéaire entre l'ancienne et la nouvelle rotation
+                smoothed_quat = np.array([
+                    (1-alpha) * current_rot[0] + alpha * norm_quat[0],
+                    (1-alpha) * current_rot[1] + alpha * norm_quat[1],
+                    (1-alpha) * current_rot[2] + alpha * norm_quat[2],
+                    (1-alpha) * current_rot[3] + alpha * norm_quat[3]
+                ])
+                
+                # Renormaliser après l'interpolation
+                smoothed_quat = normalize_quaternion(smoothed_quat)
+                
+                # Apply the normalized quaternion to the body part
+                self.body_parts[body_part_name]['rot'] = smoothed_quat
             
             # If animation is not active, rebuild the display list
             if not self.walking:

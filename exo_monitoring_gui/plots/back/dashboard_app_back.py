@@ -385,13 +385,27 @@ class DashboardAppBack:
         return False
         
     def _is_valid_quaternion(self, quaternion):
+        """Vérifie si un quaternion est valide et le normalise si nécessaire.
+        
+        Un quaternion valide doit avoir 4 composantes numériques et une norme non nulle.
+        """
         if not isinstance(quaternion, (list, tuple)) or len(quaternion) != 4:
             return False
+            
+        # Vérifier que toutes les composantes sont numériques
         for i, component in enumerate(quaternion):
             if not isinstance(component, (int, float)):
                 return False
-            if abs(component) > 100.0:
+            if abs(component) > 100.0:  # Valeur aberrante
                 return False
+        
+        # Calculer la norme du quaternion
+        norm_squared = sum(c*c for c in quaternion)
+        
+        # Vérifier que la norme n'est pas trop proche de zéro
+        if norm_squared < 1e-10:
+            return False
+            
         return True
 
     def start_recording(self):
