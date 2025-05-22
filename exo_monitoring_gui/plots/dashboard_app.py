@@ -95,16 +95,22 @@ class DashboardApp(QMainWindow):
         self.init_ui()
         self.backend.load_mappings()
         
-        self.main_bar_re = self.some_method()
-        self.main_bar_re._create_menubar()
-        self.main_bar_re.edit_creation_date()
-        self.main_bar_re._all_false_or_true(False)
-        self.main_bar_re.edit_Boleen(False)
+        # Initialiser main_bar_re correctement
+        try:
+            from utils.Menu_bar import MainBar
+            self.main_bar_re = MainBar(self)
+            if hasattr(self.main_bar_re, '_create_menubar'):
+                self.main_bar_re._create_menubar()
+            if hasattr(self.main_bar_re, 'edit_creation_date'):
+                self.main_bar_re.edit_creation_date()
+            if hasattr(self.main_bar_re, '_all_false_or_true'):
+                self.main_bar_re._all_false_or_true(False)
+            if hasattr(self.main_bar_re, 'edit_Boleen'):
+                self.main_bar_re.edit_Boleen(False)
+        except Exception as e:
+            print(f"Error initializing MainBar: {e}")
+            self.main_bar_re = None
 
-    def some_method(self):
-        from utils.Menu_bar import MainBar
-        return MainBar(self)
-    
     def init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
