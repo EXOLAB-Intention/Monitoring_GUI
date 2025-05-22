@@ -149,7 +149,7 @@ class SimplifiedMappingDialog(QDialog):
     """Interface simplifiée avec onglets pour le mapping des capteurs"""
     mappings_updated = pyqtSignal(dict, dict, dict)  # EMG, IMU, pMMG mappings
     
-    def __init__(self, parent=None, current_mappings=None):
+    def __init__(self, parent=None, current_mappings=None, available_sensors=None):
         super().__init__(parent)
         self.setWindowTitle("Configuration des capteurs sur le modèle 3D")
         # Augmenter significativement la taille de la fenêtre
@@ -170,6 +170,13 @@ class SimplifiedMappingDialog(QDialog):
             'pMMG': {}
         }
         
+        # Store available sensors
+        self.available_sensors = available_sensors or {
+            'EMG': [],
+            'IMU': [],
+            'pMMG': []
+        }
+        
         self.setup_ui()
         
     def setup_ui(self):
@@ -186,6 +193,35 @@ class SimplifiedMappingDialog(QDialog):
             border-bottom: 2px solid #4CAF50;
         """)
         main_layout.addWidget(title)
+
+        # Add a message at the top if we have available sensors to assign
+        if any(self.available_sensors.values()):
+            available_msg = QLabel("Nouveaux capteurs détectés ! Veuillez les assigner aux parties du corps appropriées.")
+            available_msg.setStyleSheet("""
+                background-color: #e3f2fd;
+                color: #0d47a1;
+                padding: 10px;
+                border-radius: 5px;
+                font-weight: bold;
+                margin: 5px 0;
+            """)
+            main_layout.addWidget(available_msg)
+            
+            # Highlight unassigned sensors
+            if self.available_sensors.get('EMG'):
+                emg_msg = QLabel(f"EMG: {', '.join([f'EMG{id}' for id in self.available_sensors['EMG']])}")
+                emg_msg.setStyleSheet("color: #CC3300; font-weight: bold;")
+                main_layout.addWidget(emg_msg)
+                
+            if self.available_sensors.get('IMU'):
+                imu_msg = QLabel(f"IMU: {', '.join([f'IMU{id}' for id in self.available_sensors['IMU']])}")
+                imu_msg.setStyleSheet("color: #00CC33; font-weight: bold;")
+                main_layout.addWidget(imu_msg)
+                
+            if self.available_sensors.get('pMMG'):
+                pmmg_msg = QLabel(f"pMMG: {', '.join([f'pMMG{id}' for id in self.available_sensors['pMMG']])}")
+                pmmg_msg.setStyleSheet("color: #0033CC; font-weight: bold;")
+                main_layout.addWidget(pmmg_msg)
 
         # Create tab widget
         self.tab_widget = QTabWidget()
@@ -625,8 +661,14 @@ class SimplifiedMappingDialog(QDialog):
         
         body_parts = ["-- Not assigned --"] + upper_body + lower_body
         
-        for i in range(1, num_sensors + 1):
-            label = QLabel(f"{sensor_type} {i}")
+        # Si nous avons des capteurs disponibles, utiliser cette liste
+        sensors_to_show = self.available_sensors.get(sensor_type, [])
+        if not sensors_to_show:
+            # Sinon, utiliser une liste par défaut de 1 à num_sensors
+            sensors_to_show = range(1, num_sensors + 1)
+        
+        for i, sensor_id in enumerate(sensors_to_show):
+            label = QLabel(f"{sensor_type} {sensor_id}")
             label.setStyleSheet(f"color: {self._get_color_for_type(sensor_type)};")
             
             combo = QComboBox()
@@ -663,12 +705,12 @@ class SimplifiedMappingDialog(QDialog):
                     padding: 2px;
                 }
             """)
-            combo.currentTextChanged.connect(lambda text, s=sensor_type, id=i: self.on_combo_changed(s, id, text))
+            combo.currentTextChanged.connect(lambda text, s=sensor_type, id=sensor_id: self.on_combo_changed(s, id, text))
             
-            control_grid.addWidget(label, i-1, 0)
-            control_grid.addWidget(combo, i-1, 1)
+            control_grid.addWidget(label, i, 0)
+            control_grid.addWidget(combo, i, 1)
             
-            self.sensor_combos[sensor_type][i] = combo
+            self.sensor_combos[sensor_type][sensor_id] = combo
         
         control_layout.addLayout(control_grid)
         control_layout.addStretch()
@@ -691,9 +733,13 @@ class SimplifiedMappingDialog(QDialog):
     def update_sensor_list(self, sensor_type):
         """Mettre à jour la liste des capteurs disponibles en fonction du type sélectionné"""
         self.sensor_id_combo.clear()
-        num_sensors = 8 if sensor_type in ["EMG", "pMMG"] else 6  # IMU a 6 capteurs, les autres 8
-        for i in range(1, num_sensors + 1):
-            self.sensor_id_combo.addItem(f"{i}")
+        sensors_to_show = self.available_sensors.get(sensor_type, [])
+        if not sensors_to_show:
+            # Sinon, utiliser une liste par défaut de 1 à num_sensors
+            num_sensors = 8 if sensor_type in ["EMG", "pMMG"] else 6  # IMU a 6 capteurs, les autres 8
+            sensors_to_show = range(1, num_sensors + 1)
+        for sensor_id in sensors_to_show:
+            self.sensor_id_combo.addItem(f"{sensor_id}")
 
     def manual_assign(self):
         """Manually assign a sensor from the general tab"""

@@ -131,16 +131,11 @@ class DashboardApp(QMainWindow):
         """)
         self.connected_systems.itemClicked.connect(self.on_sensor_clicked)
 
+        # Create only groups, do not add sensors initially
         sensors = ["EMG Data", "IMU Data", "pMMG Data"]
         for sensor_group in sensors:
             group_item = QTreeWidgetItem([sensor_group])
             self.connected_systems.addTopLevelItem(group_item)
-            num_sensors = 6 if sensor_group == "IMU Data" else 8
-            for i_sensor_init in range(1, num_sensors + 1):
-                sensor_item = QTreeWidgetItem([f"{sensor_group[:-5]}{i_sensor_init}"])
-                sensor_item.setForeground(0, QBrush(QColor("gray")))
-                sensor_item.setHidden(False)
-                group_item.addChild(sensor_item)
             group_item.setExpanded(True)
 
         left_panel = QVBoxLayout()
@@ -363,64 +358,62 @@ class DashboardApp(QMainWindow):
         self.display_mode_group.buttonClicked.connect(self.on_display_mode_changed)
 
     def reset_sensor_display(self):
+        # Completely clear sensor groups
         for i_group_item in range(self.connected_systems.topLevelItemCount()):
             group_item = self.connected_systems.topLevelItem(i_group_item)
-            sensor_type_prefix = group_item.text(0).split()[0][:-5]
-            num_sensors_in_group = 6 if sensor_type_prefix == "IMU" else 8
-            for j_sensor_item in range(group_item.childCount()):
-                sensor_item = group_item.child(j_sensor_item)
-                sensor_item.setText(0, f"{sensor_type_prefix}{j_sensor_item+1}")
-                sensor_item.setForeground(0, QBrush(QColor("gray")))
-                sensor_item.setHidden(False)
+            # Remove all children
+            while group_item.childCount() > 0:
+                group_item.removeChild(group_item.child(0))
 
     def update_sensor_tree_from_config(self, sensor_config):
         if not sensor_config: return
 
-        for i_group_idx in range(self.connected_systems.topLevelItemCount()):
-            group_item = self.connected_systems.topLevelItem(i_group_idx)
-            for j_sensor_idx in range(group_item.childCount()):
-                group_item.child(j_sensor_idx).setHidden(True)
+        # First clear all existing sensors
+        self.reset_sensor_display()
 
+        # List to store available sensors for display in the dialog
+        available_sensors = {
+            'EMG': [],
+            'IMU': [],
+            'pMMG': []
+        }
+
+        # Add EMGs
         emg_group_item = self.find_sensor_group_item("EMG Data")
         if emg_group_item:
-            num_emg_configured = len(sensor_config.get('emg_ids', []))
-            for idx in range(min(num_emg_configured, emg_group_item.childCount())):
-                sensor_id = sensor_config['emg_ids'][idx]
-                sensor_item = emg_group_item.child(idx)
-                sensor_item.setText(0, f"EMG{sensor_id}")
+            for idx, sensor_id in enumerate(sensor_config.get('emg_ids', [])):
+                sensor_item = QTreeWidgetItem([f"EMG{sensor_id}"])
                 sensor_item.setForeground(0, QBrush(QColor("green")))
-                sensor_item.setHidden(False)
+                emg_group_item.addChild(sensor_item)
+                available_sensors['EMG'].append(sensor_id)
 
+        # Add IMUs
         imu_group_item = self.find_sensor_group_item("IMU Data")
         if imu_group_item:
-            num_imu_configured = len(sensor_config.get('imu_ids', []))
-            while imu_group_item.childCount() < num_imu_configured:
-                 QTreeWidgetItem(imu_group_item)
-            for idx in range(imu_group_item.childCount()):
-                imu_group_item.child(idx).setHidden(True)
-            for idx in range(num_imu_configured):
-                sensor_id = sensor_config['imu_ids'][idx]
-                sensor_item = imu_group_item.child(idx)
-                sensor_item.setText(0, f"IMU{sensor_id}")
+            for idx, sensor_id in enumerate(sensor_config.get('imu_ids', [])):
+                sensor_item = QTreeWidgetItem([f"IMU{sensor_id}"])
                 sensor_item.setForeground(0, QBrush(QColor("green")))
-                sensor_item.setHidden(False)
+                imu_group_item.addChild(sensor_item)
+                available_sensors['IMU'].append(sensor_id)
 
+        # Add pMMGs
         pmmg_group_item = self.find_sensor_group_item("pMMG Data")
         if pmmg_group_item:
-            num_pmmg_configured = len(sensor_config.get('pmmg_ids', []))
-            for idx in range(min(num_pmmg_configured, pmmg_group_item.childCount())):
-                sensor_id = sensor_config['pmmg_ids'][idx]
-                sensor_item = pmmg_group_item.child(idx)
-                sensor_item.setText(0, f"pMMG{sensor_id}")
+            for idx, sensor_id in enumerate(sensor_config.get('pmmg_ids', [])):
+                sensor_item = QTreeWidgetItem([f"pMMG{sensor_id}"])
                 sensor_item.setForeground(0, QBrush(QColor("green")))
-                sensor_item.setHidden(False)
+                pmmg_group_item.addChild(sensor_item)
+                available_sensors['pMMG'].append(sensor_id)
         
-        self.refresh_sensor_tree_with_mappings(
-            self.backend.emg_mappings, 
-            self.backend.pmmg_mappings
-        )
+        # Enable the configuration button
+        self.config_button.setEnabled(True)
+        
+        # Create group plots if necessary
         if self.group_sensor_mode.isChecked() and not self.group_plots:
             self.create_group_plots()
+            
+        # Automatically display the sensor configuration dialog
+        self.open_sensor_mapping_dialog(available_sensors)
 
     def find_sensor_group_item(self, group_name):
         for i_find_group in range(self.connected_systems.topLevelItemCount()):
@@ -452,336 +445,16 @@ class DashboardApp(QMainWindow):
                 self.group_plots["pMMG"] = plot_widget_pmmg
                 self.backend.group_plot_data["pMMG"] = {}
 
-    def on_sensor_clicked(self, item_clicked, column):
-        if item_clicked.childCount() > 0: return
-        if item_clicked.foreground(0).color() != QColor("green"):
-            QMessageBox.warning(self, "Error", "The sensor is not connected. Please connect the sensor first.")
-            return
-
-        sensor_name_full = item_clicked.text(0)
-        sensor_name_base = sensor_name_full.split()[0]
-
-        if self.backend.recording_stopped:
-            self.plot_recorded_sensor_data(sensor_name_full, sensor_name_base)
-        else:
-            if self.single_sensor_mode.isChecked():
-                if sensor_name_base in self.plots:
-                    self.remove_sensor_plot(sensor_name_base)
-                else:
-                    self.create_individual_plot(sensor_name_full, sensor_name_base)
-            elif self.group_sensor_mode.isChecked():
-                if sensor_name_base.startswith("IMU"):
-                    if sensor_name_base in self.plots:
-                        self.remove_sensor_plot(sensor_name_base)
-                    else:
-                        self.create_individual_plot(sensor_name_full, sensor_name_base, is_group_mode_imu=True)
-                else:
-                    sensor_group_type = "EMG" if sensor_name_base.startswith("EMG") else "pMMG"
-                    if sensor_group_type in self.group_plots:
-                        if sensor_name_full in self.backend.group_plot_data.get(sensor_group_type, {}):
-                            self.remove_sensor_curve_from_group_plot(sensor_name_full, sensor_group_type)
-                        else:
-                            self.add_sensor_curve_to_group_plot(sensor_name_full, sensor_group_type)
-    
-    def plot_recorded_sensor_data(self, sensor_name_full, sensor_name_base):
-        recorded_data = self.backend.recorded_data
-        
-        # Check if specific sensor type has any data
-        has_data = False
-        sensor_prefix_short = sensor_name_base[:3] # EMG, IMU
-        sensor_prefix_long = sensor_name_base[:4] # pMMG
-        if sensor_prefix_short in recorded_data and recorded_data[sensor_prefix_short] and recorded_data[sensor_prefix_short][0]:
-            has_data = True
-        elif sensor_prefix_long in recorded_data and recorded_data[sensor_prefix_long] and recorded_data[sensor_prefix_long][0]:
-            has_data = True
-
-        if not has_data:
-            QMessageBox.information(self, "No Data", f"No recorded data available for {sensor_name_base}.")
-            return
-
-        if self.group_sensor_mode.isChecked() and not sensor_name_base.startswith("IMU"):
-            sensor_group_type = "EMG" if sensor_name_base.startswith("EMG") else "pMMG"
-            if sensor_group_type not in self.group_plots: self.create_group_plots()
-            plot_widget = self.group_plots.get(sensor_group_type)
-            if not plot_widget: return
-
-            is_already_plotted = any(hasattr(p_item, 'name') and p_item.name() == sensor_name_full for p_item in plot_widget.listDataItems())
-            if is_already_plotted: return
-
-            sensor_id_str = ''.join(filter(str.isdigit, sensor_name_base))
-            if not sensor_id_str: return
-            sensor_idx = int(sensor_id_str) - 1
-
-            data_array_key = "EMG" if sensor_group_type == "EMG" else "pMMG"
-            if sensor_idx < len(recorded_data[data_array_key]):
-                data_to_plot = recorded_data[data_array_key][sensor_idx]
-                if data_to_plot:
-                    color_idx = sensor_idx % 8
-                    plot_widget.plot(data_to_plot, pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][color_idx], width=2), name=sensor_name_full)
-            if plot_widget.legend is None: plot_widget.addLegend()
-            self.highlight_sensor_item(sensor_name_base)
-        else:
-            if sensor_name_base in self.plots:
-                plot_widget = self.plots[sensor_name_base]
-                plot_widget.clear()
-            else:
-                plot_widget = pg.PlotWidget(title=sensor_name_full)
-                plot_widget.setBackground('#1e1e1e')
-                plot_widget.getAxis('left').setTextPen('white')
-                plot_widget.getAxis('bottom').setTextPen('white')
-                plot_widget.showGrid(x=True, y=True, alpha=0.3)
-                plot_widget.setTitle(sensor_name_full, color='white', size='14pt')
-                self.middle_layout.addWidget(plot_widget)
-                self.plots[sensor_name_base] = plot_widget
-
-            sensor_id_str = ''.join(filter(str.isdigit, sensor_name_base))
-            if not sensor_id_str: return
-            sensor_idx = int(sensor_id_str) - 1
-
-            if sensor_name_base.startswith("EMG") and sensor_idx < len(recorded_data["EMG"]):
-                if recorded_data["EMG"][sensor_idx]: plot_widget.plot(recorded_data["EMG"][sensor_idx], pen=pg.mkPen('b', width=2))
-            elif sensor_name_base.startswith("pMMG") and sensor_idx < len(recorded_data["pMMG"]):
-                if recorded_data["pMMG"][sensor_idx]: plot_widget.plot(recorded_data["pMMG"][sensor_idx], pen=pg.mkPen('b', width=2))
-            elif sensor_name_base.startswith("IMU") and sensor_idx < len(recorded_data["IMU"]):
-                quaternion_data = recorded_data["IMU"][sensor_idx]
-                if quaternion_data:
-                    for i_quat, axis_label in enumerate(['w', 'x', 'y', 'z']):
-                        plot_widget.plot([q[i_quat] for q in quaternion_data], pen=pg.mkPen(['r', 'g', 'b', 'y'][i_quat], width=2), name=axis_label)
-                    if plot_widget.legend is None: plot_widget.addLegend()
-            self.highlight_sensor_item(sensor_name_base)
-
-    def create_individual_plot(self, sensor_name_full, sensor_name_base, is_group_mode_imu=False):
-        if sensor_name_base in self.plots: return
-        plot_widget = pg.PlotWidget(title=sensor_name_full)
-        plot_widget.setBackground('#1e1e1e'); plot_widget.getAxis('left').setTextPen('white'); plot_widget.getAxis('bottom').setTextPen('white')
-        plot_widget.showGrid(x=True, y=True, alpha=0.3); plot_widget.setTitle(sensor_name_full, color='white', size='14pt')
-        self.middle_layout.addWidget(plot_widget)
-        self.plots[sensor_name_base] = plot_widget
-        
-        if sensor_name_base.startswith("IMU"):
-            for axis_l in ['w', 'x', 'y', 'z']:
-                self.backend.plot_data[f"{sensor_name_base}_{axis_l}"] = np.zeros(100)
-        else:
-            self.backend.plot_data[sensor_name_base] = np.zeros(100)
-        self.highlight_sensor_item(sensor_name_base)
-        if is_group_mode_imu: self.highlighted_sensors.add(sensor_name_base)
-
-    def add_sensor_curve_to_group_plot(self, sensor_name_full, sensor_group_type):
-        if sensor_group_type not in self.group_plots:
-            self.create_group_plots()
-            if sensor_group_type not in self.group_plots: return
-
-        if sensor_group_type not in self.backend.group_plot_data:
-            self.backend.group_plot_data[sensor_group_type] = {}
-        self.backend.group_plot_data[sensor_group_type][sensor_name_full] = np.zeros(100)
-        self.highlight_sensor_item(sensor_name_full.split()[0])
-
-    def remove_sensor_plot(self, sensor_name_base):
-        if sensor_name_base in self.plots:
-            plot_widget = self.plots.pop(sensor_name_base)
-            plot_widget.setParent(None); plot_widget.deleteLater()
-            if sensor_name_base.startswith("IMU"):
-                for axis_l_rem in ['w', 'x', 'y', 'z']:
-                    self.backend.plot_data.pop(f"{sensor_name_base}_{axis_l_rem}", None)
-            else:
-                self.backend.plot_data.pop(sensor_name_base, None)
-            self.unhighlight_sensor_item(sensor_name_base)
-
-    def remove_sensor_curve_from_group_plot(self, sensor_name_full, sensor_group_type):
-        if sensor_group_type in self.group_plots and sensor_group_type in self.backend.group_plot_data:
-            self.backend.group_plot_data[sensor_group_type].pop(sensor_name_full, None)
-            self.unhighlight_sensor_item(sensor_name_full.split()[0])
-
-    def highlight_sensor_item(self, sensor_name_base):
-        for i_hl_group in range(self.connected_systems.topLevelItemCount()):
-            group_item = self.connected_systems.topLevelItem(i_hl_group)
-            for j_hl_sensor in range(group_item.childCount()):
-                sensor_item = group_item.child(j_hl_sensor)
-                if sensor_item.text(0).startswith(sensor_name_base):
-                    sensor_item.setBackground(0, QBrush(QColor("lightblue")))
-                    self.highlighted_sensors.add(sensor_name_base)
-
-    def unhighlight_sensor_item(self, sensor_name_base):
-        for i_uhl_group in range(self.connected_systems.topLevelItemCount()):
-            group_item = self.connected_systems.topLevelItem(i_uhl_group)
-            for j_uhl_sensor in range(group_item.childCount()):
-                sensor_item = group_item.child(j_uhl_sensor)
-                if sensor_item.text(0).startswith(sensor_name_base):
-                    sensor_item.setBackground(0, QBrush(QColor("white")))
-                    self.highlighted_sensors.discard(sensor_name_base)
-
-    def update_live_plots(self, packet):
-        if not self.backend.recording or not self.backend.sensor_config: return
-
-        for sensor_name_base, plot_widget in self.plots.items():
-            sensor_type = ''.join(filter(str.isalpha, sensor_name_base))
-            sensor_id_str = ''.join(filter(str.isdigit, sensor_name_base))
-            if not sensor_id_str: continue
-            sensor_id = int(sensor_id_str)
-
-            cfg = self.backend.sensor_config
-            if sensor_type == "EMG" and sensor_id in cfg.get('emg_ids', []):
-                data_idx = cfg['emg_ids'].index(sensor_id)
-                if data_idx < len(packet.get('emg',[])):
-                    val = packet['emg'][data_idx]
-                    p_data = self.backend.plot_data.get(sensor_name_base)
-                    if p_data is not None:
-                        p_data = np.roll(p_data, -1); p_data[-1] = val
-                        self.backend.plot_data[sensor_name_base] = p_data
-                        plot_widget.plot(p_data, clear=True, pen=pg.mkPen('b', width=2))
-            elif sensor_type == "pMMG" and sensor_id in cfg.get('pmmg_ids', []):
-                data_idx = cfg['pmmg_ids'].index(sensor_id)
-                if data_idx < len(packet.get('pmmg',[])):
-                    val = packet['pmmg'][data_idx]
-                    p_data = self.backend.plot_data.get(sensor_name_base)
-                    if p_data is not None:
-                        p_data = np.roll(p_data, -1); p_data[-1] = val
-                        self.backend.plot_data[sensor_name_base] = p_data
-                        plot_widget.plot(p_data, clear=True, pen=pg.mkPen('b', width=2))
-            elif sensor_type == "IMU" and sensor_id in cfg.get('imu_ids', []):
-                data_idx = cfg['imu_ids'].index(sensor_id)
-                if data_idx < len(packet.get('imu',[])):
-                    quat = packet['imu'][data_idx]
-                    if self.backend._is_valid_quaternion(quat):
-                        plot_widget.clear()
-                        for i_ax, ax_lab in enumerate(['w', 'x', 'y', 'z']):
-                            key = f"{sensor_name_base}_{ax_lab}"
-                            ax_data = self.backend.plot_data.get(key)
-                            if ax_data is not None:
-                                ax_data = np.roll(ax_data, -1); ax_data[-1] = quat[i_ax]
-                                self.backend.plot_data[key] = ax_data
-                                plot_widget.plot(ax_data, pen=pg.mkPen(['r', 'g', 'b', 'y'][i_ax], width=2), name=ax_lab)
-                        if plot_widget.legend is None: plot_widget.addLegend()
-        
-        if self.group_sensor_mode.isChecked():
-            for group_type, plot_widget in self.group_plots.items():
-                plot_widget.clear()
-                if group_type in self.backend.group_plot_data:
-                    cfg = self.backend.sensor_config
-                    colors = ['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w']
-                    for s_name_full, live_data_arr in self.backend.group_plot_data[group_type].items():
-                        s_base = s_name_full.split()[0]
-                        s_type = ''.join(filter(str.isalpha, s_base))
-                        s_id_str = ''.join(filter(str.isdigit, s_base))
-                        if not s_id_str: continue
-                        s_id = int(s_id_str)
-                        val_plot = None
-                        id_list_key, packet_data_key = ('emg_ids', 'emg') if s_type == "EMG" and group_type == "EMG" else (('pmmg_ids', 'pmmg') if s_type == "pMMG" and group_type == "pMMG" else (None,None))
-                        if id_list_key and s_id in cfg.get(id_list_key,[]):
-                            d_idx = cfg[id_list_key].index(s_id)
-                            if d_idx < len(packet.get(packet_data_key,[])):
-                                val_plot = packet[packet_data_key][d_idx]
-                        if val_plot is not None:
-                            live_data_arr = np.roll(live_data_arr, -1); live_data_arr[-1] = val_plot
-                            self.backend.group_plot_data[group_type][s_name_full] = live_data_arr
-                            plot_widget.plot(live_data_arr, pen=pg.mkPen(colors[(s_id -1) % 8], width=2), name=s_name_full)
-                if plot_widget.legend is None and self.backend.group_plot_data.get(group_type): plot_widget.addLegend()
-
-    def on_display_mode_changed(self, button_clicked=None):
-        # button_clicked is not always provided, rely on isChecked()
-        is_now_single_mode = self.single_sensor_mode.isChecked()
-        is_now_group_mode = self.group_sensor_mode.isChecked()
-
-        if self.backend.recording:
-            QMessageBox.warning(self, 'Warning', "You cannot change display mode while recording.")
-            # Revert to previous state if a change was attempted
-            if button_clicked == self.single_sensor_mode and not is_now_single_mode: # tried to switch to group
-                 self.single_sensor_mode.setChecked(True)
-            elif button_clicked == self.group_sensor_mode and not is_now_group_mode: # tried to switch to single
-                 self.group_sensor_mode.setChecked(True)
-            return
-
-        reply = QMessageBox.question(self, 'Change Mode', "Changing display mode will clear current plots. Continue?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.update_display_mode_ui()
-        else:
-            # Revert selection if user cancelled
-            if is_now_single_mode and button_clicked == self.group_sensor_mode: # Was single, clicked group, cancelled -> stay single
-                self.single_sensor_mode.setChecked(True)
-            elif is_now_group_mode and button_clicked == self.single_sensor_mode: # Was group, clicked single, cancelled -> stay group
-                self.group_sensor_mode.setChecked(True)
-
-    def update_display_mode_ui(self):
-        for sb_name in list(self.plots.keys()): self.remove_sensor_plot(sb_name)
-        self.plots.clear()
-        for grp_type in list(self.group_plots.keys()):
-            plot_w = self.group_plots.pop(grp_type); plot_w.setParent(None); plot_w.deleteLater()
-        self.group_plots.clear()
-        if "EMG" in self.backend.group_plot_data: self.backend.group_plot_data["EMG"].clear()
-        if "pMMG" in self.backend.group_plot_data: self.backend.group_plot_data["pMMG"].clear()
-        for sb_name_hl in list(self.highlighted_sensors): self.unhighlight_sensor_item(sb_name_hl)
-        self.highlighted_sensors.clear()
-        if self.group_sensor_mode.isChecked(): self.create_group_plots()
-
-    def show_recorded_data_on_plots(self, recorded_data):
-        self.update_display_mode_ui()
-        rec_data = self.backend.recorded_data # Use backend's copy
-        has_any_data = False
-        for sensor_key in ["EMG", "IMU", "pMMG"]:
-            if rec_data.get(sensor_key) and any(rec_data[sensor_key]) and any(d for d in rec_data[sensor_key] if d):
-                has_any_data = True
-                break
-        
-        if not has_any_data:
-            QMessageBox.warning(self, 'Warning', "No data was recorded.")
-            self.record_button.setEnabled(True)
-            if self.backend.client_socket: self.connect_button.setText("Disconnect"); self.connect_button.setEnabled(True)
-            else: self.connect_button.setText("Connect"); self.connect_button.setEnabled(True)
-            return
-
-        if self.backend.sensor_config:
-            cfg = self.backend.sensor_config
-            for key, id_list_name in [("EMG", 'emg_ids'), ("pMMG", 'pmmg_ids'), ("IMU", 'imu_ids')]:
-                for idx, s_id_val in enumerate(cfg.get(id_list_name, [])):
-                    if idx < len(rec_data.get(key,[])) and rec_data[key][idx]:
-                        s_base_plot = f"{key}{s_id_val}"
-                        item_t = self.find_sensor_item_by_base_name(s_base_plot)
-                        s_full_plot = item_t.text(0) if item_t else s_base_plot
-                        self.plot_recorded_sensor_data(s_full_plot, s_base_plot)
-
-    def find_sensor_item_by_base_name(self, sensor_name_base):
-        for i_find_item_group in range(self.connected_systems.topLevelItemCount()):
-            group_item = self.connected_systems.topLevelItem(i_find_item_group)
-            for j_find_item_sensor in range(group_item.childCount()):
-                sensor_item = group_item.child(j_find_item_sensor)
-                if sensor_item.text(0).startswith(sensor_name_base): return sensor_item
-        return None
-
-    def toggle_animation(self):
-        is_walking = self.model_3d_widget.toggle_animation()
-        self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
-        anim_style_on = """QPushButton { background-color: #f44336; border: none; border-radius: 6px; padding: 8px 16px; color: white; font-size: 14px; font-weight: 500; text-align: center; min-width: 120px; } QPushButton:hover { background-color: #e53935; } QPushButton:pressed { background-color: #d32f2f; }"""
-        anim_style_off = """QPushButton { background-color: #2196f3; border: none; border-radius: 6px; padding: 8px 16px; color: white; font-size: 14px; font-weight: 500; text-align: center; min-width: 120px; } QPushButton:hover { background-color: #1e88e5; } QPushButton:pressed { background-color: #1976d2; }"""
-        self.animate_button.setStyleSheet(anim_style_on if is_walking else anim_style_off)
-
-    def reset_model_view(self):
-        start_rot = (self.model_3d_widget.model_viewer.rotation_x, self.model_3d_widget.model_viewer.rotation_y, self.model_3d_widget.model_viewer.rotation_z)
-        self._anim_steps_count = 10 # Use instance var for steps
-        if not hasattr(self, '_reset_view_timer_obj'): # Ensure timer is instance variable
-            self._reset_view_timer_obj = QTimer(self)
-            self._reset_view_timer_obj.timeout.connect(self._animation_step_exec)
-        self._animation_step_counter_val = 0
-        self._start_rotation_anim_val = start_rot
-        if not self._reset_view_timer_obj.isActive(): self._reset_view_timer_obj.start(20)
-
-    def _animation_step_exec(self):
-        self._animation_step_counter_val +=1
-        prog = self._animation_step_counter_val / self._anim_steps_count
-        rx, ry, rz = self._start_rotation_anim_val
-        self.model_3d_widget.model_viewer.rotation_x = rx * (1 - prog)
-        self.model_3d_widget.model_viewer.rotation_y = ry * (1 - prog)
-        self.model_3d_widget.model_viewer.rotation_z = rz * (1 - prog)
-        self.model_3d_widget.model_viewer.update()
-        if self._animation_step_counter_val >= self._anim_steps_count: self._reset_view_timer_obj.stop()
-
-    def open_sensor_mapping_dialog(self):
+    def open_sensor_mapping_dialog(self, available_sensors=None):
         # Check if sensors are connected
         if not self.backend.sensor_config:
             QMessageBox.warning(self, "No Sensors", "Please connect sensors before configuring the mapping.")
             return
         
         curr_maps = self.backend.get_current_mappings_for_dialog()
-        dialog = SensorMappingDialog(self, curr_maps)
+        
+        # If we have available sensors, pass them to the dialog
+        dialog = SensorMappingDialog(self, curr_maps, available_sensors)
         dialog.mappings_updated.connect(self.backend.update_sensor_mappings)
         dialog.exec_()
 
@@ -901,6 +574,274 @@ class DashboardApp(QMainWindow):
             """)
         
         self.motion_prediction_button.setEnabled(True)
+
+    def toggle_animation(self):
+        """Active ou désactive l'animation du modèle 3D."""
+        is_walking = self.model_3d_widget.toggle_animation()
+        self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
+        anim_style_on = """QPushButton { background-color: #f44336; border: none; border-radius: 6px; padding: 8px 16px; color: white; font-size: 14px; font-weight: 500; text-align: center; min-width: 120px; } QPushButton:hover { background-color: #e53935; } QPushButton:pressed { background-color: #d32f2f; }"""
+        anim_style_off = """QPushButton { background-color: #2196f3; border: none; border-radius: 6px; padding: 8px 16px; color: white; font-size: 14px; font-weight: 500; text-align: center; min-width: 120px; } QPushButton:hover { background-color: #1e88e5; } QPushButton:pressed { background-color: #1976d2; }"""
+        self.animate_button.setStyleSheet(anim_style_on if is_walking else anim_style_off)
+
+    def reset_model_view(self):
+        """Réinitialise la vue du modèle 3D à sa position par défaut."""
+        if hasattr(self, 'model_3d_widget') and self.model_3d_widget:
+            self.model_3d_widget.reset_view()
+            self.update()
+
+    def on_display_mode_changed(self, button_clicked=None):
+        """Gère le changement de mode d'affichage (single sensor vs group)."""
+        if self.group_sensor_mode.isChecked():
+            self.update_display_mode_ui()
+            self.create_group_plots()
+        else:
+            self.update_display_mode_ui()
+
+    def update_display_mode_ui(self):
+        """Met à jour l'interface utilisateur lors du changement de mode d'affichage."""
+        if self.group_sensor_mode.isChecked():
+            for plot in self.plots.values():
+                plot.setParent(None)
+                plot.deleteLater()
+            self.plots.clear()
+        else:
+            for group_plot in self.group_plots.values():
+                group_plot.setParent(None)
+                group_plot.deleteLater()
+            self.group_plots.clear()
+
+    def show_recorded_data_on_plots(self, recorded_data):
+        """Affiche les données enregistrées sur les graphiques."""
+        self.update_display_mode_ui()
+        rec_data = self.backend.recorded_data # Use backend's copy
+        has_any_data = False
+        for sensor_key in ["EMG", "IMU", "pMMG"]:
+            if rec_data.get(sensor_key) and any(rec_data[sensor_key]) and any(d for d in rec_data[sensor_key] if d):
+                has_any_data = True
+                break
+        
+        if not has_any_data:
+            QMessageBox.warning(self, 'Warning', "No data was recorded.")
+            self.record_button.setEnabled(True)
+            if self.backend.client_socket: self.connect_button.setText("Disconnect"); self.connect_button.setEnabled(True)
+            else: self.connect_button.setText("Connect"); self.connect_button.setEnabled(True)
+            return
+
+        if self.backend.sensor_config:
+            cfg = self.backend.sensor_config
+            for key, id_list_name in [("EMG", 'emg_ids'), ("pMMG", 'pmmg_ids'), ("IMU", 'imu_ids')]:
+                for idx, s_id_val in enumerate(cfg.get(id_list_name, [])):
+                    if idx < len(rec_data.get(key,[])) and rec_data[key][idx]:
+                        s_base_plot = f"{key}{s_id_val}"
+                        item_t = self.find_sensor_item_by_base_name(s_base_plot)
+                        s_full_plot = item_t.text(0) if item_t else s_base_plot
+                        self.plot_recorded_sensor_data(s_full_plot, s_base_plot)
+
+    def find_sensor_item_by_base_name(self, sensor_name_base):
+        """Trouve l'élément capteur dans l'arborescence par son nom de base."""
+        for i_find_item_group in range(self.connected_systems.topLevelItemCount()):
+            group_item = self.connected_systems.topLevelItem(i_find_item_group)
+            for j_find_item_sensor in range(group_item.childCount()):
+                sensor_item = group_item.child(j_find_item_sensor)
+                if sensor_item.text(0).startswith(sensor_name_base): return sensor_item
+        return None
+
+    def update_live_plots(self, packet):
+        """Met à jour les graphiques en temps réel avec les nouvelles données."""
+        for sensor_name, data in packet.items():
+            if sensor_name in self.plots:
+                plot_widget = self.plots[sensor_name]
+                plot_widget.clear()
+                plot_widget.plot(data, pen=pg.mkPen('b', width=2))
+            elif sensor_name in self.group_plots:
+                group_plot = self.group_plots[sensor_name]
+                group_plot.clear()
+                group_plot.plot(data, pen=pg.mkPen('b', width=2))
+
+    def on_sensor_clicked(self, item_clicked, column):
+        """Gère le clic sur un capteur dans l'arborescence."""
+        if item_clicked.childCount() > 0:
+            # C'est un groupe, pas un capteur
+            return
+            
+        if item_clicked.foreground(0).color() != QColor("green"):
+            QMessageBox.warning(self, "Erreur", "Le capteur n'est pas connecté. Veuillez d'abord connecter le capteur.")
+            return
+
+        sensor_name_full = item_clicked.text(0)
+        sensor_name_base = sensor_name_full.split()[0]
+
+        if self.backend.recording_stopped:
+            self.plot_recorded_sensor_data(sensor_name_full, sensor_name_base)
+        else:
+            if self.single_sensor_mode.isChecked():
+                if sensor_name_base in self.plots:
+                    self.remove_sensor_plot(sensor_name_base)
+                else:
+                    self.create_individual_plot(sensor_name_full, sensor_name_base)
+            elif self.group_sensor_mode.isChecked():
+                if sensor_name_base.startswith("IMU"):
+                    if sensor_name_base in self.plots:
+                        self.remove_sensor_plot(sensor_name_base)
+                    else:
+                        self.create_individual_plot(sensor_name_full, sensor_name_base, is_group_mode_imu=True)
+                else:
+                    sensor_group_type = "EMG" if sensor_name_base.startswith("EMG") else "pMMG"
+                    if sensor_group_type in self.group_plots:
+                        if sensor_name_full in self.backend.group_plot_data.get(sensor_group_type, {}):
+                            self.remove_sensor_curve_from_group_plot(sensor_name_full, sensor_group_type)
+                        else:
+                            self.add_sensor_curve_to_group_plot(sensor_name_full, sensor_group_type)
+    
+    def plot_recorded_sensor_data(self, sensor_name_full, sensor_name_base):
+        """Affiche les données enregistrées pour un capteur spécifique."""
+        recorded_data = self.backend.recorded_data
+        
+        # Vérifier si ce type de capteur a des données
+        has_data = False
+        sensor_prefix_short = sensor_name_base[:3]  # EMG, IMU
+        sensor_prefix_long = sensor_name_base[:4]  # pMMG
+        if sensor_prefix_short in recorded_data and recorded_data[sensor_prefix_short] and recorded_data[sensor_prefix_short][0]:
+            has_data = True
+        elif sensor_prefix_long in recorded_data and recorded_data[sensor_prefix_long] and recorded_data[sensor_prefix_long][0]:
+            has_data = True
+
+        if not has_data:
+            QMessageBox.information(self, "Aucune donnée", f"Aucune donnée enregistrée disponible pour {sensor_name_base}.")
+            return
+
+        if self.group_sensor_mode.isChecked() and not sensor_name_base.startswith("IMU"):
+            sensor_group_type = "EMG" if sensor_name_base.startswith("EMG") else "pMMG"
+            if sensor_group_type not in self.group_plots:
+                self.create_group_plots()
+            plot_widget = self.group_plots.get(sensor_group_type)
+            if not plot_widget:
+                return
+
+            is_already_plotted = any(hasattr(p_item, 'name') and p_item.name() == sensor_name_full for p_item in plot_widget.listDataItems())
+            if is_already_plotted:
+                return
+
+            sensor_id_str = ''.join(filter(str.isdigit, sensor_name_base))
+            if not sensor_id_str:
+                return
+            sensor_idx = int(sensor_id_str) - 1
+
+            data_array_key = "EMG" if sensor_group_type == "EMG" else "pMMG"
+            if sensor_idx < len(recorded_data[data_array_key]):
+                data_to_plot = recorded_data[data_array_key][sensor_idx]
+                if data_to_plot:
+                    color_idx = sensor_idx % 8
+                    plot_widget.plot(data_to_plot, pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][color_idx], width=2), name=sensor_name_full)
+            if plot_widget.legend is None:
+                plot_widget.addLegend()
+            self.highlight_sensor_item(sensor_name_base)
+        else:
+            if sensor_name_base in self.plots:
+                plot_widget = self.plots[sensor_name_base]
+                plot_widget.clear()
+            else:
+                plot_widget = pg.PlotWidget(title=sensor_name_full)
+                plot_widget.setBackground('#1e1e1e')
+                plot_widget.getAxis('left').setTextPen('white')
+                plot_widget.getAxis('bottom').setTextPen('white')
+                plot_widget.showGrid(x=True, y=True, alpha=0.3)
+                plot_widget.setTitle(sensor_name_full, color='white', size='14pt')
+                self.middle_layout.addWidget(plot_widget)
+                self.plots[sensor_name_base] = plot_widget
+
+            sensor_id_str = ''.join(filter(str.isdigit, sensor_name_base))
+            if not sensor_id_str:
+                return
+            sensor_idx = int(sensor_id_str) - 1
+
+            if sensor_name_base.startswith("EMG") and sensor_idx < len(recorded_data["EMG"]):
+                if recorded_data["EMG"][sensor_idx]:
+                    plot_widget.plot(recorded_data["EMG"][sensor_idx], pen=pg.mkPen('b', width=2))
+            elif sensor_name_base.startswith("pMMG") and sensor_idx < len(recorded_data["pMMG"]):
+                if recorded_data["pMMG"][sensor_idx]:
+                    plot_widget.plot(recorded_data["pMMG"][sensor_idx], pen=pg.mkPen('b', width=2))
+            elif sensor_name_base.startswith("IMU") and sensor_idx < len(recorded_data["IMU"]):
+                quaternion_data = recorded_data["IMU"][sensor_idx]
+                if quaternion_data:
+                    for i_quat, axis_label in enumerate(['w', 'x', 'y', 'z']):
+                        plot_widget.plot([q[i_quat] for q in quaternion_data], pen=pg.mkPen(['r', 'g', 'b', 'y'][i_quat], width=2), name=axis_label)
+                    if plot_widget.legend is None:
+                        plot_widget.addLegend()
+            self.highlight_sensor_item(sensor_name_base)
+
+    def create_individual_plot(self, sensor_name_full, sensor_name_base, is_group_mode_imu=False):
+        """Crée un graphique individuel pour un capteur."""
+        if sensor_name_base in self.plots:
+            return
+        plot_widget = pg.PlotWidget(title=sensor_name_full)
+        plot_widget.setBackground('#1e1e1e')
+        plot_widget.getAxis('left').setTextPen('white')
+        plot_widget.getAxis('bottom').setTextPen('white')
+        plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        plot_widget.setTitle(sensor_name_full, color='white', size='14pt')
+        self.middle_layout.addWidget(plot_widget)
+        self.plots[sensor_name_base] = plot_widget
+        
+        if sensor_name_base.startswith("IMU"):
+            for axis_l in ['w', 'x', 'y', 'z']:
+                self.backend.plot_data[f"{sensor_name_base}_{axis_l}"] = np.zeros(100)
+        else:
+            self.backend.plot_data[sensor_name_base] = np.zeros(100)
+        self.highlight_sensor_item(sensor_name_base)
+        if is_group_mode_imu:
+            self.highlighted_sensors.add(sensor_name_base)
+
+    def add_sensor_curve_to_group_plot(self, sensor_name_full, sensor_group_type):
+        """Ajoute une courbe pour un capteur spécifique à un graphique de groupe."""
+        if sensor_group_type not in self.group_plots:
+            self.create_group_plots()
+            if sensor_group_type not in self.group_plots:
+                return
+
+        if sensor_group_type not in self.backend.group_plot_data:
+            self.backend.group_plot_data[sensor_group_type] = {}
+        self.backend.group_plot_data[sensor_group_type][sensor_name_full] = np.zeros(100)
+        self.highlight_sensor_item(sensor_name_full.split()[0])
+
+    def remove_sensor_plot(self, sensor_name_base):
+        """Supprime un graphique individuel pour un capteur."""
+        if sensor_name_base in self.plots:
+            plot_widget = self.plots.pop(sensor_name_base)
+            plot_widget.setParent(None)
+            plot_widget.deleteLater()
+            if sensor_name_base.startswith("IMU"):
+                for axis_l_rem in ['w', 'x', 'y', 'z']:
+                    self.backend.plot_data.pop(f"{sensor_name_base}_{axis_l_rem}", None)
+            else:
+                self.backend.plot_data.pop(sensor_name_base, None)
+            self.unhighlight_sensor_item(sensor_name_base)
+
+    def remove_sensor_curve_from_group_plot(self, sensor_name_full, sensor_group_type):
+        """Supprime une courbe d'un capteur spécifique d'un graphique de groupe."""
+        if sensor_group_type in self.group_plots and sensor_group_type in self.backend.group_plot_data:
+            self.backend.group_plot_data[sensor_group_type].pop(sensor_name_full, None)
+            self.unhighlight_sensor_item(sensor_name_full.split()[0])
+
+    def highlight_sensor_item(self, sensor_name_base):
+        """Met en évidence un élément capteur dans l'arborescence."""
+        for i_hl_group in range(self.connected_systems.topLevelItemCount()):
+            group_item = self.connected_systems.topLevelItem(i_hl_group)
+            for j_hl_sensor in range(group_item.childCount()):
+                sensor_item = group_item.child(j_hl_sensor)
+                if sensor_item.text(0).startswith(sensor_name_base):
+                    sensor_item.setBackground(0, QBrush(QColor("lightblue")))
+                    self.highlighted_sensors.add(sensor_name_base)
+
+    def unhighlight_sensor_item(self, sensor_name_base):
+        """Supprime la mise en évidence d'un élément capteur dans l'arborescence."""
+        for i_uhl_group in range(self.connected_systems.topLevelItemCount()):
+            group_item = self.connected_systems.topLevelItem(i_uhl_group)
+            for j_uhl_sensor in range(group_item.childCount()):
+                sensor_item = group_item.child(j_uhl_sensor)
+                if sensor_item.text(0).startswith(sensor_name_base):
+                    sensor_item.setBackground(0, QBrush(QColor("white")))
+                    self.highlighted_sensors.discard(sensor_name_base)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

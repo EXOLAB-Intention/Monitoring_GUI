@@ -8,6 +8,9 @@ from PyQt5.QtGui import QFont, QPainter
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
+
+# Add parent directory to path for proper module imports
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.body_motion_predictor import MotionPredictorFactory
 
 # --- Quaternion Utility Functions ---
@@ -35,19 +38,19 @@ def quaternion_from_axis_angle(axis, angle_rad):
     return normalize_quaternion(np.array([w, x, y, z]))
 
 def quaternion_to_matrix(q):
-    """Convertit un quaternion en matrice de rotation 4x4 (format OpenGL)"""
+    """Converts a quaternion to a 4x4 rotation matrix (OpenGL format)"""
     w, x, y, z = q
     x2, y2, z2, w2 = x*x, y*y, z*z, w*w
     xy, xz, yz = x*y, x*z, y*z
     wx, wy, wz = w*x, w*y, w*z
 
-    # Format compatible avec OpenGL - ordre colonne-major
+    # Format compatible with OpenGL - column-major order
     m = np.array([
         [1-2*(y2+z2),   2*(xy-wz),    2*(xz+wy),  0],
         [2*(xy+wz),   1-2*(x2+z2),    2*(yz-wx),  0],
         [2*(xz-wy),     2*(yz+wx),  1-2*(x2+y2),  0],
         [0,             0,            0,          1]
-    ], dtype=np.float32).flatten(order='F')  # 'F' correspond à l'ordre colonne-major pour OpenGL
+    ], dtype=np.float32).flatten(order='F')  # 'F' corresponds to column-major order for OpenGL
     
     return m
 
@@ -134,22 +137,38 @@ class Model3DViewer(QGLWidget):
         self.fps_update_timer.timeout.connect(self.update_fps)
         self.fps_update_timer.start(1000)
         
-        # Initialiser le prédicteur de mouvement
-        model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
-                                 'data', 'motion_model.pth')
+        # Initialize the motion predictor - CORRIGER LE CHEMIN DU MODÈLE
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        model_paths = [
+            os.path.join(base_dir, 'data', 'motion_model.pth'),
+            os.path.join(base_dir, 'data', 'training_viz', 'motion_model.pth')
+        ]
+        
+        # Essayer les deux chemins possibles
+        model_path = None
+        for path in model_paths:
+            if os.path.exists(path):
+                model_path = path
+                print(f"Modèle trouvé: {path}")
+                break
+        
+        if not model_path:
+            print("Attention: Aucun modèle trouvé dans les chemins standards.")
+            model_path = model_paths[0]  # Utiliser le chemin par défaut pour afficher l'erreur
+            
         self.motion_predictor = MotionPredictorFactory.create_predictor("simple", model_path)
-        self.use_motion_prediction = True  # Activer par défaut
+        self.use_motion_prediction = True  # Enabled by default
                 
     def _precalculate_animation(self, num_frames):
         """Precalculate animation frames with quaternion rotations and positions."""
-        print(f"Précalcul des {num_frames} frames d'animation en quaternions...")
+        print(f"Precalculating {num_frames} animation frames in quaternions...")
         animation_frames = []
         identity_quat = np.array([1.0, 0.0, 0.0, 0.0])
 
         for i in range(num_frames):
             phase = (i / float(num_frames)) * 2 * math.pi
             
-            # Calculs des angles clés pour l'animation
+            # Calculate key angles for animation
             arm_swing_angle_rad = math.radians(45.0 * math.sin(phase))
             leg_swing_angle_left_rad = math.radians(40.0 * math.sin(phase))
             leg_swing_angle_right_rad = math.radians(40.0 * math.sin(phase + math.pi))
@@ -162,7 +181,7 @@ class Model3DViewer(QGLWidget):
             head_rotation_angle_y_rad = torso_rotation_angle_y_rad * 0.5
             head_rotation_angle_z_rad = math.radians(3.0 * math.sin(phase))
 
-            # Initialisation des données de frame pour toutes les parties du corps
+            # Initialize frame data for all body parts
             frame_data = {}
             for part_name in self.body_parts.keys():
                 frame_data[part_name] = {
@@ -171,7 +190,7 @@ class Model3DViewer(QGLWidget):
                 }
 
             # --- Positions ---
-            # Torse et tête - oscillation latérale et rebond vertical
+            # Torso and head - lateral sway and vertical bounce
             frame_data['torso']['pos_offset'][0] = torso_sway_offset
             frame_data['head']['pos_offset'][0] = torso_sway_offset * 1.1
             frame_data['neck']['pos_offset'][0] = torso_sway_offset * 1.05
@@ -182,8 +201,8 @@ class Model3DViewer(QGLWidget):
             frame_data['hip']['pos_offset'][0] = torso_sway_offset * 0.5
             frame_data['hip']['pos_offset'][1] = vertical_bounce_offset
 
-            # --- Position des bras en mouvement ---
-            # Mouvement avant/arrière des bras
+            # --- Arm movement positions ---
+            # Forward/backward arm movement
             frame_data['left_hand']['pos_offset'][2] = -0.3 * math.sin(phase)
             frame_data['forearm_l']['pos_offset'][2] = -0.2 * math.sin(phase)
             frame_data['biceps_l']['pos_offset'][2] = -0.1 * math.sin(phase)
@@ -192,7 +211,7 @@ class Model3DViewer(QGLWidget):
             frame_data['forearm_r']['pos_offset'][2] = 0.2 * math.sin(phase)
             frame_data['biceps_r']['pos_offset'][2] = 0.1 * math.sin(phase)
             
-            # --- Position des jambes en mouvement ---
+            # --- Leg movement positions ---
             frame_data['left_foot']['pos_offset'][2] = 0.3 * math.sin(phase)
             frame_data['calves_l']['pos_offset'][2] = 0.2 * math.sin(phase)
             frame_data['quadriceps_l']['pos_offset'][2] = 0.1 * math.sin(phase)
@@ -201,12 +220,12 @@ class Model3DViewer(QGLWidget):
             frame_data['calves_r']['pos_offset'][2] = -0.2 * math.sin(phase)
             frame_data['quadriceps_r']['pos_offset'][2] = -0.1 * math.sin(phase)
 
-            # --- Rotations en quaternions ---
-            # Rotation du torse autour de l'axe Y (yaw)
+            # --- Quaternion rotations ---
+            # Torso rotation around Y-axis (yaw)
             if abs(torso_rotation_angle_y_rad) > 1e-6:
                 frame_data['torso']['rot_quat'] = quaternion_from_axis_angle([0, 1, 0], torso_rotation_angle_y_rad)
 
-            # Rotation combinée de la tête (pitch, yaw, roll)
+            # Combined head rotation (pitch, yaw, roll)
             q_head_x = quaternion_from_axis_angle([1, 0, 0], head_rotation_angle_x_rad)
             q_head_y = quaternion_from_axis_angle([0, 1, 0], head_rotation_angle_y_rad)
             q_head_z = quaternion_from_axis_angle([0, 0, 1], head_rotation_angle_z_rad)
@@ -214,23 +233,23 @@ class Model3DViewer(QGLWidget):
             combined_head_rot = quaternion_multiply(combined_head_rot, q_head_z)
             frame_data['head']['rot_quat'] = combined_head_rot
 
-            # Rotation des bras (pitch - rotation autour de X)
+            # Arm rotations (pitch - rotation around X)
             if abs(arm_swing_angle_rad) > 1e-6:
                 left_arm_swing_q = quaternion_from_axis_angle([1, 0, 0], arm_swing_angle_rad)
                 right_arm_swing_q = quaternion_from_axis_angle([1, 0, 0], -arm_swing_angle_rad)
 
-                # Bras gauche
+                # Left arm
                 for part in ['deltoid_l', 'biceps_l', 'forearm_l', 'left_hand']:
                     if part in frame_data:
                         frame_data[part]['rot_quat'] = left_arm_swing_q
                 
-                # Bras droit
+                # Right arm
                 for part in ['deltoid_r', 'biceps_r', 'forearm_r', 'right_hand']:
                     if part in frame_data:
                         frame_data[part]['rot_quat'] = right_arm_swing_q
             
-            # Rotation des jambes (pitch - rotation autour de X)
-            # Jambe gauche
+            # Leg rotations (pitch - rotation around X)
+            # Left leg
             if abs(leg_swing_angle_left_rad) > 1e-6:
                 q_leg_l = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_left_rad)
                 q_knee_l = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_left_rad * 0.5)
@@ -241,7 +260,7 @@ class Model3DViewer(QGLWidget):
                 frame_data['calves_l']['rot_quat'] = q_knee_l
                 frame_data['left_foot']['rot_quat'] = q_foot_l
             
-            # Jambe droite
+            # Right leg
             if abs(leg_swing_angle_right_rad) > 1e-6:
                 q_leg_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad)
                 q_knee_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad * 0.5)
@@ -254,7 +273,7 @@ class Model3DViewer(QGLWidget):
             
             animation_frames.append(frame_data)
         
-        print(f"Animation précalculée terminée: {len(animation_frames)} frames.")
+        print(f"Animation precalculation completed: {len(animation_frames)} frames.")
         return animation_frames
 
     def get_default_state(self, part_name):
@@ -263,56 +282,56 @@ class Model3DViewer(QGLWidget):
         return np.array([0, 0, 0]), np.array([1.0, 0, 0, 0])
 
     def update_animation_frame(self):
-        """Met à jour l'animation de marche en utilisant les frames pré-calculées."""
+        """Updates the walking animation using pre-calculated frames."""
         if not self.walking:
             return
         
-        # Vérifier la disponibilité des frames d'animation
+        # Check the availability of animation frames
         if not self.precalculated_animation_frames:
-            print("Erreur: Aucune frame d'animation précalculée disponible.")
+            print("Error: No precalculated animation frames available.")
             return
         
-        # Incrémenter l'index de frame et le limiter au nombre de frames disponibles
+        # Increment frame index and limit it to available frames
         self.precalc_frame = (self.precalc_frame + 1) % self.num_precalc_frames
         
-        # Vérifier que l'index est valide
+        # Check the index is valid
         if self.precalc_frame >= len(self.precalculated_animation_frames):
-            print(f"Erreur: Index de frame {self.precalc_frame} hors limites (max: {len(self.precalculated_animation_frames)-1})")
-            self.precalc_frame = 0  # Réinitialiser à 0 pour éviter une erreur
+            print(f"Error: Frame index {self.precalc_frame} out of bounds (max: {len(self.precalculated_animation_frames)-1})")
+            self.precalc_frame = 0  # Reset to 0 to avoid error
         
-        # Récupérer les données de la frame courante
+        # Retrieve current frame data
         current_frame_data = self.precalculated_animation_frames[self.precalc_frame]
         
-        # Appliquer les données à chaque partie du corps
+        # Apply data to each body part
         for part_name, data in self.body_parts.items():
-            # Vérifier que cette partie existe dans les données de frame
+            # Check that this part exists in the frame data
             if part_name in current_frame_data:
-                # Récupérer la position et rotation de base (sans animation)
+                # Retrieve base position and rotation (without animation)
                 base_pos, _ = self.get_default_state(part_name)
                 
-                # Récupérer les offsets et rotations de l'animation
+                # Retrieve animation offsets and rotations
                 anim_data = current_frame_data[part_name]
                 pos_offset = anim_data.get('pos_offset', np.array([0.0, 0.0, 0.0]))
                 rot_quat = anim_data.get('rot_quat', np.array([1.0, 0.0, 0.0, 0.0]))
                 
-                # Appliquer les offsets de position à la position de base
+                # Apply position offsets to base position
                 data['pos'] = base_pos + pos_offset
                 
-                # Appliquer le quaternion de rotation directement
-                data['rot'] = rot_quat.copy()  # Copie importante pour éviter les références partagées
+                # Apply rotation quaternion directly
+                data['rot'] = rot_quat.copy()  # Important copy to avoid shared references
         
-        # Si l'animation de marche n'est pas active, appliquer la prédiction de mouvement
+        # If walking animation is not active, apply motion prediction
         if self.use_motion_prediction and not self.walking:
-            # Identifier les parties du corps surveillées par des IMUs
+            # Identify body parts monitored by IMUs
             monitored_parts = set()
             for imu_id, body_part in self.imu_mapping.items():
                 monitored_parts.add(body_part)
             
-            # Prédire et appliquer les mouvements des parties non surveillées
+            # Predict and apply movements of unmonitored parts
             updated_body_parts = self.motion_predictor.predict_joint_movement(
                 self.body_parts, monitored_parts, self.walking)
             
-            # Appliquer les prédictions
+            # Apply predictions
             for part_name, data in updated_body_parts.items():
                 if part_name not in monitored_parts:
                     self.body_parts[part_name]['rot'] = data['rot']
@@ -491,7 +510,7 @@ class Model3DViewer(QGLWidget):
             print(f"Error in resizeGL: {e}")
 
     def paintGL(self):
-        """Rendu de la scène OpenGL."""
+        """Render the OpenGL scene."""
         if not self.isValid() or not self.context().isValid():
             print("Warning: OpenGL context not valid during paint")
             return
@@ -505,36 +524,36 @@ class Model3DViewer(QGLWidget):
             
             gluLookAt(0, 1.0, 5.0, 0, 1.0, 0.0, 0, 1.0, 0.0)
             
-            # Rotation globale de la vue
+            # Global view rotation
             glRotatef(self.rotation_x, 1, 0, 0)
             glRotatef(self.rotation_y, 0, 1, 0)
             glRotatef(self.rotation_z, 0, 0, 1)
             
-            # Dessiner le sol
+            # Draw the floor
             self.create_floor()
             
-            # Choisir la méthode de rendu en fonction du mode d'animation
+            # Choose rendering method based on animation mode
             if self.walking:
-                # En mode animation, dessiner directement pour une meilleure fluidité
-                # et pour éviter d'avoir à recréer la display list à chaque frame
+                # In animation mode, draw directly for better fluidity
+                # and to avoid recreating the display list every frame
                 self.draw_limbs_internal()
                 self.draw_joints_internal()
             else:
-                # Sinon utiliser la display list (plus performant)
+                # Otherwise use the display list (more efficient)
                 if hasattr(self, 'display_list') and self.display_list != 0:
                     try:
                         glCallList(self.display_list)
                     except OpenGL.error.GLError as e:
                         print(f"Error drawing model: {e}")
-                        # Fallback en cas d'erreur
+                        # Fallback in case of error
                         self.draw_limbs_internal()
                         self.draw_joints_internal()
                 else:
-                    # Si la display list n'est pas disponible, dessiner directement
+                    # If the display list is not available, draw directly
                     self.draw_limbs_internal()
                     self.draw_joints_internal()
             
-            # Afficher la légende
+            # Display the legend
             self._draw_legend()
         except OpenGL.error.GLError as e:
             print(f"OpenGL rendering error: {e}")
@@ -593,43 +612,43 @@ class Model3DViewer(QGLWidget):
         glVertex3f(p2[0], p2[1], p2[2])
     
     def draw_joints_internal(self):
-        """Dessine les articulations avec rotations via quaternions."""
+        """Draws joints with rotations via quaternions."""
         for part_name, data in self.body_parts.items():
             pos = data['pos']
             quat_rotation = data['rot']
             
             glPushMatrix()
-            # Déplacement à la position de la partie du corps
+            # Move to the position of the body part
             glTranslatef(pos[0], pos[1], pos[2])
             
-            # Application de la rotation quaternion via une matrice
+            # Apply quaternion rotation via a matrix
             try:
                 rotation_matrix = quaternion_to_matrix(quat_rotation)
                 glMultMatrixf(rotation_matrix)
             except Exception as e:
                 print(f"Error applying rotation for {part_name}: {e}")
-                # En cas d'erreur, ne pas appliquer de rotation
+                # In case of error, do not apply rotation
             
-            # Déterminer la couleur de l'articulation selon le type de capteur
+            # Determine the joint color based on sensor type
             sensor_type = self._get_mapped_sensor_type(part_name)
             
             if sensor_type == "IMU":
-                glColor3f(0.0, 0.8, 0.2)  # Vert
+                glColor3f(0.0, 0.8, 0.2)  # Green
             elif sensor_type == "EMG":
-                glColor3f(0.8, 0.2, 0.0)  # Rouge
+                glColor3f(0.8, 0.2, 0.0)  # Red
             elif sensor_type == "pMMG":
-                glColor3f(0.0, 0.2, 0.8)  # Bleu
+                glColor3f(0.0, 0.2, 0.8)  # Blue
             else:
-                glColor3f(0.9, 0.9, 0.9)  # Gris
+                glColor3f(0.9, 0.9, 0.9)  # Gray
 
-            # Dessiner la sphère de l'articulation
+            # Draw the joint sphere
             if self.quadric:
                 if part_name == 'head':
-                    gluSphere(self.quadric, 0.15, 12, 12)  # Tête plus grosse
+                    gluSphere(self.quadric, 0.15, 12, 12)  # Larger head
                 else:
-                    gluSphere(self.quadric, 0.05, 6, 6)  # Autres articulations
+                    gluSphere(self.quadric, 0.05, 6, 6)  # Other joints
             
-            # Ajouter une étiquette si c'est un capteur
+            # Add a label if it's a sensor
             if sensor_type:
                 model = glGetDoublev(GL_MODELVIEW_MATRIX)
                 proj = glGetDoublev(GL_PROJECTION_MATRIX)
@@ -670,20 +689,20 @@ class Model3DViewer(QGLWidget):
         self.last_pos = event.pos()
     
     def apply_imu_data(self, imu_id, quaternion_data):
-        """Applique les données IMU (quaternion) à une partie du corps."""
+        """Applies IMU data (quaternion) to a body part."""
         if not self.isValid() or not self.context().isValid():
             print("Warning: OpenGL context not valid in apply_imu_data")
             return False
         
         try:
-            # Déterminer quelle partie du corps est associée à cet IMU
+            # Determine which body part is associated with this IMU
             body_part_name = self.get_body_part_for_sensor('IMU', imu_id)
             
             if not body_part_name or body_part_name not in self.body_parts:
                 print(f"Warning: IMU ID {imu_id} not mapped or body part '{body_part_name}' unknown.")
                 return False
             
-            # Vérifications de validité des données
+            # Check data validity
             if not isinstance(quaternion_data, (list, np.ndarray)):
                 print(f"Warning: Quaternion data for IMU {imu_id} is not a list or numpy array.")
                 return False
@@ -691,37 +710,37 @@ class Model3DViewer(QGLWidget):
                 print(f"Warning: Quaternion data for IMU {imu_id} does not have 4 components.")
                 return False
 
-            # Normaliser le quaternion pour assurer une rotation correcte
+            # Normalize the quaternion to ensure correct rotation
             norm_quat = normalize_quaternion(np.array(quaternion_data))
             
-            # Appliquer le quaternion normalisé à la partie du corps
+            # Apply the normalized quaternion to the body part
             self.body_parts[body_part_name]['rot'] = norm_quat
             
-            # Si l'animation n'est pas active, reconstruire la display list
+            # If animation is not active, rebuild the display list
             if not self.walking:
                 self.safely_update_display_list()
             
-            # Appliquer la prédiction de mouvement après avoir traité les données IMU
+            # Apply motion prediction after processing IMU data
             if self.use_motion_prediction and not self.walking:
-                # Identifier les parties du corps surveillées par des IMUs
+                # Identify body parts monitored by IMUs
                 monitored_parts = set()
                 for imu_id, body_part in self.imu_mapping.items():
                     monitored_parts.add(body_part)
                 
-                # Prédire et appliquer les mouvements des parties non surveillées
+                # Predict and apply movements of unmonitored parts
                 updated_body_parts = self.motion_predictor.predict_joint_movement(
                     self.body_parts, monitored_parts, self.walking)
                 
-                # Appliquer les prédictions
+                # Apply predictions
                 for part_name, data in updated_body_parts.items():
                     if part_name not in monitored_parts:
                         self.body_parts[part_name]['rot'] = data['rot']
                 
-                # Si l'animation n'est pas active, reconstruire la display list
+                # If animation is not active, rebuild the display list
                 if not self.walking:
                     self.safely_update_display_list()
             
-            # Demander une mise à jour du rendu
+            # Request a render update
             self.update()
             return True
         except Exception as e:
@@ -737,19 +756,19 @@ class Model3DViewer(QGLWidget):
         if body_part in self.legacy_mappings:
             body_part = self.legacy_mappings[body_part]
         
-        # Stocker le mapping
+        # Store the mapping
         self.imu_mapping[imu_id] = body_part
         return True
     
     def get_body_part_for_sensor(self, sensor_type, sensor_id):
-        """Retourne la partie du corps associée à un capteur spécifique.
+        """Returns the body part associated with a specific sensor.
         
         Args:
-            sensor_type (str): Type de capteur ('IMU', 'EMG', 'pMMG')
-            sensor_id (int): ID du capteur
+            sensor_type (str): Sensor type ('IMU', 'EMG', 'pMMG')
+            sensor_id (int): Sensor ID
             
         Returns:
-            str: Nom de la partie du corps associée, ou None si aucun mapping
+            str: Name of the associated body part, or None if no mapping
         """
         if sensor_type == 'IMU':
             if sensor_id in self.imu_mapping:
@@ -893,7 +912,7 @@ class Model3DViewer(QGLWidget):
             return False
 
     def toggle_motion_prediction(self):
-        """Active ou désactive la prédiction de mouvement."""
+        """Enable or disable motion prediction."""
         self.use_motion_prediction = not self.use_motion_prediction
         return self.use_motion_prediction
 
@@ -961,7 +980,7 @@ class Model3DWidget(QWidget):
         QTimer.singleShot(500, self.model_viewer.safely_update_display_list)
 
     def toggle_motion_prediction(self):
-        """Active ou désactive la prédiction de mouvement."""
+        """Enable or disable motion prediction."""
         return self.model_viewer.toggle_motion_prediction()
 
 if __name__ == '__main__':

@@ -162,7 +162,8 @@ class DashboardAppBack:
         self.sensor_config = sensor_config
         self.packet_size = packet_size
         
-        self.ui.update_sensor_tree_from_config(self.sensor_config) # L'UI met à jour l'arbre
+        # Mettre à jour l'interface avec les capteurs disponibles
+        self.ui.update_sensor_tree_from_config(self.sensor_config)
         
         num_imus = self.sensor_config.get('num_imus', 0)
         self.recorded_data["IMU"] = [[] for _ in range(max(1, num_imus))]
@@ -174,9 +175,6 @@ class DashboardAppBack:
         len_emg = len(self.sensor_config.get('emg_ids', []))
         num_imus = self.sensor_config.get('num_imus', 0)
         len_pmmg = len(self.sensor_config.get('pmmg_ids', []))
-        
-        QMessageBox.information(self.ui, "Connection Success", 
-                               f"Connecté au dispositif ! Détecté {len_emg} EMG, {num_imus} IMU, {len_pmmg} pMMG.")
 
     def on_client_init_error(self, error_msg):
         print(f"[ERROR] {error_msg}")

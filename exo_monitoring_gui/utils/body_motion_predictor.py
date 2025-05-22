@@ -227,9 +227,68 @@ class SimpleBodyPredictor:
         return constrained_angles
 
 
+class ImprovedBodyMotionNetwork(nn.Module):
+    """Version améliorée du réseau pour de meilleures prédictions."""
+    def __init__(self, input_size, hidden_size, output_size):
+        super(ImprovedBodyMotionNetwork, self).__init__()
+        # Architecture plus profonde
+        self.layer1 = nn.Linear(input_size, hidden_size)
+        self.bn1 = nn.BatchNorm1d(hidden_size)
+        self.layer2 = nn.Linear(hidden_size, hidden_size*2)
+        self.bn2 = nn.BatchNorm1d(hidden_size*2)
+        self.layer3 = nn.Linear(hidden_size*2, hidden_size)
+        self.bn3 = nn.BatchNorm1d(hidden_size)
+        self.layer4 = nn.Linear(hidden_size, output_size)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.3)  # Augmenter légèrement le dropout
+        
+    def forward(self, x):
+        # Flux amélioré avec normalisation par lots
+        x = self.layer1(x)
+        if x.shape[0] > 1:  # BatchNorm1d nécessite plus d'un exemple
+            x = self.bn1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        
+        x = self.layer2(x)
+        if x.shape[0] > 1:
+            x = self.bn2(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        
+        x = self.layer3(x)
+        if x.shape[0] > 1:
+            x = self.bn3(x)
+        x = self.relu(x)
+        
+        x = self.layer4(x)
+        return x
+
+
+class SequentialBodyMotionNetwork(nn.Module):
+    """Réseau LSTM pour modéliser les séquences temporelles de mouvements."""
+    def __init__(self, input_size, hidden_size, output_size, num_layers=2):
+        super(SequentialBodyMotionNetwork, self).__init__()
+        self.lstm = nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=0.2 if num_layers > 1 else 0
+        )
+        self.fc = nn.Linear(hidden_size, output_size)
+        
+    def forward(self, x):
+        # x shape: [batch_size, sequence_length, input_size]
+        lstm_out, _ = self.lstm(x)
+        # Prendre seulement la dernière sortie de la séquence
+        output = self.fc(lstm_out[:, -1, :])
+        return output
+
+
 class BodyMotionNetwork(nn.Module):
     """
-    Réseau de neurones pour prédire les mouvements corporels à partir 
+    Réseau de neurones pour prédire les mouvements corporels à partir
     d'un nombre limité de capteurs IMU.
     """
     def __init__(self, input_size, hidden_size, output_size):
@@ -397,12 +456,13 @@ class MLBodyPredictor:
         
         # Marquer le modèle comme étant chargé
         self.model_loaded = True
-        return losses
+        return True  # Retourne True pour indiquer que l'entraînement s'est bien déroulé
     
     def save_model(self, path):
         """Sauvegarde le modèle entraîné sur disque."""
         torch.save(self.model.state_dict(), path)
         print(f"Modèle sauvegardé à {path}")
+        return True
 
 
 class MotionPredictorFactory:
