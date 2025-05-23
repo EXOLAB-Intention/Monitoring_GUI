@@ -317,6 +317,7 @@ class MainBar:
         except Exception as e:
             self.main_app_back._show_error(self.main_app,f"Error displaying metadata: {str(e)}")
 
+
     def show_about_dialog(self):
         """Show information about the software"""
         about_text = """
@@ -483,11 +484,39 @@ class MainBar:
         self.save_subject_as_action.setEnabled(False)
 
     def clear_plot(self):
-        print("clear plot")
+        """Clear all plots while maintaining settings."""
+        if hasattr(self.main_app, 'clear_plots_from_menu'):
+            self.main_app.clear_plots_from_menu()
+        elif hasattr(self.main_app, 'clear_all_plots'):
+            self.main_app.clear_all_plots()
+        else:
+            print("[WARNING] clear plots method not found in main_app")
 
-    def refresh_the_connected_systeme(self):
-        print("refresh_the_connected_systeme")
-    
+    def refresh_the_connected_system(self):
+        """Refresh the connected system and allow modification of sensor mappings."""
+        # Vérifier si on a accès à l'interface principale pour ouvrir le dialogue de mapping
+        if hasattr(self.main_app, 'open_sensor_mapping_dialog'):
+            # Vérifier si des capteurs sont connectés
+            if hasattr(self.main_app, 'backend') and hasattr(self.main_app.backend, 'sensor_config') and self.main_app.backend.sensor_config:
+                self.main_app.open_sensor_mapping_dialog()
+            else:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self.main_app, 
+                    "Refresh Connected System", 
+                    "No sensors are currently connected.\n\n"
+                    "Please connect sensors first using the 'Connect' button, then use this function to modify hardware settings and sensor-to-segment mappings."
+                )
+        else:
+            # Fallback: message d'information
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self.main_app, 
+                "Refresh Connected System", 
+                "This function allows you to modify hardware settings and sensor-to-segment mappings.\n\n"
+                "Please connect sensors first, then use the 'Configure Sensor Mapping' button in the 3D view panel."
+            )
+
     def request_h5_file(self):
         print("request_h5_file")
 
@@ -499,17 +528,17 @@ class MainBar:
 
         # Edit menu actions
         self.clear_plot_action = self._create_action(
-            "&Clear Plot",
+            "&Clear plots",
             lambda: self.clear_plot(),
             "Ctrl+P",
-            tip="Clear the current plot"
+            tip="Clear all plots while maintaining settings"
         )
 
         self.refresh_connected_system_action = self._create_action(
             "&Refresh Connected System",
-            lambda: self.refresh_the_connected_systeme(),
+            lambda: self.refresh_the_connected_system(),
             "Ctrl+R",
-            tip="Refresh the connected system"
+            tip="Refresh the connected system and modify sensor mappings"
         )
 
         self.request_h5_file_action = self._create_action(
@@ -525,6 +554,19 @@ class MainBar:
         edit_menu.addAction(self.request_h5_file_action)
 
     def edit_Boleen(self, boleen):
-        self.clear_plot_action.setEnabled(boleen)
-        self.refresh_connected_system_action.setEnabled(boleen)
-        self.request_h5_file_action.setEnabled(boleen)
+        """Active ou désactive les actions du menu Edit."""
+        actions_to_toggle = [
+            ('clear_plot_action', 'clear_plot_action'),  
+            ('refresh_connected_system_action', 'refresh_connected_system_action'),
+            ('request_h5_file_action', 'request_h5_file_action')
+        ]
+        
+        for attr_name, action_name in actions_to_toggle:
+            if hasattr(self, attr_name):
+                action = getattr(self, attr_name)
+                if action is not None:
+                    action.setEnabled(boleen)
+                else:
+                    print(f"[WARNING] {action_name} is None")
+            else:
+                print(f"[WARNING] {attr_name} attribute not found")
