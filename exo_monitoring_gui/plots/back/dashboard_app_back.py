@@ -237,7 +237,12 @@ class DashboardAppBack:
         self.sensor_config = sensor_config
         self.packet_size = packet_size
         
+        # Charger les mappages existants avant de mettre à jour l'interface
+        # pour s'assurer que tout mapping sauvegardé est disponible
+        self.load_mappings()
+        
         # Mettre à jour l'interface avec les capteurs disponibles
+        # Cela déclenchera aussi l'ouverture de la boîte de dialogue
         self.ui.update_sensor_tree_from_config(self.sensor_config)
         
         num_imus = self.sensor_config.get('num_imus', 0)
@@ -246,10 +251,6 @@ class DashboardAppBack:
         self.ui.connect_button.setText("Disconnect")
         self.ui.connect_button.setEnabled(True)
         self.ui.record_button.setEnabled(True)
-        
-        len_emg = len(self.sensor_config.get('emg_ids', []))
-        num_imus = self.sensor_config.get('num_imus', 0)
-        len_pmmg = len(self.sensor_config.get('pmmg_ids', []))
 
     def on_client_init_error(self, error_msg):
         print(f"[ERROR] {error_msg}")

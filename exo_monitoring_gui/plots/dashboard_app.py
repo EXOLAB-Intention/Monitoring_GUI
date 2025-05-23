@@ -143,12 +143,8 @@ class DashboardApp(QMainWindow):
         """)
         self.connected_systems.itemClicked.connect(self.on_sensor_clicked)
 
-        # Create only groups, do not add sensors initially
-        sensors = ["EMG Data", "IMU Data", "pMMG Data"]
-        for sensor_group in sensors:
-            group_item = QTreeWidgetItem([sensor_group])
-            self.connected_systems.addTopLevelItem(group_item)
-            group_item.setExpanded(True)
+        # Ne plus créer les groupes par défaut - ils seront créés uniquement quand des capteurs sont détectés
+        # Les groupes seront ajoutés dynamiquement dans update_sensor_tree_from_config()
 
         left_panel = QVBoxLayout()
         left_panel.addWidget(self.connected_systems)
@@ -370,17 +366,13 @@ class DashboardApp(QMainWindow):
         self.display_mode_group.buttonClicked.connect(self.on_display_mode_changed)
 
     def reset_sensor_display(self):
-        # Completely clear sensor groups
-        for i_group_item in range(self.connected_systems.topLevelItemCount()):
-            group_item = self.connected_systems.topLevelItem(i_group_item)
-            # Remove all children
-            while group_item.childCount() > 0:
-                group_item.removeChild(group_item.child(0))
+        # Completely clear all sensor groups and items
+        self.connected_systems.clear()
 
     def update_sensor_tree_from_config(self, sensor_config):
         if not sensor_config: return
 
-        # First clear all existing sensors
+        # First clear all existing sensors and groups
         self.reset_sensor_display()
 
         # List to store available sensors for display in the dialog
@@ -390,27 +382,36 @@ class DashboardApp(QMainWindow):
             'pMMG': []
         }
 
-        # Add EMGs
-        emg_group_item = self.find_sensor_group_item("EMG Data")
-        if emg_group_item:
+        # Add EMGs only if they exist
+        if sensor_config.get('emg_ids'):
+            emg_group_item = QTreeWidgetItem(["EMG Data"])
+            self.connected_systems.addTopLevelItem(emg_group_item)
+            emg_group_item.setExpanded(True)
+            
             for idx, sensor_id in enumerate(sensor_config.get('emg_ids', [])):
                 sensor_item = QTreeWidgetItem([f"EMG{sensor_id}"])
                 sensor_item.setForeground(0, QBrush(QColor("green")))
                 emg_group_item.addChild(sensor_item)
                 available_sensors['EMG'].append(sensor_id)
 
-        # Add IMUs
-        imu_group_item = self.find_sensor_group_item("IMU Data")
-        if imu_group_item:
+        # Add IMUs only if they exist
+        if sensor_config.get('imu_ids'):
+            imu_group_item = QTreeWidgetItem(["IMU Data"])
+            self.connected_systems.addTopLevelItem(imu_group_item)
+            imu_group_item.setExpanded(True)
+            
             for idx, sensor_id in enumerate(sensor_config.get('imu_ids', [])):
                 sensor_item = QTreeWidgetItem([f"IMU{sensor_id}"])
                 sensor_item.setForeground(0, QBrush(QColor("green")))
                 imu_group_item.addChild(sensor_item)
                 available_sensors['IMU'].append(sensor_id)
 
-        # Add pMMGs
-        pmmg_group_item = self.find_sensor_group_item("pMMG Data")
-        if pmmg_group_item:
+        # Add pMMGs only if they exist
+        if sensor_config.get('pmmg_ids'):
+            pmmg_group_item = QTreeWidgetItem(["pMMG Data"])
+            self.connected_systems.addTopLevelItem(pmmg_group_item)
+            pmmg_group_item.setExpanded(True)
+            
             for idx, sensor_id in enumerate(sensor_config.get('pmmg_ids', [])):
                 sensor_item = QTreeWidgetItem([f"pMMG{sensor_id}"])
                 sensor_item.setForeground(0, QBrush(QColor("green")))
@@ -424,8 +425,9 @@ class DashboardApp(QMainWindow):
         if self.group_sensor_mode.isChecked() and not self.group_plots:
             self.create_group_plots()
             
-        # Automatically display the sensor configuration dialog
-        self.open_sensor_mapping_dialog(available_sensors)
+        # Toujours ouvrir automatiquement la boîte de dialogue de configuration des capteurs
+        # après chaque connexion réussie, avec délai pour laisser l'interface se mettre à jour
+        QTimer.singleShot(100, lambda: self.open_sensor_mapping_dialog(available_sensors))
 
     def find_sensor_group_item(self, group_name):
         for i_find_group in range(self.connected_systems.topLevelItemCount()):
@@ -465,11 +467,19 @@ class DashboardApp(QMainWindow):
             QMessageBox.warning(self, "No Sensors", "Please connect sensors before configuring the mapping.")
             return
         
+        # Si ce n'est pas la première fois, charger les mappages existants
         curr_maps = self.backend.get_current_mappings_for_dialog()
         
-        # If we have available sensors, pass them to the dialog
+        # Créer et afficher la boîte de dialogue
         dialog = SensorMappingDialog(self, curr_maps, available_sensors)
         dialog.mappings_updated.connect(self.backend.update_sensor_mappings)
+        
+        # Déplacer la fenêtre de dialogue au premier plan et la mettre en évidence
+        dialog.setWindowState(dialog.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
+        dialog.activateWindow()
+        dialog.raise_()
+        
+        # Exécuter la boîte de dialogue de façon modale
         dialog.exec_()
 
     def refresh_sensor_tree_with_mappings(self, emg_mappings, pmmg_mappings):
@@ -964,4 +974,3 @@ if __name__ == '__main__':
     dashboard = DashboardApp()
     dashboard.show()
     sys.exit(app.exec_())
-    
