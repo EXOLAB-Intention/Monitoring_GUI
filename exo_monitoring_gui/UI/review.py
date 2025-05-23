@@ -151,14 +151,16 @@ class ZoomBar(QGraphicsView):
 
 
 class Review(QMainWindow):
-    def __init__(self):
+    def __init__(self, file):
         super().__init__()
         self.setWindowTitle("Logiciel de Surveillance des Données")
         self.resize(1600, 900)
         self.setMinimumSize(1400, 800)
         self.loaded_data = {}
+        self.curent_file = file
+        print(f"sahhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh + {self.curent_file}")
         self.time_axis = None
-        self.data = load_hdf5_data('C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\data6.h5')
+        self.data = load_hdf5_data(self.curent_file)
         print(f"Données chargées : {self.data}")
         self.setStyleSheet(self.get_stylesheet())
         self.init_ui()
@@ -239,7 +241,7 @@ class Review(QMainWindow):
         # Ajoutez un bouton de test pour charger le fichier HDF5
         load_button = QPushButton("Charger fichier HDF5")
         load_button.clicked.connect(
-            lambda: self.load_hdf5_and_populate_tree("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\data6.h5")
+            lambda: self.load_hdf5_and_populate_tree(self.curent_file)
         )
         layout.addWidget(load_button)
 

@@ -19,4 +19,16 @@ def show_h5_structure(file_path):
         f.visititems(lambda name, obj: print_tree(name, obj))
 
 
-show_h5_structure("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\sensor_20250522_211100.h5")
+show_h5_structure("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\data6.h5")
+
+import h5py
+
+# Remplace ce chemin par le chemin réel de ton fichier HDF5
+h5_file_path = "C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\data6.h5"
+
+# Ouvre le fichier HDF5 en mode lecture/écriture
+with h5py.File(h5_file_path, 'r+') as f:
+    # Ajoute ou modifie l'attribut à la racine
+    f.attrs['subject_created'] = True
+
+print("Attribut 'subject_current = True' ajouté à la racine du fichier.")

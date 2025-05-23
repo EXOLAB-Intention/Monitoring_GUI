@@ -89,7 +89,7 @@ class DashboardApp(QMainWindow):
         self.setWindowTitle("Data Monitoring Software")
         self.resize(1600, 900)
         self.setMinimumSize(1400, 800)
-
+        self.current_subject_file = None
         self.backend = DashboardAppBack(self)
 
         self.init_ui()
@@ -106,7 +106,7 @@ class DashboardApp(QMainWindow):
             if hasattr(self.main_bar_re, '_all_false_or_true'):
                 self.main_bar_re._all_false_or_true(False)
             if hasattr(self.main_bar_re, 'edit_Boleen'):
-                self.main_bar_re.edit_Boleen(False)
+                self.main_bar_re.edit_Boleen(True)
         except Exception as e:
             print(f"Error initializing MainBar: {e}")
             self.main_bar_re = None
