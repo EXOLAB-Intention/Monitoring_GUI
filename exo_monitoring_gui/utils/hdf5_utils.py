@@ -1,6 +1,14 @@
 import h5py
 import os
 from datetime import datetime
+from PyQt5.QtWidgets import (
+    QTreeWidgetItem, QVBoxLayout
+    )
+from PyQt5.QtGui import QBrush, QColor
+import numpy as np
+import pyqtgraph as pg
+
+
 
 def load_metadata(subject_file):
     """Load metadata from an HDF5 file.
@@ -171,3 +179,120 @@ def extract_group_data(file_path, group_name):
             raise ValueError(f"Le groupe '{group_name}' est introuvable dans 'Sensor'.")
 
         return read_group(target_group)
+    
+def plot_sensor_data(self, sensor_name, data_array):
+    """Trace les données d’un capteur sur un graphique."""
+    plot_widget = pg.PlotWidget()
+    plot_widget.setBackground('w')
+    plot_widget.setTitle(sensor_name, color='k', size='14pt')
+    plot_widget.plot(self.time_axis, data_array, pen=pg.mkPen(color='b', width=2))
+    plot_widget.setLabel('left', sensor_name)
+    plot_widget.setLabel('bottom', 'Time (s)')
+    plot_widget.showGrid(x=True, y=True)
+    self.middle_layout.addWidget(plot_widget)
+
+
+def load_hdf5_and_populate_tree(self, file_path):
+    """Charge un fichier HDF5, met à jour le QTreeWidget, et trace automatiquement les capteurs disponibles."""
+    self.connected_systems.clear()
+    self.middle_layout.setParent(None)  # Efface les anciens graphes
+    self.middle_layout = QVBoxLayout()
+    self.middle_placeholder.setLayout(self.middle_layout)
+
+    self.loaded_data.clear()
+    data_structure = {}
+    time_length = None
+
+    with h5py.File(file_path, "r") as f:
+        def visitor(name, obj):
+            nonlocal time_length
+            if isinstance(obj, h5py.Dataset):
+                parts = name.strip("/").split("/")
+                if len(parts) >= 2:
+                    group_name, dataset_name = parts[-2], parts[-1]
+                    group_upper = group_name.upper()
+                    dataset_upper = dataset_name.upper()
+
+                    if group_upper == "TIME":
+                        time_length = len(obj[:])
+                        return
+                    if group_upper == "LABEL":
+                        return
+
+                    if group_upper not in data_structure:
+                        data_structure[group_upper] = []
+                    data_structure[group_upper].append(dataset_upper)
+                    self.loaded_data[dataset_upper] = obj[:]
+
+        f.visititems(visitor)
+
+    # Génère X à partir de time_length et 40 ms entre chaque échantillon
+    if time_length is not None:
+        self.time_axis = np.arange(time_length) * 0.040
+    else:
+        any_key = next(iter(self.loaded_data), None)
+        if any_key:
+            length = len(self.loaded_data[any_key])
+            self.time_axis = np.arange(length) * 0.040
+        else:
+            self.time_axis = []
+
+    for group_name, dataset_list in data_structure.items():
+        group_item = QTreeWidgetItem([f"{group_name} Data"])
+        self.connected_systems.addTopLevelItem(group_item)
+
+        for dataset_name in dataset_list:
+            sensor_item = QTreeWidgetItem([dataset_name])
+            sensor_item.setForeground(0, QBrush(QColor("black")))
+            group_item.addChild(sensor_item)
+
+            if dataset_name in self.loaded_data:
+                plot_sensor_data(self, dataset_name, self.loaded_data[dataset_name])
+
+        group_item.setExpanded(True)
+
+
+def load_hdf5_data(file_path):
+
+    loaded_data = {}
+    data_structure = {}
+    time_length = None
+
+    with h5py.File(file_path, "r") as f:
+        def visitor(name, obj):
+            nonlocal time_length
+            if isinstance(obj, h5py.Dataset):
+                parts = name.strip("/").split("/")
+                if len(parts) >= 2:
+                    group_name, dataset_name = parts[-2], parts[-1]
+                    group_upper = group_name.upper()
+                    dataset_upper = dataset_name.upper()
+
+                    if group_upper == "TIME":
+                        time_length = len(obj[:])
+                        return
+                    if group_upper == "LABEL":
+                        return
+
+                    if group_upper not in data_structure:
+                        data_structure[group_upper] = []
+                    data_structure[group_upper].append(dataset_upper)
+                    loaded_data[dataset_upper] = obj[:]
+
+        f.visititems(visitor)
+
+    if time_length is not None:
+        time_axis = np.arange(time_length) * 0.040
+    else:
+        any_key = next(iter(loaded_data), None)
+        if any_key:
+            length = len(loaded_data[any_key])
+            time_axis = np.arange(length) * 0.040
+        else:
+            time_axis = np.array([])
+
+    return {
+        "loaded_data": loaded_data,
+        "data_structure": data_structure,
+        "time_axis": time_axis
+    }
