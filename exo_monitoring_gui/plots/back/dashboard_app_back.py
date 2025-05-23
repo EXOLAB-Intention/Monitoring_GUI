@@ -375,7 +375,7 @@ class DashboardAppBack:
                     self.ui.record_button.setEnabled(False) # Désactiver l'enregistrement si déconnecté
                     if self.recording: # Si on enregistrait, arrêter proprement
                         self.stop_recording()
-                    QMessageBox.warning(self.ui, "Connection Lost", f"Connection to the device was lost or trial ended: {reason}")
+                    QMessageBox.warning(self.ui, "Connection Lost", f"Connection to the device was lost or trial ended: ")
                 except ConnectionResetError:
                     print("[ERROR] Connection reset by peer.")
                     self.handle_connection_error("Connection reset by peer")
