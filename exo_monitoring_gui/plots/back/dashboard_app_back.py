@@ -13,6 +13,10 @@ import threading
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from utils.ethernet_receiver import recv_all, decode_packet
+
+# Constante pour le trial end marker
+TRIAL_END_MARKER = b'\x4E'
+
 from plots.model_3d_viewer import Model3DWidget # Garder pour la logique 3D
 
 class EthernetServerThread(QThread):
@@ -193,12 +197,13 @@ class DashboardAppBack:
         self.timer = QTimer() # Pas de self.ui ici, QTimer n'a pas besoin d'un parent direct pour fonctionner
         self.timer.timeout.connect(self.update_data)
         
-        try:
-            from utils.Menu_bar import MainBar
-            self.main_bar_re = MainBar(self.ui)
-        except Exception as e:
-            print(f"Error initializing MainBar: {e}")
-            self.main_bar_re = None
+        # Ne pas créer un deuxième MainBar, utiliser celui de l'UI
+        # try:
+        #     from utils.Menu_bar import MainBar
+        #     self.main_bar_re = MainBar(self.ui)
+        # except Exception as e:
+        #     print(f"Error initializing MainBar: {e}")
+        #     self.main_bar_re = None
 
     def connect_sensors(self):
         if not self.is_server_running:
@@ -224,6 +229,10 @@ class DashboardAppBack:
                                "Ethernet server started successfully. Waiting for device connection...")
 
     def on_client_connected(self, client_info):
+        # Si on était dans un état post-enregistrement, préparer un nouveau trial
+        if self.recording_stopped:
+            self.prepare_new_trial()
+            
         client_socket, addr = client_info
         self.client_socket = client_socket
         
@@ -235,9 +244,28 @@ class DashboardAppBack:
 
     def on_client_init_success(self, sensor_config, packet_size):
         self.sensor_config = sensor_config
+        
+        # Ajouter les champs manquants pour la compatibilité avec le reste du code
+        if 'raw_imu_ids' not in self.sensor_config:
+            # Reconstituer raw_imu_ids à partir des imu_ids
+            raw_imu_ids = []
+            for imu_id in sensor_config.get('imu_ids', []):
+                raw_imu_ids.extend([imu_id, imu_id, imu_id, imu_id])
+            self.sensor_config['raw_imu_ids'] = raw_imu_ids
+            self.sensor_config['len_pmmg'] = len(sensor_config.get('pmmg_ids', []))
+            self.sensor_config['len_fsr'] = len(sensor_config.get('fsr_ids', []))
+            self.sensor_config['len_imu'] = len(raw_imu_ids)
+            self.sensor_config['len_emg'] = len(sensor_config.get('emg_ids', []))
+            self.sensor_config['num_imus'] = len(sensor_config.get('imu_ids', []))
+        
         self.packet_size = packet_size
         
+        # Charger les mappages existants avant de mettre à jour l'interface
+        # pour s'assurer que tout mapping sauvegardé est disponible
+        self.load_mappings()
+        
         # Mettre à jour l'interface avec les capteurs disponibles
+        # Cela déclenchera aussi l'ouverture de la boîte de dialogue
         self.ui.update_sensor_tree_from_config(self.sensor_config)
         
         num_imus = self.sensor_config.get('num_imus', 0)
@@ -246,10 +274,6 @@ class DashboardAppBack:
         self.ui.connect_button.setText("Disconnect")
         self.ui.connect_button.setEnabled(True)
         self.ui.record_button.setEnabled(True)
-        
-        len_emg = len(self.sensor_config.get('emg_ids', []))
-        num_imus = self.sensor_config.get('num_imus', 0)
-        len_pmmg = len(self.sensor_config.get('pmmg_ids', []))
 
     def on_client_init_error(self, error_msg):
         print(f"[ERROR] {error_msg}")
@@ -292,15 +316,32 @@ class DashboardAppBack:
 
     def update_data(self):
         if self.recording:
+            print("[DEBUG] update_data called - recording is active")
             if self.client_socket and self.sensor_config and self.packet_size > 0:
+                print(f"[DEBUG] Reading data - packet_size: {self.packet_size}")
                 try:
-                    # Lire le paquet complet directement
+                    # Lire le premier byte pour vérifier s'il s'agit du trial end marker
+                    first = self.client_socket.recv(1)
+                    if not first:
+                        raise ConnectionError("Client disconnected")
+                    
+                    # Vérifier le trial end marker
+                    if first == TRIAL_END_MARKER:
+                        print("[INFO] Trial end marker received - stopping recording")
+                        # Vider le buffer après le trial end marker pour éviter la corruption
+                        print("[INFO] Flushing socket buffer after trial end marker")
+                        self.flush_socket_buffer()
+                        self.stop_recording()
+                        return
+                    
                     if self.packet_size <= 0:
                         print(f"[ERROR] Invalid packet_size {self.packet_size} in DashboardAppBack, cannot read packet.")
                         self.handle_connection_error("Invalid packet size detected")
                         return
-                        
-                    data_packet = recv_all(self.client_socket, self.packet_size)
+                    
+                    # Lire le reste du paquet
+                    rest = recv_all(self.client_socket, self.packet_size - 1)
+                    data_packet = first + rest
                     
                     packet = decode_packet(data_packet, self.sensor_config)
                     
@@ -311,6 +352,8 @@ class DashboardAppBack:
                         self.corrupted_packets_count += 1
                         if self.corrupted_packets_count > 5:
                             print("[ERROR] Too many corrupted packets in a row. Data may be unreliable.")
+                            print("[INFO] Flushing socket buffer to recover synchronization")
+                            self.flush_socket_buffer()
                             self.corrupted_packets_count = 0
                             # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
                             return
@@ -364,6 +407,8 @@ class DashboardAppBack:
                     return
                 except struct.error as e:
                     print(f"[ERROR] Struct unpacking error: {e}. Packet size may be incorrect.")
+                    print("[INFO] Flushing socket buffer to recover from struct error")
+                    self.flush_socket_buffer()
                     # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
                     return
                 except Exception as e:
@@ -408,7 +453,47 @@ class DashboardAppBack:
             
         return True
 
+    def flush_socket_buffer(self):
+        """Vide le buffer du socket pour éviter les données résiduelles."""
+        if not self.client_socket:
+            return
+            
+        try:
+            # Sauvegarder le timeout actuel
+            original_timeout = self.client_socket.gettimeout()
+            
+            # Mettre le socket en mode non-bloquant temporairement avec un timeout très court
+            self.client_socket.settimeout(0.05)  # 50ms timeout seulement
+            flushed_bytes = 0
+            max_iterations = 10  # Limiter le nombre d'itérations
+            
+            for _ in range(max_iterations):
+                try:
+                    data = self.client_socket.recv(512)  # Chunks plus petits
+                    if not data:
+                        break
+                    flushed_bytes += len(data)
+                except socket.timeout:
+                    break  # Plus rien à lire
+                except Exception:
+                    break
+                    
+            if flushed_bytes > 0:
+                print(f"[INFO] Flushed {flushed_bytes} bytes from socket buffer")
+                
+        except Exception as e:
+            print(f"[WARNING] Error flushing socket buffer: {e}")
+        finally:
+            # Remettre le timeout original
+            try:
+                self.client_socket.settimeout(original_timeout)
+            except:
+                pass
+
     def start_recording(self):
+        # Réinitialiser le compteur de paquets corrompus
+        self.corrupted_packets_count = 0
+        
         self.recording = True
         self.recording_stopped = False
         
@@ -424,8 +509,10 @@ class DashboardAppBack:
         }
         
         print(f"[INFO] Début de l'enregistrement avec {num_imus} IMUs")
+        print(f"[INFO] Timer starting with 40ms interval")
         self.ui.record_button.setText("Record Stop")
         self.timer.start(40) # Démarrer le timer ici
+        print(f"[INFO] Timer started, is active: {self.timer.isActive()}")
 
     def stop_recording(self):
         self.recording = False
@@ -441,12 +528,62 @@ class DashboardAppBack:
         self.ui.record_button.setEnabled(False)
         self.ui.show_recorded_data_on_plots(self.recorded_data) # L'UI gère l'affichage
         
-        if hasattr(self, 'main_bar_re') and self.main_bar_re is not None:
-            if hasattr(self.main_bar_re, 'edit_Boleen'):
+        if hasattr(self.ui, 'main_bar_re') and self.ui.main_bar_re is not None:
+            if hasattr(self.ui.main_bar_re, 'edit_Boleen'):
                 try:
-                    self.main_bar_re.edit_Boleen(True)
+                    self.ui.main_bar_re.edit_Boleen(True)
                 except Exception as e:
-                    print(f"Error calling edit_Boleen: {e}")
+                    print(f"[ERROR] Error calling edit_Boleen: {e}")
+
+    def clear_plots_only(self):
+        """Nettoie seulement les graphiques et données d'enregistrement, maintient tous les settings."""
+        # Réinitialiser l'état pour permettre un nouveau trial
+        self.recording_stopped = False
+        
+        # Réinitialiser le compteur de paquets corrompus
+        self.corrupted_packets_count = 0
+        
+        # Vider les données enregistrées
+        num_imus = self.sensor_config.get('num_imus', 0) if self.sensor_config else 1
+        self.recorded_data = {
+            "EMG": [[] for _ in range(8)],
+            "IMU": [[] for _ in range(max(1, num_imus))],
+            "pMMG": [[] for _ in range(8)]
+        }
+        
+        # Vider les données de plot en temps réel
+        self.plot_data.clear()
+        self.group_plot_data.clear()
+        
+        # Demander à l'UI de nettoyer les graphiques
+        self.ui.clear_all_plots()
+        
+        # Désactiver le menu Edit après nettoyage
+        if hasattr(self.ui, 'main_bar_re') and self.ui.main_bar_re is not None:
+            if hasattr(self.ui.main_bar_re, 'edit_Boleen'):
+                try:
+                    self.ui.main_bar_re.edit_Boleen(False)
+                except Exception as e:
+                    print(f"[ERROR] Error calling edit_Boleen: {e}")
+        
+        # Réactiver le bouton d'enregistrement si on a une connexion
+        if self.client_socket:
+            self.ui.record_button.setText("Record Start")
+            self.ui.record_button.setEnabled(True)
+            print("[INFO] System ready for new trial - Record button enabled")
+
+    def prepare_new_trial(self):
+        """Prépare l'interface pour un nouveau trial en nettoyant les données et graphiques."""
+        # Arrêter l'enregistrement si en cours
+        if self.recording:
+            self.recording = False
+            self.timer.stop()
+        
+        # Réinitialiser les états
+        self.recording_stopped = False
+        
+        # Utiliser la méthode de nettoyage simple
+        self.clear_plots_only()
 
     def toggle_recording(self):
         if self.recording:

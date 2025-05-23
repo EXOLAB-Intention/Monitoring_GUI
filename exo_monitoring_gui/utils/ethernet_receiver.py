@@ -6,7 +6,7 @@ import time  # for internal timing
 # === Configuration ===
 LISTEN_IP       = '0.0.0.0'
 LISTEN_PORT     = 5001
-TRIAL_END_MARKER = b'\x4E' # MOD01 : Added trial end marker
+TRIAL_END_MARKER = b'\x4E'
 
 def recv_all(sock, size):
     """Block until exactly `size` bytes have been received."""
@@ -68,7 +68,6 @@ def decode_packet(data, cfg):
 
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Good practice
     server.bind((LISTEN_IP, LISTEN_PORT))
     server.listen(1)
     print(f"[INFO] Listening on {LISTEN_IP}:{LISTEN_PORT}...")
@@ -85,7 +84,6 @@ def start_server():
             print(f"[INFO] Connection from {addr}")
 
             try:
-                # Configuration reception loop (as per user's MOD02)
                 while True:
                     while True:
                         hdr = recv_all(conn, 4)
@@ -97,7 +95,7 @@ def start_server():
                         if recv_crc != ((sum(hdr) + sum(ids)) & 0xFFFFFFFF):
                             print("[ERROR] SensorConfig CRC mismatch, retrying...")
                             continue
-                        break # CRC OK
+                        break
 
                     # decode IDs
                     offset = 0
@@ -113,58 +111,44 @@ def start_server():
                         'fsr_ids':  fsr_ids,
                         'imu_ids':  imu_ids,
                         'emg_ids':  emg_ids,
-                        # Adding these for completeness, similar to what receive_initial_config_from_client did
-                        'raw_imu_ids': raw_imu_ids,
-                        'len_pmmg': lp,
-                        'len_fsr': lf,
-                        'len_imu': li, # This is len_imu_components
-                        'len_emg': le,
-                        'num_imus': num_imus
                     }
-                    print(f"[INFO] Received SensorConfig: { {k: v for k,v in cfg.items() if k in ['pmmg_ids', 'fsr_ids', 'imu_ids', 'emg_ids']} }")
+                    print(f"[INFO] Received SensorConfig: {cfg}")
 
                     # calculate packet size
                     packet_size = (
-                        4 +             # timestamp
-                        len(pmmg_ids)*2 + # pmmg
-                        len(fsr_ids)*2 +  # fsr
-                        len(imu_ids)*4*2 +# imu (4 values × int16)
-                        len(emg_ids)*2 +  # emg
-                        5 +             # buttons
-                        4 +             # joystick
-                        4               # CRC
+                        4 +
+                        len(pmmg_ids)*2 +
+                        len(fsr_ids)*2 +
+                        len(imu_ids)*4*2 +
+                        len(emg_ids)*2 +
+                        5 +
+                        4 +
+                        4
                     )
-                    break # Config received and processed, exit config loop
 
-                ## MOD03 : Read data packets until trial-end marker
-                while True:
-                    first = conn.recv(1)
-                    if not first:
-                        raise ConnectionError("Client disconnected")
-                  
-                    
-                    if packet_size <= 1:
-                        print(f"[ERROR] Invalid packet size {packet_size} in start_server. Cannot read rest of packet.")
-                        raise ValueError("Calculated packet size is too small for a data packet.")
-                        
-                    rest = recv_all(conn, packet_size - 1)
-                    data = first + rest
-                    parsed = decode_packet(data, cfg)
+                    ## MOD03 : Read data packets until trial-end marker
+                    while True:
+                        first = conn.recv(1)
+                        if not first:
+                            raise ConnectionError("Client disconnected")
+                        if first == TRIAL_END_MARKER:
+                            print("[INFO] Trial end marker received")
+                            break
+                        rest = recv_all(conn, packet_size - 1)
+                        data = first + rest
+                        parsed = decode_packet(data, cfg)
 
-                    print(
-                        f"[sensor_ts={parsed['timestamp_ms']} ms] "
-                        f"pMMG={parsed['pmmg']} FSR={parsed['fsr']} "
-                        f"IMU={parsed['imu']} EMG={parsed['emg']} "
-                        f"Buttons={parsed['buttons']} "
-                        f"Joystick={parsed['joystick']} CRC_OK={parsed['crc_valid']}"
-                    )
+
+                        print(
+                            f"[sensor_ts={parsed['timestamp_ms']} ms] "
+                            f"pMMG={parsed['pmmg']} FSR={parsed['fsr']} "
+                            f"IMU={parsed['imu']} EMG={parsed['emg']} "
+                            f"Buttons={parsed['buttons']} "
+                            f"Joystick={parsed['joystick']} CRC_OK={parsed['crc_valid']}"
+                        )
 
             except ConnectionError as e:
                 print(f"[ERROR] {e}")
-            except ValueError as e:
-                print(f"[ERROR] Value error with {addr}: {e}")
-            except Exception as e:
-                print(f"[ERROR] Unexpected error with client {addr}: {e}")
             finally:
                 ## MOD04 : Print different message
                 conn.close()
@@ -172,7 +156,6 @@ def start_server():
 
     finally:
         server.close()
-        print("[INFO] Server shut down.")
 
 if __name__ == '__main__':
     start_server()
