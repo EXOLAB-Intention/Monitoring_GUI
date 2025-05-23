@@ -583,6 +583,28 @@ class SimplifiedMappingDialog(QDialog):
         """)
         assign_layout.addWidget(self.manual_assign_button, 3, 0, 1, 2)
         
+        # Auto-suggest button
+        self.auto_suggest_button = QPushButton("Suggest IMU Mappings")
+        self.auto_suggest_button.clicked.connect(self.auto_suggest_mappings)
+        self.auto_suggest_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #1E88E5;
+            }
+            QPushButton:pressed {
+                background-color: #1976D2;
+            }
+        """)
+        assign_layout.addWidget(self.auto_suggest_button, 4, 0, 1, 2)
+        
         assign_group.setLayout(assign_layout)
         assign_container_layout.addWidget(assign_group)
         assign_container_layout.addStretch(1)  # Add stretch to keep the assign group at the top
@@ -742,37 +764,97 @@ class SimplifiedMappingDialog(QDialog):
             self.sensor_id_combo.addItem(f"{sensor_id}")
 
     def manual_assign(self):
-        """Manually assign a sensor from the general tab"""
+        """Manually assign a sensor to a body part"""
         body_part_ui = self.body_part_combo.currentText()
         sensor_type = self.sensor_type_combo.currentText()
-        sensor_id = int(self.sensor_id_combo.currentText())
         
-        body_part = self._convert_ui_to_model_part(body_part_ui)
+        if not self.sensor_id_combo.currentText():
+            QMessageBox.warning(self, "Warning", "Please select a sensor ID")
+            return
+            
+        try:
+            sensor_id = int(self.sensor_id_combo.currentText())
+        except ValueError:
+            QMessageBox.warning(self, "Warning", "Invalid sensor ID")
+            return
+            
+        body_part_model = self._convert_ui_to_model_part(body_part_ui)
         
-        # Update mapping
-        self.current_mappings[sensor_type][sensor_id] = body_part
-        
-        # Update combos in specific tab
-        if sensor_type in self.sensor_combos and sensor_id in self.sensor_combos[sensor_type]:
-            combo = self.sensor_combos[sensor_type][sensor_id]
-            index = combo.findText(body_part_ui)
-            if index >= 0:
-                combo.setCurrentIndex(index)
-        
-        # Update 3D model
+        # Update the mapping in the appropriate dictionary
         if sensor_type == "IMU":
-            self.general_model.map_imu_to_body_part(sensor_id, body_part)
-            self.imu_model.map_imu_to_body_part(sensor_id, body_part)
-        
-        # Update badges
+            self.current_mappings["IMU"][sensor_id] = body_part_model
+            # Mettre à jour le modèle 3D pour montrer immédiatement le changement
+            self.general_model.map_imu_to_body_part(sensor_id, body_part_model)
+        elif sensor_type == "EMG":
+            self.current_mappings["EMG"][sensor_id] = body_part_model
+        elif sensor_type == "pMMG":
+            self.current_mappings["pMMG"][sensor_id] = body_part_model
+            
+        # Update the badges
         self.update_badges()
         
-        # Confirmation message
+        # Feedback to user
         QMessageBox.information(
             self, 
             "Sensor Assigned", 
-            f"{sensor_type} {sensor_id} has been assigned to {body_part_ui}"
+            f"{sensor_type} sensor {sensor_id} has been assigned to {body_part_ui}."
         )
+
+    def auto_suggest_mappings(self):
+        """Suggère automatiquement des mappages pour les IMU basés sur des positions logiques"""
+        # Mappages suggérés basés sur l'expérience et les positions anatomiques
+        suggested_mappings = {
+            # IMU mappings - ajustez selon vos besoins spécifiques
+            'IMU': {
+                1: 'head',           # Tête
+                2: 'left_hand',      # Main gauche
+                3: 'right_hand',     # Main droite
+                4: 'torso',          # Torse
+                5: 'left_foot',      # Pied gauche
+                6: 'right_foot',     # Pied droit
+                7: 'forearm_l',      # Avant-bras gauche
+                8: 'forearm_r',      # Avant-bras droit
+                9: 'biceps_l',       # Biceps gauche
+                10: 'biceps_r',      # Biceps droit
+                11: 'quadriceps_l',  # Quadriceps gauche
+                12: 'quadriceps_r',  # Quadriceps droit
+                13: 'calves_l',      # Mollet gauche
+                14: 'calves_r',      # Mollet droit
+                15: 'neck',          # Cou
+                16: 'hip',           # Hanche
+                17: 'left_hand',     # Main gauche (alternative)
+                18: 'forearm_l',     # Avant-bras gauche (alternative)
+                19: 'biceps_l',      # Biceps gauche (alternative)
+                20: 'forearm_r',     # Avant-bras droit (alternative)
+                21: 'right_hand'     # Main droite (alternative)
+            }
+        }
+        
+        # Demander confirmation à l'utilisateur
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Question)
+        msg.setText("Appliquer les mappages automatiques suggérés pour les IMU?")
+        msg.setInformativeText("Cela remplacera tous les mappages IMU existants.")
+        msg.setWindowTitle("Confirmation")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+        
+        if msg.exec_() == QMessageBox.Yes:
+            # Appliquer les mappages suggérés
+            self.current_mappings["IMU"] = suggested_mappings['IMU'].copy()
+            
+            # Mettre à jour le modèle 3D pour montrer immédiatement les changements
+            for imu_id, body_part in self.current_mappings["IMU"].items():
+                self.general_model.map_imu_to_body_part(imu_id, body_part)
+            
+            # Mettre à jour les badges
+            self.update_badges()
+            
+            QMessageBox.information(
+                self,
+                "Mappages appliqués",
+                "Les mappages automatiques pour les IMU ont été appliqués avec succès."
+            )
 
     def _get_color_for_type(self, typ):
         return {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}.get(typ, "#888")
@@ -794,7 +876,6 @@ class SimplifiedMappingDialog(QDialog):
         # Mettre à jour tous les modèles 3D
         for sensor_id, body_part in self.current_mappings["IMU"].items():
             self.general_model.map_imu_to_body_part(sensor_id, body_part)
-            self.imu_model.map_imu_to_body_part(sensor_id, body_part)
 
     def on_combo_changed(self, sensor_type, sensor_id, body_part_ui):
         """Called when a combo is changed in a specific tab"""
@@ -808,7 +889,6 @@ class SimplifiedMappingDialog(QDialog):
             # Update 3D model for IMU
             if sensor_type == "IMU":
                 self.general_model.map_imu_to_body_part(sensor_id, body_part)
-                self.imu_model.map_imu_to_body_part(sensor_id, body_part)
         
         # Update badges
         self.update_badges()
@@ -870,7 +950,6 @@ class SimplifiedMappingDialog(QDialog):
         if sensor_type == "IMU":
             for sensor_id, body_part in default_values.items():
                 self.general_model.map_imu_to_body_part(sensor_id, body_part)
-                self.imu_model.map_imu_to_body_part(sensor_id, body_part)
         
         # Update badges
         self.update_badges()

@@ -27,14 +27,14 @@ def convert_imu_csv_to_json(csv_path, json_output_path):
         df.columns = df.columns.str.strip()  # Supprimer les espaces dans les noms de colonnes
         print(f"   ┣ CSV chargé avec succès: {len(df)} lignes trouvées")
         
-        # Mapping capteur -> partie du corps
+        # Mapping capteur -> partie du corps MIS À JOUR
         sensor_map = {
-            1: "torso",
-            2: "forearm_l",
-            3: "forearm_r",
-            4: "calves_l",
-            5: "calves_r",
-            6: "head"
+            1: "left_foot",    # Pied gauche
+            2: "right_foot",   # Pied droit
+            3: "quadriceps_l", # Poche avant gauche (sur la cuisse gauche)
+            4: "quadriceps_r", # Poche avant droite (sur la cuisse droite)
+            5: "right_hand",   # IMU tenue en main (supposons main droite)
+            6: "hip"           # Poche arrière (hanche/bassin)
         }
         
         # Création de la structure
@@ -104,14 +104,14 @@ class AutoModelTrainer:
         os.makedirs(self.viz_dir, exist_ok=True)
         print(f"   ┣ Dossier de visualisation: {self.viz_dir}")
         
-        # Configuration du mapping des capteurs
+        # Configuration du mapping des capteurs MIS À JOUR
         self.sensor_map = {
-            1: "torso",
-            2: "forearm_l",
-            3: "forearm_r",
-            4: "calves_l",
-            5: "calves_r",
-            6: "head"
+            1: "left_foot",    # Pied gauche
+            2: "right_foot",   # Pied droit
+            3: "quadriceps_l", # Poche avant gauche (sur la cuisse gauche)
+            4: "quadriceps_r", # Poche avant droite (sur la cuisse droite)
+            5: "right_hand",   # IMU tenue en main (supposons main droite)
+            6: "hip"           # Poche arrière (hanche/bassin)
         }
         
         # Liste des parties du corps pour l'entraînement
@@ -318,30 +318,40 @@ class AutoModelTrainer:
         print(f"   ┣ Configuration: {epochs} epochs, batch size {batch_size}, learning rate {learning_rate}")
         
         print("   ┣ Initialisation du modèle...")
-        predictor = MLBodyPredictor(model_path if model_path else None)
+        # MLBodyPredictor.__init__ ne prend pas learning_rate pour l'instant.
+        predictor = MLBodyPredictor(
+            model_path=model_path if model_path else None
+            # learning_rate retiré du constructeur
+        )
         
         # Entraîner le modèle
         print(f"   ┣ Lancement de l'entraînement ({datetime.now().strftime('%H:%M:%S')})")
         start_time = datetime.now()
+        
+        # On suppose que predictor.train_model prend learning_rate et retourne un booléen.
         success = predictor.train_model(
             (inputs_tensor, targets_tensor), 
             epochs=epochs, 
-            batch_size=batch_size, 
-            learning_rate=learning_rate
+            batch_size=batch_size,
+            learning_rate=learning_rate # learning_rate est passé ici
         )
         
         training_time = datetime.now() - start_time
         print(f"   ┣ Entraînement terminé en {training_time.total_seconds():.1f} secondes")
         
+        # training_outcome est maintenant 'success' (un booléen)
+        # Les variables last_epoch et final_loss ne sont pas disponibles depuis train_model
+        # si MLBodyPredictor n'a pas été mis à jour pour les retourner.
+
         if success:
             # Sauvegarder le modèle
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = os.path.join(self.output_dir, f"motion_model_{timestamp}.pth")
             standard_path = os.path.join(self.output_dir, "motion_model.pth")
-            # Ajouter le chemin pour training_viz
             viz_path = os.path.join(self.viz_dir, "motion_model.pth")
             
-            if predictor.save_model(output_path):
+            # On suppose que predictor.save_model ne prend pas encore epoch et loss.
+            if predictor.save_model(output_path): # Appel sans epoch et loss
                 print(f"Modèle sauvegardé à {output_path}")
                 
                 # Copier vers les chemins standards
@@ -349,13 +359,15 @@ class AutoModelTrainer:
                 shutil.copy2(output_path, standard_path)
                 print(f"Modèle copié vers le chemin standard: {standard_path}")
                 
-                # Ajouter une copie dans training_viz
                 shutil.copy2(output_path, viz_path)
                 print(f"Modèle copié vers training_viz: {viz_path}")
                 
                 return True
+            else:
+                print(f"   ┗ ERREUR: Échec de la sauvegarde du modèle à {output_path}. ❌")
         else:
-            print("   ┗ ERREUR: Échec de l'entraînement du modèle. ❌")
+            # Si l'entraînement a échoué, success est False.
+            print(f"   ┗ ERREUR: Échec de l'entraînement du modèle. ❌")
         
         return False
     
