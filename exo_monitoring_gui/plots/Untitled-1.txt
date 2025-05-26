@@ -1,0 +1,9 @@
+{
+  "window.newWindowDimensions": "inherit"
+}
+```:
+- "default" - Open new windows in the center of the screen
+- "inherit" - Open new windows with same dimensions as last active one
+- "offset" - Open new windows with same dimensions as last active one with an offset position
+- "maximized" - Open new windows maximized
+- "fullscreen" - Open new windows in full screen mode
