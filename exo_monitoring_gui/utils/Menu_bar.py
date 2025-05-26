@@ -8,7 +8,7 @@ from datetime import datetime
 from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata
 from UI.back.main_window_back import MainAppBack
-
+from utils.file_receiver import request_files
 class MainBar:
     def __init__(self, main_app):
         self.main_app = main_app
@@ -532,13 +532,26 @@ class MainBar:
             )
             if not f:  # User cancelled file selection
                 return
-                
-        self.review = Review(file_path=f)
         
-        for widget in QApplication.topLevelWidgets():
-            widget.close()
-        
-        self.review.show()
+        OUT_DIR = os.path.expanduser("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\exo_monitoring_gui\\data\\recuperation")
+
+        request_files()
+
+        received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
+        received_files = [f for f in received_files if os.path.isfile(f)]
+
+        if received_files:
+            latest_file = max(received_files, key=os.path.getmtime)
+
+            self.review = Review(file_path=latest_file)
+
+            for widget in QApplication.topLevelWidgets():
+                widget.close()
+
+            self.review.show()
+        else:
+            print("[WARN] Aucun fichier reçu.")
+
         
 
     def edit_creation_date(self):
