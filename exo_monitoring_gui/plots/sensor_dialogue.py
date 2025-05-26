@@ -439,34 +439,117 @@ class SimplifiedMappingDialog(QDialog):
         self.update_badges()
 
     def start_calibration(self):
-        """Démarre la calibration des IMU."""
+        """Starts IMU calibration."""
         if hasattr(self.parent(), 'model_3d_widget'):
-            result = QMessageBox.question(self, "IMU Calibration", 
-                                   "🎯 IMU Calibration Process\n\n"
-                                   "This will calibrate your IMU sensors for better accuracy.\n\n"
-                                   "Instructions:\n"
-                                   "1. Stand in T-pose (arms extended horizontally)\n"
-                                   "2. Face forward and remain completely still\n"
-                                   "3. Calibration will start in 3 seconds and last 3 seconds\n\n"
-                                   "Are you ready to start?",
+            # Detailed instructions for T-pose
+            calibration_instructions = """🎯 IMU Sensor Calibration
+
+📋 IMPORTANT INSTRUCTIONS:
+
+🧍 Correct T-pose position:
+   • Stand upright, feet shoulder-width apart
+   • Arms extended horizontally to the sides (like a T)
+   • Palms facing down, fingers extended
+   • Look straight ahead, head upright
+   • Straight back, relaxed shoulders
+   • Distribute weight evenly on both feet
+
+⏱️ Procedure:
+   • Take the T-pose position
+   • Stay PERFECTLY still for 6 seconds
+   • 3 seconds preparation + 3 seconds calibration
+   • Do not move even slightly!
+
+🎯 This pose allows sensors to define their reference orientation.
+
+Are you ready to start calibration?"""
+
+            result = QMessageBox.question(self, "IMU Calibration - T-pose Position", 
+                                   calibration_instructions,
                                    QMessageBox.Yes | QMessageBox.No,
                                    QMessageBox.Yes)
             
             if result == QMessageBox.Yes:
-                # Délai de 3 secondes pour se préparer
-                QTimer.singleShot(3000, lambda: self.parent().model_3d_widget.model_viewer.start_calibration(3))
-                
-                # Désactiver le bouton temporairement
-                self.calibration_button.setEnabled(False)
-                self.calibration_button.setText("🎯 Calibrating...")
-                
-                # Réactiver après 6 secondes (3s préparation + 3s calibration)
-                QTimer.singleShot(6000, self._reset_calibration_button)
+                # Show visual countdown
+                self._show_countdown_dialog()
         else:
-            QMessageBox.warning(self, "Error", "3D model viewer not available")
+            QMessageBox.warning(self, "Error", "3D viewer not available")
+
+    def _show_countdown_dialog(self):
+        """Shows a countdown dialog for calibration."""
+        from PyQt5.QtWidgets import QProgressDialog
+        from PyQt5.QtCore import QTimer
+        
+        # Create progress dialog
+        self.countdown_dialog = QProgressDialog("Prepare in T-pose...", "Cancel", 0, 6, self)
+        self.countdown_dialog.setWindowTitle("Calibration in Progress")
+        self.countdown_dialog.setModal(True)
+        self.countdown_dialog.setAutoClose(False)
+        self.countdown_dialog.setAutoReset(False)
+        
+        # Style pour le dialogue
+        self.countdown_dialog.setStyleSheet("""
+            QProgressDialog {
+                background-color: #2196F3;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QProgressBar {
+                border: 2px solid #1976D2;
+                border-radius: 8px;
+                background-color: #BBDEFB;
+                text-align: center;
+                font-weight: bold;
+                color: #1976D2;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 6px;
+            }
+        """)
+        
+        self.countdown_seconds = 6
+        self.countdown_timer = QTimer()
+        self.countdown_timer.timeout.connect(self._update_countdown)
+        
+        # Start calibration after dialog display
+        QTimer.singleShot(100, self._start_countdown)
+        
+        self.countdown_dialog.show()
+
+    def _start_countdown(self):
+        """Démarre le compte à rebours."""
+        self.countdown_timer.start(1000)  # 1 seconde
+        self._update_countdown()
+
+    def _update_countdown(self):
+        """Updates the countdown."""
+        if self.countdown_seconds > 3:
+            # Preparation phase
+            phase_text = f"🧍 TAKE T-POSE POSITION\nCalibration starting in {self.countdown_seconds - 3} seconds..."
+            self.countdown_dialog.setLabelText(phase_text)
+        elif self.countdown_seconds > 0:
+            # Calibration phase
+            if self.countdown_seconds == 3:
+                # Start actual calibration
+                self.parent().model_3d_widget.model_viewer.start_calibration(3)
+            phase_text = f"🎯 CALIBRATION IN PROGRESS\nDo not move! {self.countdown_seconds} seconds remaining..."
+            self.countdown_dialog.setLabelText(phase_text)
+        else:
+            # End of calibration
+            self.countdown_timer.stop()
+            self.countdown_dialog.setLabelText("✅ Calibration completed!")
+            QTimer.singleShot(1000, self.countdown_dialog.close)
+            self._reset_calibration_button()
+            return
+        
+        # Update progress bar
+        self.countdown_dialog.setValue(6 - self.countdown_seconds)
+        self.countdown_seconds -= 1
 
     def _reset_calibration_button(self):
-        """Remet le bouton de calibration à l'état normal."""
+        """Resets calibration button to normal state."""
         self.calibration_button.setEnabled(True)
         self.calibration_button.setText("🎯 Start IMU Calibration")
         QMessageBox.information(self, "Calibration Complete", 
@@ -474,7 +557,7 @@ class SimplifiedMappingDialog(QDialog):
                                "Your sensors are now calibrated for optimal tracking accuracy.")
 
     def toggle_debug(self):
-        """Active/désactive le mode debug."""
+        """Enables/disables debug mode."""
         if hasattr(self.parent(), 'model_3d_widget'):
             debug_active = self.parent().model_3d_widget.model_viewer.toggle_debug_mode()
             
@@ -496,7 +579,7 @@ class SimplifiedMappingDialog(QDialog):
                         background-color: #43A047;
                     }
                 """)
-                # Afficher les informations de debug
+                # Show debug information
                 QTimer.singleShot(500, self._show_debug_info)
             else:
                 self.debug_button.setText("🐛 Debug Mode")
@@ -518,7 +601,7 @@ class SimplifiedMappingDialog(QDialog):
                 """)
 
     def _show_debug_info(self):
-        """Affiche les informations de debug dans une fenêtre séparée."""
+        """Shows debug information in a separate window."""
         if hasattr(self.parent(), 'model_3d_widget'):
             debug_info = self.parent().model_3d_widget.model_viewer.get_debug_info()
             if debug_info:

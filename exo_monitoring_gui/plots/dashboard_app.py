@@ -654,45 +654,20 @@ class DashboardApp(QMainWindow):
             QMessageBox.warning(self, "No Sensors", "Please connect sensors before configuring the mapping.")
             return
         
-        # Si ce n'est pas la première fois, charger les mappages existants
+        # If not the first time, load existing mappings
         curr_maps = self.backend.get_current_mappings_for_dialog()
         
-        # Créer et afficher la boîte de dialogue
+        # Create and show dialog
         dialog = SensorMappingDialog(self, curr_maps, available_sensors)
         dialog.mappings_updated.connect(self.backend.update_sensor_mappings)
         
-        # Déplacer la fenêtre de dialogue au premier plan et la mettre en évidence
+        # Move dialog to foreground and highlight it
         dialog.setWindowState(dialog.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
         dialog.activateWindow()
         dialog.raise_()
         
-        # Exécuter la boîte de dialogue de façon modale
+        # Execute dialog modally
         dialog.exec_()
-
-    def refresh_sensor_tree_with_mappings(self, emg_mappings, pmmg_mappings):
-        for i_rf_group in range(self.connected_systems.topLevelItemCount()):
-            group_item = self.connected_systems.topLevelItem(i_rf_group)
-            for j_rf_sensor in range(group_item.childCount()):
-                sensor_item = group_item.child(j_rf_sensor)
-                if sensor_item.isHidden(): continue
-                orig_text = sensor_item.text(0)
-                s_base_rf = orig_text.split()[0]
-                new_s_text = s_base_rf
-                s_id_str_rf = ''.join(filter(str.isdigit, s_base_rf))
-                if s_id_str_rf:
-                    s_id_rf = int(s_id_str_rf)
-                    if s_base_rf.startswith("IMU"):
-                        imu_maps_curr = self.model_3d_widget.get_current_mappings()
-                        if s_id_rf in imu_maps_curr:
-                            new_s_text = f"{s_base_rf} ({self._convert_model_part_to_ui(imu_maps_curr[s_id_rf])})"
-                    elif s_base_rf.startswith("EMG") and s_id_rf in emg_mappings:
-                        new_s_text = f"{s_base_rf} ({self._convert_model_part_to_ui(emg_mappings[s_id_rf])})"
-                    elif s_base_rf.startswith("pMMG") and s_id_rf in pmmg_mappings:
-                        new_s_text = f"{s_base_rf} ({self._convert_model_part_to_ui(pmmg_mappings[s_id_rf])})"
-                sensor_item.setText(0, new_s_text)
-
-    def _convert_model_part_to_ui(self, model_part_name):
-        return {'head': 'Head', 'neck': 'Neck', 'torso': 'Torso'}.get(model_part_name, model_part_name.replace('_', ' ').title())
 
     def setup_default_mappings(self):
         # Check if sensors are connected
@@ -706,162 +681,8 @@ class DashboardApp(QMainWindow):
         QMessageBox.information(self, "Default Assignments Setup", "Configure sensor mappings...\nThese will be saved as default.")
         dialog_def.exec_()
 
-    def apply_imu_mappings(self, imu_mappings_apply):
-        for imu_id_apply, body_part_apply in imu_mappings_apply.items():
-            self.model_3d_widget.map_imu_to_body_part(int(imu_id_apply), body_part_apply)
-        self.refresh_sensor_tree_with_mappings(self.backend.emg_mappings, self.backend.pmmg_mappings)
-
-    def closeEvent(self, event_close):
-        self.backend.cleanup_on_close()
-        event_close.accept()
-
-    def toggle_motion_prediction(self):
-        """Enable or disable smart movement prediction."""
-        # Change button appearance during processing
-        self.motion_prediction_button.setEnabled(False)
-        self.motion_prediction_button.setText("Processing...")
-        self.motion_prediction_button.setStyleSheet("""
-            QPushButton {
-                background-color: #777777;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 16px;
-                color: white;
-                font-size: 13px;
-                font-weight: 500;
-                text-align: center;
-                min-height: 35px;
-            }
-        """)
-        
-        # Allow UI to refresh
-        QApplication.processEvents()
-        
-        # Perform the action
-        is_enabled = self.model_3d_widget.toggle_motion_prediction()
-        
-        # Update button appearance based on result
-        if is_enabled:
-            self.motion_prediction_button.setText("Smart Movement: ACTIVE")
-            self.motion_prediction_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #4CAF50;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 10px 16px;
-                    color: white;
-                    font-size: 13px;
-                    font-weight: 500;
-                    text-align: center;
-                    min-height: 35px;
-                }
-                QPushButton:hover {
-                    background-color: #43A047;
-                }
-                QPushButton:pressed {
-                    background-color: #388E3C;
-                }
-            """)
-        else:
-            self.motion_prediction_button.setText("Smart Movement: INACTIVE")
-            self.motion_prediction_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #9C27B0;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 10px 16px;
-                    color: white;
-                    font-size: 13px;
-                    font-weight: 500;
-                    text-align: center;
-                    min-height: 35px;
-                }
-                QPushButton:hover {
-                    background-color: #8E24AA;
-                }
-                QPushButton:pressed {
-                    background-color: #7B1FA2;
-                }
-            """)
-        
-        self.motion_prediction_button.setEnabled(True)
-
-    def toggle_animation(self):
-        """Active ou désactive l'animation du modèle 3D."""
-        is_walking = self.model_3d_widget.toggle_animation()
-        self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
-        
-        anim_style_on = """
-            QPushButton {
-                background-color: #f44336;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 12px;
-                color: white;
-                font-size: 12px;
-                font-weight: 500;
-                text-align: center;
-                min-height: 30px;
-            }
-            QPushButton:hover {
-                background-color: #e53935;
-            }
-            QPushButton:pressed {
-                background-color: #d32f2f;
-            }
-        """
-        
-        anim_style_off = """
-            QPushButton {
-                background-color: #2196f3;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 12px;
-                color: white;
-                font-size: 12px;
-                font-weight: 500;
-                text-align: center;
-                min-height: 30px;
-            }
-            QPushButton:hover {
-                background-color: #1e88e5;
-            }
-            QPushButton:pressed {
-                background-color: #1976d2;
-            }
-        """
-        
-        self.animate_button.setStyleSheet(anim_style_on if is_walking else anim_style_off)
-
-    def check_imu_signal_quality(self):
-        """Surveille la qualité du signal des IMU."""
-        if hasattr(self, 'model_3d_widget') and self.backend.sensor_config:
-            debug_info = self.model_3d_widget.model_viewer.get_debug_info()
-            if debug_info and self.backend.sensor_config.get('imu_ids'):
-                expected_imus = set(self.backend.sensor_config['imu_ids'])
-                active_imus = set(debug_info['active_imus'])
-                
-                # Vérifier les IMU manquants
-                missing_imus = expected_imus - active_imus
-                if missing_imus:
-                    print(f"[WARNING] Missing IMU signals: {list(missing_imus)}")
-                    # Optionnel : afficher une notification dans la status bar
-                    if hasattr(self, 'statusBar'):
-                        self.statusBar().showMessage(
-                            f"Warning: Missing IMU signals: {', '.join(map(str, missing_imus))}", 
-                            3000
-                        )
-
-    def reset_model_view(self):
-        """Réinitialise la vue du modèle 3D à sa position par défaut."""
-        if hasattr(self, 'model_3d_widget') and self.model_3d_widget:
-            self.model_3d_widget.reset_view()
-            # Nettoyer aussi les priorités d'animation
-            self.model_3d_widget.model_viewer.clear_animation_priorities()
-            self.update()
-
     def show_imu_status(self):
-        """Affiche le statut détaillé des IMU."""
+        """Shows detailed IMU status."""
         if not hasattr(self, 'model_3d_widget'):
             QMessageBox.warning(self, "Error", "3D model viewer not available")
             return
@@ -893,7 +714,7 @@ class DashboardApp(QMainWindow):
         QMessageBox.information(self, "IMU Status", status_msg)
 
     def show_calibration_status(self):
-        """Affiche le statut de calibration des IMU."""
+        """Shows IMU calibration status."""
         if not hasattr(self, 'model_3d_widget'):
             QMessageBox.warning(self, "Error", "3D model viewer not available")
             return
@@ -948,7 +769,7 @@ class DashboardApp(QMainWindow):
             self.group_plots.clear()
 
     def show_recorded_data_on_plots(self, recorded_data):
-        """Affiche les données enregistrées sur les graphiques."""
+        """Shows recorded data on plots."""
         rec_data = self.backend.recorded_data # Use backend's copy
         has_any_data = False
         for sensor_key in ["EMG", "IMU", "pMMG"]:
@@ -957,7 +778,7 @@ class DashboardApp(QMainWindow):
                 break
         
         if not has_any_data:
-            QMessageBox.warning(self, 'Warning', "Aucune donnée n'a été enregistrée.")
+            QMessageBox.warning(self, 'Warning', "No data was recorded.")
             self.record_button.setEnabled(True)
             if self.backend.client_socket: 
                 self.connect_button.setText("Disconnect")
@@ -974,15 +795,15 @@ class DashboardApp(QMainWindow):
         self.auto_display_all_sensors_with_data()
 
     def auto_display_all_sensors_with_data(self):
-        """Affiche automatiquement tous les capteurs qui ont des données enregistrées."""
+        """Automatically displays all sensors that have recorded data."""
         rec_data = self.backend.recorded_data
         
-        # Vérifier si on a une configuration de capteurs
+        # Check if we have sensor configuration
         if not self.backend.sensor_config:
-            print("[WARNING] Aucune configuration de capteurs disponible")
+            print("[WARNING] No sensor configuration available")
             return
         
-        print(f"[DEBUG] Configuration disponible: EMG_IDs={self.backend.sensor_config.get('emg_ids')}, "
+        print(f"[DEBUG] Available configuration: EMG_IDs={self.backend.sensor_config.get('emg_ids')}, "
               f"IMU_IDs={self.backend.sensor_config.get('imu_ids')}, "
               f"pMMG_IDs={self.backend.sensor_config.get('pmmg_ids')}")
         
@@ -1171,13 +992,13 @@ class DashboardApp(QMainWindow):
                         self.curves[key].setData(self.backend.plot_data[key])
 
     def on_sensor_clicked(self, item_clicked, column):
-        """Gère le clic sur un capteur dans l'arborescence."""
+        """Handles click on a sensor in the tree."""
         if item_clicked.childCount() > 0:
-            # C'est un groupe, pas un capteur
+            # It's a group, not a sensor
             return
             
         if item_clicked.foreground(0).color() != QColor("green"):
-            QMessageBox.warning(self, "Erreur", "Le capteur n'est pas connecté. Veuillez d'abord connecter le capteur.")
+            QMessageBox.warning(self, "Error", "Sensor is not connected. Please connect the sensor first.")
             return
 
         sensor_name_full = item_clicked.text(0)
@@ -1206,7 +1027,7 @@ class DashboardApp(QMainWindow):
                             self.add_sensor_curve_to_group_plot(sensor_name_full, sensor_group_type)
     
     def plot_recorded_sensor_data(self, sensor_name_full, sensor_name_base):
-        """Affiche les données enregistrées pour un capteur spécifique."""
+        """Shows recorded data for a specific sensor."""
         recorded_data = self.backend.recorded_data
         
         # Extraire l'ID du capteur
@@ -1249,7 +1070,7 @@ class DashboardApp(QMainWindow):
                                recorded_data["IMU"][sensor_idx])
 
         if not has_data or sensor_idx == -1:
-            QMessageBox.information(self, "Aucune donnée", f"Aucune donnée enregistrée disponible pour {sensor_name_base}.")
+            QMessageBox.information(self, "No Data", f"No recorded data available for {sensor_name_base}.")
             return
 
         # Mode groupe: afficher dans les graphiques de groupe

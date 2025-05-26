@@ -366,31 +366,83 @@ class Model3DViewer(QGLWidget):
         self.update()
 
     def start_calibration(self, duration_seconds=3):
-        """Démarre la calibration des IMU pour l'alignement initial."""
+        """Starts IMU calibration for initial alignment with T-pose validation."""
         self.calibration_mode = True
         self.calibration_samples = {}
-        print(f"[INFO] Calibration started for {duration_seconds} seconds...")
-        print("[INFO] Please stand in T-pose and remain still")
+        self.calibration_start_time = self.fps_timer.elapsed()
         
-        # Timer pour arrêter la calibration
+        print(f"[INFO] 🎯 Calibration started for {duration_seconds} seconds...")
+        print("[INFO] 🧍 T-pose requirements:")
+        print("      • Stand upright, feet shoulder-width apart")
+        print("      • Arms extended horizontally to the sides")
+        print("      • Palms facing down, fingers extended")
+        print("      • Look straight ahead, head upright")
+        print("      • Stay PERFECTLY still during calibration")
+        
+        # Timer to stop calibration
         QTimer.singleShot(duration_seconds * 1000, self.finish_calibration)
         
     def finish_calibration(self):
-        """Termine la calibration et calcule les offsets."""
+        """Finishes calibration and calculates offsets with validation."""
         self.calibration_mode = False
+        calibration_successful = False
         
         for imu_id, samples in self.calibration_samples.items():
-            if len(samples) > 10:  # Minimum 10 échantillons
-                # Calculer la moyenne des quaternions pour l'offset
-                avg_quat = np.mean(samples, axis=0)
-                avg_quat = normalize_quaternion(avg_quat)
-                # L'offset est l'inverse de la rotation moyenne
-                self.calibration_offsets[imu_id] = self._quaternion_conjugate(avg_quat)
-                print(f"[INFO] IMU {imu_id} calibrated with offset: {avg_quat}")
+            if len(samples) > 10:  # Minimum 10 samples
+                # Validate sample stability (correct T-pose)
+                if self._validate_tpose_stability(samples):
+                    # Calculate quaternion average for offset
+                    avg_quat = np.mean(samples, axis=0)
+                    avg_quat = normalize_quaternion(avg_quat)
+                    # Offset is the inverse of average rotation
+                    self.calibration_offsets[imu_id] = self._quaternion_conjugate(avg_quat)
+                    print(f"[INFO] ✅ IMU {imu_id} calibrated successfully")
+                    print(f"       📊 Stability: {self._calculate_stability_score(samples):.1f}%")
+                    calibration_successful = True
+                else:
+                    print(f"[WARNING] ⚠️ IMU {imu_id} calibration unstable - T-pose may be incorrect")
+                    print("          💡 Tip: Make sure you stay perfectly still in T-pose")
             else:
-                print(f"[WARNING] IMU {imu_id} insufficient calibration data")
+                print(f"[WARNING] ❌ IMU {imu_id} insufficient calibration data ({len(samples)} samples)")
         
-        print("[INFO] Calibration completed")
+        if calibration_successful:
+            print("[INFO] ✅ Calibration completed successfully!")
+            print("      🎯 Sensor alignment optimized for better tracking")
+        else:
+            print("[WARNING] ⚠️ Calibration had issues - consider recalibrating")
+            print("         📝 Tips for better calibration:")
+            print("            • Ensure perfect T-pose position")
+            print("            • Stay completely motionless")
+            print("            • Check sensor attachment")
+
+    def _validate_tpose_stability(self, samples):
+        """Valide que les échantillons montrent une pose T stable."""
+        if len(samples) < 5:
+            return False
+        
+        # Calculer la variance des quaternions pour vérifier la stabilité
+        samples_array = np.array(samples)
+        variance = np.var(samples_array, axis=0)
+        
+        # Un seuil de variance faible indique une pose stable
+        max_variance_threshold = 0.05  # Ajustez selon vos besoins
+        stability = np.all(variance < max_variance_threshold)
+        
+        return stability
+
+    def _calculate_stability_score(self, samples):
+        """Calcule un score de stabilité pour la calibration."""
+        if len(samples) < 2:
+            return 0.0
+        
+        samples_array = np.array(samples)
+        variance = np.var(samples_array, axis=0)
+        avg_variance = np.mean(variance)
+        
+        # Convertir la variance en score de stabilité (0-100%)
+        # Plus la variance est faible, plus le score est élevé
+        stability_score = max(0, 100 * (1 - avg_variance * 10))
+        return min(100, stability_score)
 
     def _quaternion_conjugate(self, q):
         """Retourne le conjugué d'un quaternion (inverse de rotation)."""

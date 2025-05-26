@@ -15,14 +15,14 @@ def main():
         print(f"Starting EXO Monitoring GUI v{VERSION} (previous: v{PREVIOUS_VERSION})...")
         print("=" * 60)
         
-        # Vérifier si le modèle ML existe et l'utiliser s'il est disponible
+        # Check if ML model exists and use it if available
         model_path = os.path.join(script_dir, 'data', 'motion_model.pth')
         if os.path.exists(model_path):
-            print(f"✅ Modèle de prédiction de mouvement trouvé: {model_path}")
-            # Le modèle sera automatiquement chargé par MotionPredictorFactory
+            print(f"✅ Motion prediction model found: {model_path}")
+            # Model will be automatically loaded by MotionPredictorFactory
         else:
-            print("⚠️  Aucun modèle ML trouvé. Utilisation du prédicteur simple.")
-            # Vous pourriez ajouter un message pour suggérer d'entraîner un modèle
+            print("⚠️  No ML model found. Using simple predictor.")
+            # You could add a message to suggest training a model
         
         from app import launch
         print("📦 Imported launch function")
@@ -36,7 +36,7 @@ def main():
         input("Press Enter to exit...")
 
 def get_version_info():
-    """Retourne les informations de version."""
+    """Returns version information."""
     return {
         'current': VERSION,
         'previous': PREVIOUS_VERSION,
