@@ -158,6 +158,33 @@ class Model3DViewer(QGLWidget):
             
         self.motion_predictor = MotionPredictorFactory.create_predictor("simple", model_path)
         self.use_motion_prediction = True  # Enabled by default
+        
+        # Nouveau système de calibration et filtrage
+        self.calibration_mode = False
+        self.calibration_samples = {}  # {imu_id: [samples]}
+        self.calibration_offsets = {}  # {imu_id: quaternion_offset}
+        self.imu_filters = {}  # {imu_id: filter_state}
+        self.last_valid_data = {}  # {imu_id: last_valid_quaternion}
+        self.signal_timeout = {}  # {imu_id: last_update_time}
+        self.signal_timeout_threshold = 1000  # 1 seconde en ms
+        
+        # Système de priorités d'animation
+        self.animation_priority = {
+            'imu_data': 100,  # Priorité la plus haute
+            'motion_prediction': 50,
+            'walking_animation': 10,
+            'idle_animation': 1
+        }
+        self.active_animations = {}  # {body_part: animation_source}
+        
+        # Debug et validation
+        self.debug_mode = False
+        self.debug_data = {
+            'raw_imu_data': {},
+            'filtered_data': {},
+            'applied_rotations': {},
+            'signal_quality': {}
+        }
                 
     def _precalculate_animation(self, num_frames):
         """Precalculate animation frames with quaternion rotations and positions."""
@@ -338,6 +365,248 @@ class Model3DViewer(QGLWidget):
         
         self.update()
 
+    def start_calibration(self, duration_seconds=3):
+        """Démarre la calibration des IMU pour l'alignement initial."""
+        self.calibration_mode = True
+        self.calibration_samples = {}
+        print(f"[INFO] Calibration started for {duration_seconds} seconds...")
+        print("[INFO] Please stand in T-pose and remain still")
+        
+        # Timer pour arrêter la calibration
+        QTimer.singleShot(duration_seconds * 1000, self.finish_calibration)
+        
+    def finish_calibration(self):
+        """Termine la calibration et calcule les offsets."""
+        self.calibration_mode = False
+        
+        for imu_id, samples in self.calibration_samples.items():
+            if len(samples) > 10:  # Minimum 10 échantillons
+                # Calculer la moyenne des quaternions pour l'offset
+                avg_quat = np.mean(samples, axis=0)
+                avg_quat = normalize_quaternion(avg_quat)
+                # L'offset est l'inverse de la rotation moyenne
+                self.calibration_offsets[imu_id] = self._quaternion_conjugate(avg_quat)
+                print(f"[INFO] IMU {imu_id} calibrated with offset: {avg_quat}")
+            else:
+                print(f"[WARNING] IMU {imu_id} insufficient calibration data")
+        
+        print("[INFO] Calibration completed")
+
+    def _quaternion_conjugate(self, q):
+        """Retourne le conjugué d'un quaternion (inverse de rotation)."""
+        w, x, y, z = q
+        return normalize_quaternion(np.array([w, -x, -y, -z]))
+
+    def _apply_complementary_filter(self, imu_id, new_quat, alpha=0.98):
+        """Applique un filtre complémentaire pour lisser les données IMU."""
+        if imu_id not in self.imu_filters:
+            self.imu_filters[imu_id] = new_quat.copy()
+            return new_quat
+        
+        prev_quat = self.imu_filters[imu_id]
+        
+        # Interpolation sphérique (SLERP) pour les quaternions
+        filtered_quat = self._slerp(prev_quat, new_quat, 1.0 - alpha)
+        self.imu_filters[imu_id] = filtered_quat
+        
+        return filtered_quat
+
+    def _slerp(self, q1, q2, t):
+        """Interpolation sphérique entre deux quaternions."""
+        dot = np.dot(q1, q2)
+        
+        # Si le produit scalaire est négatif, inverser q2 pour prendre le chemin le plus court
+        if dot < 0.0:
+            q2 = -q2
+            dot = -dot
+        
+        # Si les quaternions sont très proches, utiliser l'interpolation linéaire
+        if dot > 0.9995:
+            result = q1 + t * (q2 - q1)
+            return normalize_quaternion(result)
+        
+        # Calcul SLERP standard
+        theta_0 = np.arccos(abs(dot))
+        sin_theta_0 = np.sin(theta_0)
+        theta = theta_0 * t
+        sin_theta = np.sin(theta)
+        
+        s0 = np.cos(theta) - dot * sin_theta / sin_theta_0
+        s1 = sin_theta / sin_theta_0
+        
+        return normalize_quaternion(s0 * q1 + s1 * q2)
+
+    def _detect_signal_loss(self, imu_id):
+        """Détecte la perte de signal d'un IMU."""
+        current_time = self.fps_timer.elapsed()
+        
+        if imu_id in self.signal_timeout:
+            time_since_last = current_time - self.signal_timeout[imu_id]
+            if time_since_last > self.signal_timeout_threshold:
+                return True
+        return False
+
+    def _validate_quaternion_data(self, quaternion_data):
+        """Valide la cohérence des données de quaternion."""
+        if not isinstance(quaternion_data, (list, tuple, np.ndarray)):
+            return False
+        
+        if len(quaternion_data) != 4:
+            return False
+        
+        # Vérifier que toutes les composantes sont numériques
+        for component in quaternion_data:
+            if not isinstance(component, (int, float)) or not np.isfinite(component):
+                return False
+        
+        # Vérifier que la norme n'est pas trop éloignée de 1
+        norm = np.linalg.norm(quaternion_data)
+        if norm < 0.1 or norm > 10.0:  # Tolérances larges pour éviter les faux positifs
+            return False
+        
+        return True
+
+    def apply_imu_data(self, imu_id, quaternion_data):
+        """Version améliorée avec calibration, filtrage et validation."""
+        if not self.isValid() or not self.context().isValid():
+            return False
+        
+        current_time = self.fps_timer.elapsed()
+        self.signal_timeout[imu_id] = current_time
+        
+        # Validation des données
+        if not self._validate_quaternion_data(quaternion_data):
+            if self.debug_mode:
+                print(f"[DEBUG] Invalid quaternion data for IMU {imu_id}: {quaternion_data}")
+            return False
+        
+        try:
+            raw_quat = normalize_quaternion(np.array(quaternion_data))
+            
+            # Stockage des données brutes pour debug
+            if self.debug_mode:
+                self.debug_data['raw_imu_data'][imu_id] = raw_quat.copy()
+            
+            # Mode calibration : collecter les échantillons
+            if self.calibration_mode:
+                if imu_id not in self.calibration_samples:
+                    self.calibration_samples[imu_id] = []
+                self.calibration_samples[imu_id].append(raw_quat)
+                return True
+            
+            # Appliquer l'offset de calibration si disponible
+            if imu_id in self.calibration_offsets:
+                calibrated_quat = quaternion_multiply(self.calibration_offsets[imu_id], raw_quat)
+            else:
+                calibrated_quat = raw_quat
+            
+            # Appliquer le filtrage
+            filtered_quat = self._apply_complementary_filter(imu_id, calibrated_quat)
+            
+            # Stockage des données filtrées pour debug
+            if self.debug_mode:
+                self.debug_data['filtered_data'][imu_id] = filtered_quat.copy()
+                self.debug_data['signal_quality'][imu_id] = {
+                    'last_update': current_time,
+                    'signal_strength': 100,  # Placeholder pour future implémentation
+                    'data_rate': self._calculate_data_rate(imu_id)
+                }
+            
+            # Déterminer la partie du corps
+            body_part_name = self.get_body_part_for_sensor('IMU', imu_id)
+            if not body_part_name or body_part_name not in self.body_parts:
+                # Mapping par défaut pour la compatibilité
+                default_mappings = {1: 'head', 2: 'left_hand', 3: 'right_hand', 4: 'torso', 17: 'left_hand', 21: 'right_hand'}
+                if imu_id in default_mappings and default_mappings[imu_id] in self.body_parts:
+                    body_part_name = default_mappings[imu_id]
+                else:
+                    return False
+            
+            # Système de priorités : vérifier si on peut appliquer cette rotation
+            if self._can_apply_animation(body_part_name, 'imu_data'):
+                self.body_parts[body_part_name]['rot'] = filtered_quat
+                self.active_animations[body_part_name] = 'imu_data'
+                self.last_valid_data[imu_id] = filtered_quat
+                
+                if self.debug_mode:
+                    self.debug_data['applied_rotations'][body_part_name] = filtered_quat.copy()
+            
+            # Mise à jour du modèle si pas en animation
+            if not self.walking:
+                self.safely_update_display_list()
+            
+            # Prédiction de mouvement pour les parties non contrôlées
+            if self.use_motion_prediction and not self.walking:
+                self._apply_motion_prediction()
+            
+            self.update()
+            return True
+            
+        except Exception as e:
+            if self.debug_mode:
+                print(f"[DEBUG] Error in apply_imu_data for IMU {imu_id}: {e}")
+            return False
+
+    def _calculate_data_rate(self, imu_id):
+        """Calcule le taux de données pour un IMU (placeholder)."""
+        # Implémentation future pour calculer les Hz de réception
+        return 60  # Placeholder
+
+    def _can_apply_animation(self, body_part, animation_source):
+        """Vérifie si une animation peut être appliquée selon les priorités."""
+        if body_part not in self.active_animations:
+            return True
+        
+        current_source = self.active_animations[body_part]
+        current_priority = self.animation_priority.get(current_source, 0)
+        new_priority = self.animation_priority.get(animation_source, 0)
+        
+        return new_priority >= current_priority
+
+    def _apply_motion_prediction(self):
+        """Applique la prédiction de mouvement aux parties non contrôlées."""
+        monitored_parts = set()
+        for imu_id, body_part in self.imu_mapping.items():
+            if not self._detect_signal_loss(imu_id):
+                monitored_parts.add(body_part)
+        
+        updated_body_parts = self.motion_predictor.predict_joint_movement(
+            self.body_parts, monitored_parts, self.walking)
+        
+        for part_name, data in updated_body_parts.items():
+            if self._can_apply_animation(part_name, 'motion_prediction'):
+                self.body_parts[part_name]['rot'] = data['rot']
+                self.active_animations[part_name] = 'motion_prediction'
+
+    def clear_animation_priorities(self):
+        """Nettoie les priorités d'animation (utile lors du reset)."""
+        self.active_animations.clear()
+
+    def toggle_debug_mode(self):
+        """Active/désactive le mode debug."""
+        self.debug_mode = not self.debug_mode
+        if self.debug_mode:
+            print("[INFO] Debug mode enabled")
+        else:
+            print("[INFO] Debug mode disabled")
+        return self.debug_mode
+
+    def get_debug_info(self):
+        """Retourne les informations de debug."""
+        if not self.debug_mode:
+            return None
+        
+        info = {
+            'active_imus': list(self.debug_data['raw_imu_data'].keys()),
+            'signal_quality': self.debug_data['signal_quality'].copy(),
+            'calibration_status': {
+                'calibrated_imus': list(self.calibration_offsets.keys()),
+                'calibration_active': self.calibration_mode
+            },
+            'animation_priorities': self.active_animations.copy()
+        }
+        return info
+
     def toggle_walking(self):
         self.walking = not self.walking
         if self.walking:
@@ -346,6 +615,7 @@ class Model3DViewer(QGLWidget):
         else:
             self.animation_main_timer.stop()
             self.reset_body_parts_to_initial_state()
+            self.clear_animation_priorities()  # Nettoyer les priorités pour permettre aux IMU de reprendre le contrôle
             self.update()
         return self.walking
     
@@ -367,6 +637,7 @@ class Model3DViewer(QGLWidget):
         else:
             self.reset_body_parts_to_initial_state()
             
+        self.clear_animation_priorities()  # Nettoyer les priorités d'animation lors du reset
         self.update()
 
     def initializeGL(self):

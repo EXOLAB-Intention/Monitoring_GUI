@@ -7,7 +7,7 @@ import numpy as np # Kept for np.zeros, np.roll
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QComboBox, 
-    QMessageBox, QRadioButton, QButtonGroup, QScrollArea
+    QMessageBox, QRadioButton, QButtonGroup, QScrollArea, QGroupBox, QGridLayout
 )
 from PyQt5.QtCore import Qt, QTimer # QThread, pyqtSignal are in the backend
 from PyQt5.QtGui import QColor, QBrush # QCursor is no longer directly used here
@@ -121,6 +121,11 @@ class DashboardApp(QMainWindow):
             traceback.print_exc()
             self.main_bar_re = None
 
+        # Ajouter un timer pour surveiller la qualité du signal IMU
+        self.imu_monitor_timer = QTimer()
+        self.imu_monitor_timer.timeout.connect(self.check_imu_signal_quality)
+        self.imu_monitor_timer.start(5000)  # Vérification toutes les 5 secondes
+
     def init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -183,54 +188,112 @@ class DashboardApp(QMainWindow):
         right_panel.addWidget(label_3d_title)
         self.model_3d_widget = Model3DWidget()
         right_panel.addWidget(self.model_3d_widget, stretch=3)
+        
+        # Grouper les contrôles du modèle 3D
+        model_controls_group = QGroupBox("Model Controls")
+        model_controls_layout = QVBoxLayout()
+        
+        # Ligne 1: Animation et Reset view
+        animation_layout = QHBoxLayout()
         self.animate_button = QPushButton("Start Animation")
         self.animate_button.clicked.connect(self.toggle_animation)
-        right_panel.addWidget(self.animate_button)
         self.reset_view_button = QPushButton("Reset View")
         self.reset_view_button.clicked.connect(self.reset_model_view)
-        right_panel.addWidget(self.reset_view_button)
+        animation_layout.addWidget(self.animate_button)
+        animation_layout.addWidget(self.reset_view_button)
+        model_controls_layout.addLayout(animation_layout)
+        
+        # Ligne 2: Smart Movement
+        self.motion_prediction_button = QPushButton("Smart Movement: INACTIVE")
+        self.motion_prediction_button.clicked.connect(self.toggle_motion_prediction)
+        model_controls_layout.addWidget(self.motion_prediction_button)
+        
+        model_controls_group.setLayout(model_controls_layout)
+        right_panel.addWidget(model_controls_group)
+        
+        # Grouper les contrôles de configuration des capteurs
+        sensor_config_group = QGroupBox("Sensor Configuration")
+        sensor_config_layout = QVBoxLayout()
+        
         self.config_button = QPushButton("Configure Sensor Mapping")
-        self.config_button.setStyleSheet("font-size: 14px; padding: 8px 20px;")
         self.config_button.clicked.connect(self.open_sensor_mapping_dialog)
         self.config_button.setEnabled(False)  # Disable the button by default
-        right_panel.addWidget(self.config_button)
-        self.default_config_button = QPushButton("Set Up Default Assignments")
-        # Button styles (multi-line escaped strings)
-        self.default_config_button.setStyleSheet("""
-            QPushButton {
-                background-color: #9C27B0;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-                text-align: center;
-                min-width: 120px;
-            }
-            QPushButton:hover {
-                background-color: #8E24AA;
-            }
-            QPushButton:pressed {
-                background-color: #7B1FA2;
-            }
-        """)
-        self.default_config_button.clicked.connect(self.setup_default_mappings)
-        right_panel.addWidget(self.default_config_button)
+        sensor_config_layout.addWidget(self.config_button)
         
-        # Add a button for smart movement
-        self.motion_prediction_button = QPushButton("Enable Smart Movement")
-        self.motion_prediction_button.setStyleSheet("""
+        self.default_config_button = QPushButton("Set Up Default Assignments")
+        self.default_config_button.clicked.connect(self.setup_default_mappings)
+        sensor_config_layout.addWidget(self.default_config_button)
+        
+        sensor_config_group.setLayout(sensor_config_layout)
+        right_panel.addWidget(sensor_config_group)
+
+        # Grouper les outils de debug et validation
+        debug_group = QGroupBox("Debug & Validation")
+        debug_layout = QGridLayout()  # Utiliser une grille pour une meilleure organisation
+        
+        self.imu_status_button = QPushButton("IMU Status")
+        self.imu_status_button.clicked.connect(self.show_imu_status)
+        debug_layout.addWidget(self.imu_status_button, 0, 0)
+        
+        self.calibration_status_button = QPushButton("Calibration Status")
+        self.calibration_status_button.clicked.connect(self.show_calibration_status)
+        debug_layout.addWidget(self.calibration_status_button, 0, 1)
+        
+        debug_group.setLayout(debug_layout)
+        right_panel.addWidget(debug_group)
+        
+        # Styles améliorés pour les boutons
+        animate_button_style = """
+            QPushButton {
+                background-color: #2196f3;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: center;
+                min-height: 30px;
+            }
+            QPushButton:hover {
+                background-color: #1e88e5;
+            }
+            QPushButton:pressed {
+                background-color: #1976d2;
+            }
+        """
+        
+        reset_view_button_style = """
+            QPushButton {
+                background-color: #9e9e9e;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: center;
+                min-height: 30px;
+            }
+            QPushButton:hover {
+                background-color: #8e8e8e;
+            }
+            QPushButton:pressed {
+                background-color: #757575;
+            }
+        """
+        
+        motion_prediction_style = """
             QPushButton {
                 background-color: #9C27B0;
                 border: none;
                 border-radius: 6px;
-                padding: 8px 16px;
+                padding: 10px 16px;
                 color: white;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 500;
                 text-align: center;
-                min-width: 120px;
+                min-height: 35px;
             }
             QPushButton:hover {
                 background-color: #8E24AA;
@@ -238,9 +301,103 @@ class DashboardApp(QMainWindow):
             QPushButton:pressed {
                 background-color: #7B1FA2;
             }
-        """)
-        self.motion_prediction_button.clicked.connect(self.toggle_motion_prediction)
-        right_panel.addWidget(self.motion_prediction_button)
+        """
+        
+        config_button_style = """
+            QPushButton {
+                background-color: #ff9800;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 16px;
+                color: white;
+                font-size: 13px;
+                font-weight: 500;
+                text-align: center;
+                min-height: 35px;
+            }
+            QPushButton:hover {
+                background-color: #fb8c00;
+            }
+            QPushButton:pressed {
+                background-color: #f57c00;
+            }
+            QPushButton:disabled {
+                background-color: #d0d0d0;
+                color: #888888;
+            }
+        """
+        
+        default_config_style = """
+            QPushButton {
+                background-color: #673AB7;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 16px;
+                color: white;
+                font-size: 13px;
+                font-weight: 500;
+                text-align: center;
+                min-height: 35px;
+            }
+            QPushButton:hover {
+                background-color: #5E35B1;
+            }
+            QPushButton:pressed {
+                background-color: #512DA8;
+            }
+        """
+        
+        debug_button_style = """
+            QPushButton {
+                background-color: #607D8B;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 11px;
+                font-weight: 500;
+                text-align: center;
+                min-height: 28px;
+            }
+            QPushButton:hover {
+                background-color: #546E7A;
+            }
+            QPushButton:pressed {
+                background-color: #455A64;
+            }
+        """
+        
+        # Appliquer les styles
+        self.animate_button.setStyleSheet(animate_button_style)
+        self.reset_view_button.setStyleSheet(reset_view_button_style)
+        self.motion_prediction_button.setStyleSheet(motion_prediction_style)
+        self.config_button.setStyleSheet(config_button_style)
+        self.default_config_button.setStyleSheet(default_config_style)
+        self.imu_status_button.setStyleSheet(debug_button_style)
+        self.calibration_status_button.setStyleSheet(debug_button_style)
+        
+        # Style pour les groupes
+        group_style = """
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #c0c0c0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 12px;
+                background-color: #fafafa;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 8px;
+                color: #333;
+                font-size: 12px;
+            }
+        """
+        
+        model_controls_group.setStyleSheet(group_style)
+        sensor_config_group.setStyleSheet(group_style)
+        debug_group.setStyleSheet(group_style)
 
         content_layout.addLayout(left_panel, stretch=1)
         content_layout.addLayout(middle_panel, stretch=4)
@@ -568,12 +725,12 @@ class DashboardApp(QMainWindow):
                 background-color: #777777;
                 border: none;
                 border-radius: 6px;
-                padding: 8px 16px;
+                padding: 10px 16px;
                 color: white;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 500;
                 text-align: center;
-                min-width: 120px;
+                min-height: 35px;
             }
         """)
         
@@ -591,12 +748,12 @@ class DashboardApp(QMainWindow):
                     background-color: #4CAF50;
                     border: none;
                     border-radius: 6px;
-                    padding: 8px 16px;
+                    padding: 10px 16px;
                     color: white;
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 500;
                     text-align: center;
-                    min-width: 120px;
+                    min-height: 35px;
                 }
                 QPushButton:hover {
                     background-color: #43A047;
@@ -612,12 +769,12 @@ class DashboardApp(QMainWindow):
                     background-color: #9C27B0;
                     border: none;
                     border-radius: 6px;
-                    padding: 8px 16px;
+                    padding: 10px 16px;
                     color: white;
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 500;
                     text-align: center;
-                    min-width: 120px;
+                    min-height: 35px;
                 }
                 QPushButton:hover {
                     background-color: #8E24AA;
@@ -633,15 +790,141 @@ class DashboardApp(QMainWindow):
         """Active ou désactive l'animation du modèle 3D."""
         is_walking = self.model_3d_widget.toggle_animation()
         self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
-        anim_style_on = """QPushButton { background-color: #f44336; border: none; border-radius: 6px; padding: 8px 16px; color: white; font-size: 14px; font-weight: 500; text-align: center; min-width: 120px; } QPushButton:hover { background-color: #e53935; } QPushButton:pressed { background-color: #d32f2f; }"""
-        anim_style_off = """QPushButton { background-color: #2196f3; border: none; border-radius: 6px; padding: 8px 16px; color: white; font-size: 14px; font-weight: 500; text-align: center; min-width: 120px; } QPushButton:hover { background-color: #1e88e5; } QPushButton:pressed { background-color: #1976d2; }"""
+        
+        anim_style_on = """
+            QPushButton {
+                background-color: #f44336;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: center;
+                min-height: 30px;
+            }
+            QPushButton:hover {
+                background-color: #e53935;
+            }
+            QPushButton:pressed {
+                background-color: #d32f2f;
+            }
+        """
+        
+        anim_style_off = """
+            QPushButton {
+                background-color: #2196f3;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: center;
+                min-height: 30px;
+            }
+            QPushButton:hover {
+                background-color: #1e88e5;
+            }
+            QPushButton:pressed {
+                background-color: #1976d2;
+            }
+        """
+        
         self.animate_button.setStyleSheet(anim_style_on if is_walking else anim_style_off)
+
+    def check_imu_signal_quality(self):
+        """Surveille la qualité du signal des IMU."""
+        if hasattr(self, 'model_3d_widget') and self.backend.sensor_config:
+            debug_info = self.model_3d_widget.model_viewer.get_debug_info()
+            if debug_info and self.backend.sensor_config.get('imu_ids'):
+                expected_imus = set(self.backend.sensor_config['imu_ids'])
+                active_imus = set(debug_info['active_imus'])
+                
+                # Vérifier les IMU manquants
+                missing_imus = expected_imus - active_imus
+                if missing_imus:
+                    print(f"[WARNING] Missing IMU signals: {list(missing_imus)}")
+                    # Optionnel : afficher une notification dans la status bar
+                    if hasattr(self, 'statusBar'):
+                        self.statusBar().showMessage(
+                            f"Warning: Missing IMU signals: {', '.join(map(str, missing_imus))}", 
+                            3000
+                        )
 
     def reset_model_view(self):
         """Réinitialise la vue du modèle 3D à sa position par défaut."""
         if hasattr(self, 'model_3d_widget') and self.model_3d_widget:
             self.model_3d_widget.reset_view()
+            # Nettoyer aussi les priorités d'animation
+            self.model_3d_widget.model_viewer.clear_animation_priorities()
             self.update()
+
+    def show_imu_status(self):
+        """Affiche le statut détaillé des IMU."""
+        if not hasattr(self, 'model_3d_widget'):
+            QMessageBox.warning(self, "Error", "3D model viewer not available")
+            return
+            
+        debug_info = self.model_3d_widget.model_viewer.get_debug_info()
+        if not debug_info:
+            QMessageBox.information(self, "IMU Status", 
+                                   "Debug mode not active.\nEnable debug mode in sensor configuration to see detailed status.")
+            return
+        
+        status_msg = "IMU Signal Status:\n\n"
+        
+        if self.backend.sensor_config and 'imu_ids' in self.backend.sensor_config:
+            expected_imus = self.backend.sensor_config['imu_ids']
+            active_imus = debug_info['active_imus']
+            
+            for imu_id in expected_imus:
+                if imu_id in active_imus:
+                    signal_info = debug_info['signal_quality'].get(imu_id, {})
+                    status = f"✅ IMU {imu_id}: ACTIVE"
+                    if signal_info:
+                        status += f" ({signal_info.get('data_rate', 'N/A')}Hz)"
+                else:
+                    status = f"❌ IMU {imu_id}: NO SIGNAL"
+                status_msg += status + "\n"
+        else:
+            status_msg += "No IMU configuration available"
+        
+        QMessageBox.information(self, "IMU Status", status_msg)
+
+    def show_calibration_status(self):
+        """Affiche le statut de calibration des IMU."""
+        if not hasattr(self, 'model_3d_widget'):
+            QMessageBox.warning(self, "Error", "3D model viewer not available")
+            return
+            
+        debug_info = self.model_3d_widget.model_viewer.get_debug_info()
+        if not debug_info:
+            QMessageBox.information(self, "Calibration Status", 
+                                   "Debug mode not active.\nEnable debug mode to see calibration status.")
+            return
+        
+        cal_info = debug_info['calibration_status']
+        status_msg = "IMU Calibration Status:\n\n"
+        
+        if cal_info['calibration_active']:
+            status_msg += "🔄 Calibration in progress...\n\n"
+        else:
+            status_msg += "Calibration completed\n\n"
+        
+        if self.backend.sensor_config and 'imu_ids' in self.backend.sensor_config:
+            expected_imus = self.backend.sensor_config['imu_ids']
+            calibrated_imus = cal_info['calibrated_imus']
+            
+            for imu_id in expected_imus:
+                if imu_id in calibrated_imus:
+                    status_msg += f"✅ IMU {imu_id}: CALIBRATED\n"
+                else:
+                    status_msg += f"⚠️ IMU {imu_id}: NOT CALIBRATED\n"
+        
+        status_msg += "\nNote: Calibration improves tracking accuracy.\nUse 'Start IMU Calibration' in sensor configuration."
+        
+        QMessageBox.information(self, "Calibration Status", status_msg)
 
     def on_display_mode_changed(self, button_clicked=None):
         """Gère le changement de mode d'affichage (single sensor vs group)."""

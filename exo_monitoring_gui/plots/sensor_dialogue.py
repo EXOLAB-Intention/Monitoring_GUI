@@ -196,32 +196,18 @@ class SimplifiedMappingDialog(QDialog):
 
         # Add a message at the top if we have available sensors to assign
         if any(self.available_sensors.values()):
-            available_msg = QLabel("Nouveaux capteurs détectés ! Veuillez les assigner aux parties du corps appropriées.")
-            available_msg.setStyleSheet("""
-                background-color: #e3f2fd;
-                color: #0d47a1;
-                padding: 10px;
-                border-radius: 5px;
-                font-weight: bold;
-                margin: 5px 0;
+            info_label = QLabel("📍 Configure sensor assignments for optimal motion tracking")
+            info_label.setStyleSheet("""
+                QLabel {
+                    background-color: #E3F2FD;
+                    border: 1px solid #2196F3;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    color: #1976D2;
+                    font-size: 13px;
+                }
             """)
-            main_layout.addWidget(available_msg)
-            
-            # Highlight unassigned sensors
-            if self.available_sensors.get('EMG'):
-                emg_msg = QLabel(f"EMG: {', '.join([f'EMG{id}' for id in self.available_sensors['EMG']])}")
-                emg_msg.setStyleSheet("color: #CC3300; font-weight: bold;")
-                main_layout.addWidget(emg_msg)
-                
-            if self.available_sensors.get('IMU'):
-                imu_msg = QLabel(f"IMU: {', '.join([f'IMU{id}' for id in self.available_sensors['IMU']])}")
-                imu_msg.setStyleSheet("color: #00CC33; font-weight: bold;")
-                main_layout.addWidget(imu_msg)
-                
-            if self.available_sensors.get('pMMG'):
-                pmmg_msg = QLabel(f"pMMG: {', '.join([f'pMMG{id}' for id in self.available_sensors['pMMG']])}")
-                pmmg_msg.setStyleSheet("color: #0033CC; font-weight: bold;")
-                main_layout.addWidget(pmmg_msg)
+            main_layout.addWidget(info_label)
 
         # Create tab widget
         self.tab_widget = QTabWidget()
@@ -230,538 +216,328 @@ class SimplifiedMappingDialog(QDialog):
         self.tab_widget.setStyleSheet("""
             QTabWidget::pane {
                 border: 1px solid #d0d0d0;
-                border-radius: 4px;
+                border-radius: 6px;
                 background: white;
-                padding: 10px;
+                margin-top: 10px;
             }
             QTabBar::tab {
-                background: #e0e0e0;
-                border: 1px solid #c0c0c0;
+                background: #f5f5f5;
+                border: 1px solid #d0d0d0;
                 border-bottom: none;
                 border-top-left-radius: 6px;
                 border-top-right-radius: 6px;
                 padding: 10px 20px;
-                margin-right: 4px;
-                font-weight: bold;
-                font-size: 14px;
-                color: #555555;
-                min-width: 100px;
-                text-align: center;
+                margin-right: 2px;
+                font-weight: 500;
             }
             QTabBar::tab:selected {
-                background: #4CAF50;
-                color: white;
-                border: 1px solid #388E3C;
-                border-bottom: none;
+                background: white;
+                border-bottom: 1px solid white;
+                color: #2196F3;
             }
             QTabBar::tab:hover:!selected {
-                background: #f0f0f0;
-                border-color: #b0b0b0;
+                background: #e8e8e8;
             }
         """)
+
+        # Create tabs for each sensor type
+        if self.available_sensors.get('EMG'):
+            emg_tab = self.create_specific_tab('EMG', len(self.available_sensors['EMG']))
+            self.tab_widget.addTab(emg_tab, f"EMG Sensors ({len(self.available_sensors['EMG'])})")
         
-        # Create tabs
-        self.general_tab = self.create_general_tab()
-        self.emg_tab = self.create_specific_tab("EMG", 8)
-        self.imu_tab = self.create_specific_tab("IMU", 6)
-        self.pmmg_tab = self.create_specific_tab("pMMG", 8)
-        
-        # Add tabs
-        self.tab_widget.addTab(self.general_tab, "General View")
-        self.tab_widget.addTab(self.emg_tab, "EMG")
-        self.tab_widget.addTab(self.imu_tab, "IMU")
-        self.tab_widget.addTab(self.pmmg_tab, "pMMG")
-        
+        if self.available_sensors.get('IMU'):
+            imu_tab = self.create_specific_tab('IMU', len(self.available_sensors['IMU']))
+            self.tab_widget.addTab(imu_tab, f"IMU Sensors ({len(self.available_sensors['IMU'])})")
+            
+        if self.available_sensors.get('pMMG'):
+            pmmg_tab = self.create_specific_tab('pMMG', len(self.available_sensors['pMMG']))
+            self.tab_widget.addTab(pmmg_tab, f"pMMG Sensors ({len(self.available_sensors['pMMG'])})")
+
+        # Add general overview tab
+        general_tab = self.create_general_tab()
+        self.tab_widget.addTab(general_tab, "Overview & Summary")
+
         main_layout.addWidget(self.tab_widget)
 
-        # Summary of mappings with badges
-        badges_group = QGroupBox("Assignment Summary")
-        badges_layout = QVBoxLayout()
-        self.scroll_badges = QScrollArea()
-        self.scroll_badges.setWidgetResizable(True)
-        self.scroll_badges.setMinimumHeight(150)  # Add this line to ensure minimum height
-        all_mappings = {}
-        for sensor_type, mappings in self.current_mappings.items():
-            for sensor_id, body_part in mappings.items():
-                all_mappings[f"{sensor_type}{sensor_id}"] = body_part
-        self.badges_widget = MappingBadgesWidget(all_mappings, self)
-        self.scroll_badges.setWidget(self.badges_widget)
-        badges_layout.addWidget(self.scroll_badges)
-        badges_group.setLayout(badges_layout)
-        main_layout.addWidget(badges_group, 1)  # Add stretch factor 1 to give more space
-
-        # Control buttons
-        button_layout = QHBoxLayout()
+        # Grouper les contrôles avancés
+        advanced_controls_group = QGroupBox("Advanced Controls")
+        advanced_layout = QHBoxLayout()
         
-        self.reset_button = QPushButton("Reset to Default Values")
-        self.reset_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                color: #555;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
-        """)
+        # Boutons de calibration et debug
+        self.calibration_button = QPushButton("🎯 Start IMU Calibration")
+        self.calibration_button.setToolTip("Calibrate IMU sensors for better accuracy\n(Stand in T-pose for 3 seconds)")
+        self.calibration_button.clicked.connect(self.start_calibration)
+        
+        self.debug_button = QPushButton("🐛 Debug Mode")
+        self.debug_button.setToolTip("Enable debug mode to monitor sensor data quality")
+        self.debug_button.clicked.connect(self.toggle_debug)
+        
+        # Boutons d'action rapide
+        self.auto_assign_button = QPushButton("⚡ Auto Assign")
+        self.auto_assign_button.setToolTip("Automatically assign sensors to body parts")
+        self.auto_assign_button.clicked.connect(self.auto_suggest_mappings)
+        
+        self.reset_button = QPushButton("🔄 Reset All")
+        self.reset_button.setToolTip("Reset all sensor assignments")
         self.reset_button.clicked.connect(self.reset_to_default)
         
-        self.confirm_button = QPushButton("Confirm")
-        self.confirm_button.setStyleSheet("""
+        # Style pour les boutons avancés
+        advanced_button_style = """
             QPushButton {
-                background-color: #4CAF50;
-                border: none;
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
                 border-radius: 6px;
-                padding: 10px 20px;
-                color: white;
-                font-size: 14px;
+                padding: 8px 16px;
+                color: #495057;
+                font-size: 12px;
                 font-weight: 500;
+                min-height: 30px;
+                min-width: 120px;
             }
             QPushButton:hover {
-                background-color: #43A047;
+                background-color: #e9ecef;
+                border-color: #adb5bd;
             }
             QPushButton:pressed {
-                background-color: #388E3C;
+                background-color: #dee2e6;
+            }
+        """
+        
+        # Styles spéciaux pour certains boutons
+        calibration_style = """
+            QPushButton {
+                background-color: #FF9800;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                min-height: 30px;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #F57C00;
+            }
+            QPushButton:pressed {
+                background-color: #EF6C00;
+            }
+        """
+        
+        debug_style = """
+            QPushButton {
+                background-color: #9C27B0;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                min-height: 30px;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #7B1FA2;
+            }
+            QPushButton:pressed {
+                background-color: #6A1B9A;
+            }
+        """
+        
+        self.calibration_button.setStyleSheet(calibration_style)
+        self.debug_button.setStyleSheet(debug_style)
+        self.auto_assign_button.setStyleSheet(advanced_button_style)
+        self.reset_button.setStyleSheet(advanced_button_style)
+        
+        advanced_layout.addWidget(self.calibration_button)
+        advanced_layout.addWidget(self.debug_button)
+        advanced_layout.addWidget(self.auto_assign_button)
+        advanced_layout.addWidget(self.reset_button)
+        advanced_layout.addStretch()
+        
+        advanced_controls_group.setLayout(advanced_layout)
+        advanced_controls_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 12px;
+                background-color: #fafafa;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 8px;
+                color: #555;
+                font-size: 12px;
             }
         """)
-        self.confirm_button.clicked.connect(self.confirm_mapping)
+        main_layout.addWidget(advanced_controls_group)
+
+        # Boutons de confirmation avec un meilleur style
+        button_layout = QHBoxLayout()
         
         self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.setStyleSheet("""
+        self.cancel_button.clicked.connect(self.reject)
+        
+        self.confirm_button = QPushButton("✅ Apply Configuration")
+        self.confirm_button.clicked.connect(self.confirm_mapping)
+        self.confirm_button.setDefault(True)
+        
+        # Styles pour les boutons de confirmation
+        cancel_style = """
             QPushButton {
-                background-color: #f44336;
+                background-color: #6c757d;
                 border: none;
                 border-radius: 6px;
                 padding: 10px 20px;
                 color: white;
                 font-size: 14px;
                 font-weight: 500;
+                min-width: 100px;
             }
             QPushButton:hover {
-                background-color: #e53935;
+                background-color: #5a6268;
             }
             QPushButton:pressed {
-                background-color: #d32f2f;
+                background-color: #545b62;
             }
-        """)
-        self.cancel_button.clicked.connect(self.reject)
+        """
         
-        button_layout.addWidget(self.reset_button)
+        confirm_style = """
+            QPushButton {
+                background-color: #28a745;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                color: white;
+                font-size: 14px;
+                font-weight: 600;
+                min-width: 150px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:pressed {
+                background-color: #1e7e34;
+            }
+        """
+        
+        self.cancel_button.setStyleSheet(cancel_style)
+        self.confirm_button.setStyleSheet(confirm_style)
+        
         button_layout.addStretch()
         button_layout.addWidget(self.cancel_button)
         button_layout.addWidget(self.confirm_button)
-
+        
         main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
         
-        # Initialize combos with current mappings
+        # Load current mappings and update badges
         self.load_current_mappings()
-        
-        self.styleAllComboBoxes()
+        self.update_badges()
 
-    def styleAllComboBoxes(self):
-        """Style all comboboxes to fix dropdowns"""
-        for widget in self.findChildren(QComboBox):
-            widget.setStyleSheet("""
-                QComboBox {
-                    border: 1px solid #d0d0d0;
-                    border-radius: 4px;
-                    padding: 5px 10px;
-                    min-height: 30px;
-                    background: white;
-                }
-                QComboBox::drop-down {
-                    subcontrol-origin: padding;
-                    subcontrol-position: top right;
-                    width: 20px;
-                    border-left: 1px solid #d0d0d0;
-                }
-                QComboBox::down-arrow {
-                    image: url(none);
-                    width: 14px;
-                    height: 14px;
-                }
-                QComboBox::down-arrow:on {
-                    /* shift the arrow when popup is open */
-                    top: 1px;
-                    left: 1px;
-                }
-                QComboBox QAbstractItemView {
-                    border: 1px solid #d0d0d0;
-                    selection-background-color: #e0e0e0;
-                    selection-color: black;
-                    background-color: white;
-                    padding: 2px;
-                }
-            """)
-
-    def create_general_tab(self):
-        """Create general tab with 3D model and manual assignment"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        
-        # Create a splitter for horizontal layout
-        splitter = QSplitter(Qt.Horizontal)
-        
-        # 3D Model - Now in a container on the left
-        model_container = QWidget()
-        model_layout = QVBoxLayout(model_container)
-        
-        model_group = QGroupBox("3D Model")
-        model_inner_layout = QVBoxLayout()
-        self.general_model = Model3DWidget()
-        model_inner_layout.addWidget(self.general_model)
-        model_group.setLayout(model_inner_layout)
-        model_layout.addWidget(model_group)
-        
-        splitter.addWidget(model_container)
-        
-        # Manual assignment - Now on the right side
-        assign_container = QWidget()
-        assign_container_layout = QVBoxLayout(assign_container)
-        
-        assign_group = QGroupBox("Assign a Sensor")
-        assign_layout = QGridLayout()
-        
-        # Body part selection
-        assign_layout.addWidget(QLabel("Body part:"), 0, 0)
-        self.body_part_combo = QComboBox()
-        
-        # Upper body parts
-        upper_body = [
-            "Head", "Neck", "Torso",
-            "Left Deltoid", "Left Biceps", "Left Forearm", "Left Latissimus Dorsi", "Left Pectorals", "Left Hand",
-            "Right Deltoid", "Right Biceps", "Right Forearm", "Right Latissimus Dorsi", "Right Pectorals", "Right Hand"
-        ]
-        # Lower body parts
-        lower_body = [
-            "Hip", 
-            "Left Quadriceps", "Left Hamstrings", "Left Calves", "Left Gluteus", "Left Foot",
-            "Right Quadriceps", "Right Hamstrings", "Right Calves", "Right Gluteus", "Right Foot"
-        ]
-        
-        # Add all body parts
-        body_parts = upper_body + lower_body
-        self.body_part_combo.addItems(body_parts)
-        self.body_part_combo.setStyleSheet("""
-            QComboBox {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                padding: 5px 10px;
-                min-height: 30px;
-                background: white;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left: 1px solid #d0d0d0;
-            }
-            QComboBox::down-arrow {
-                image: url(none);
-                width: 14px;
-                height: 14px;
-            }
-            QComboBox::down-arrow:on {
-                /* shift the arrow when popup is open */
-                top: 1px;
-                left: 1px;
-            }
-            QComboBox QAbstractItemView {
-                border: 1px solid #d0d0d0;
-                selection-background-color: #e0e0e0;
-                selection-color: black;
-                background-color: white;
-                padding: 2px;
-            }
-        """)
-        assign_layout.addWidget(self.body_part_combo, 0, 1)
-        
-        # Sensor type
-        assign_layout.addWidget(QLabel("Sensor type:"), 1, 0)
-        self.sensor_type_combo = QComboBox()
-        self.sensor_type_combo.addItems(["EMG", "IMU", "pMMG"])
-        self.sensor_type_combo.currentTextChanged.connect(self.update_sensor_list)
-        self.sensor_type_combo.setStyleSheet("""
-            QComboBox {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                padding: 5px 10px;
-                min-height: 30px;
-                background: white;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left: 1px solid #d0d0d0;
-            }
-            QComboBox::down-arrow {
-                image: url(none);
-                width: 14px;
-                height: 14px;
-            }
-            QComboBox::down-arrow:on {
-                /* shift the arrow when popup is open */
-                top: 1px;
-                left: 1px;
-            }
-            QComboBox QAbstractItemView {
-                border: 1px solid #d0d0d0;
-                selection-background-color: #e0e0e0;
-                selection-color: black;
-                background-color: white;
-                padding: 2px;
-            }
-        """)
-        assign_layout.addWidget(self.sensor_type_combo, 1, 1)
-        
-        # Sensor number
-        assign_layout.addWidget(QLabel("Sensor:"), 2, 0)
-        self.sensor_id_combo = QComboBox()
-        self.sensor_id_combo.setStyleSheet("""
-            QComboBox {
-                border: 1px solid #d0d0d0;
-                border-radius: 4px;
-                padding: 5px 10px;
-                min-height: 30px;
-                background: white;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left: 1px solid #d0d0d0;
-            }
-            QComboBox::down-arrow {
-                image: url(none);
-                width: 14px;
-                height: 14px;
-            }
-            QComboBox::down-arrow:on {
-                /* shift the arrow when popup is open */
-                top: 1px;
-                left: 1px;
-            }
-            QComboBox QAbstractItemView {
-                border: 1px solid #d0d0d0;
-                selection-background-color: #e0e0e0;
-                selection-color: black;
-                background-color: white;
-                padding: 2px;
-            }
-        """)
-        assign_layout.addWidget(self.sensor_id_combo, 2, 1)
-        self.update_sensor_list("IMU")
-        
-        # Assignment button
-        self.manual_assign_button = QPushButton("Assign this Sensor")
-        self.manual_assign_button.clicked.connect(self.manual_assign)
-        self.manual_assign_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #43A047;
-            }
-            QPushButton:pressed {
-                background-color: #388E3C;
-            }
-        """)
-        assign_layout.addWidget(self.manual_assign_button, 3, 0, 1, 2)
-        
-        # Auto-suggest button
-        self.auto_suggest_button = QPushButton("Suggest IMU Mappings")
-        self.auto_suggest_button.clicked.connect(self.auto_suggest_mappings)
-        self.auto_suggest_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #1E88E5;
-            }
-            QPushButton:pressed {
-                background-color: #1976D2;
-            }
-        """)
-        assign_layout.addWidget(self.auto_suggest_button, 4, 0, 1, 2)
-        
-        assign_group.setLayout(assign_layout)
-        assign_container_layout.addWidget(assign_group)
-        assign_container_layout.addStretch(1)  # Add stretch to keep the assign group at the top
-        
-        # Add a help section below the assignment controls
-        help_group = QGroupBox("Help")
-        help_layout = QVBoxLayout()
-        help_text = QLabel(
-            "Use this panel to assign sensors to body parts. "
-            "Select the body part first, then choose the sensor type and number. "
-            "Click 'Assign this Sensor' to complete the mapping."
-        )
-        help_text.setWordWrap(True)
-        help_layout.addWidget(help_text)
-        help_group.setLayout(help_layout)
-        assign_container_layout.addWidget(help_group)
-        
-        splitter.addWidget(assign_container)
-        
-        # Set the proportion (70% model, 30% controls)
-        splitter.setSizes([int(splitter.width() * 0.7), int(splitter.width() * 0.3)])
-        
-        layout.addWidget(splitter)
-        tab.setLayout(layout)
-        return tab
-
-    def create_specific_tab(self, sensor_type, num_sensors):
-        """Create a specific tab for each sensor type"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        
-        # Header
-        header = QLabel(f"{sensor_type} Sensor Configuration")  # Changed from French
-        header.setFont(QFont("Arial", 12, QFont.Bold))
-        header.setAlignment(Qt.AlignCenter)
-        layout.addWidget(header)
-        
-        # Split view: 3D model on left, controls on right
-        splitter = QSplitter(Qt.Horizontal)
-        
-        # 3D Model
-        model_widget = Model3DWidget()
-        splitter.addWidget(model_widget)
-        
-        # Store model reference
-        setattr(self, f"{sensor_type.lower()}_model", model_widget)
-        
-        # Assignment controls
-        control_widget = QWidget()
-        control_layout = QVBoxLayout()
-        
-        # Instructions
-        instructions = QLabel(f"Assign {sensor_type} sensors to different body parts")  # Changed from French
-        instructions.setWordWrap(True)
-        control_layout.addWidget(instructions)
-        
-        # Create controls for each sensor
-        control_grid = QGridLayout()
-        
-        # ComboBox storage
-        self.sensor_combos = getattr(self, "sensor_combos", {})
-        self.sensor_combos[sensor_type] = {}
-        
-        # Upper body parts
-        upper_body = [
-            "Head", "Neck", "Torso",
-            "Left Deltoid", "Left Biceps", "Left Forearm", "Left Latissimus Dorsi", "Left Pectorals", "Left Hand",
-            "Right Deltoid", "Right Biceps", "Right Forearm", "Right Latissimus Dorsi", "Right Pectorals", "Right Hand"
-        ]
-        # Lower body parts
-        lower_body = [
-            "Hip", 
-            "Left Quadriceps", "Left Hamstrings", "Left Calves", "Left Gluteus", "Left Foot",
-            "Right Quadriceps", "Right Hamstrings", "Right Calves", "Right Gluteus", "Right Foot"
-        ]
-        
-        body_parts = ["-- Not assigned --"] + upper_body + lower_body
-        
-        # Si nous avons des capteurs disponibles, utiliser cette liste
-        sensors_to_show = self.available_sensors.get(sensor_type, [])
-        if not sensors_to_show:
-            # Sinon, utiliser une liste par défaut de 1 à num_sensors
-            sensors_to_show = range(1, num_sensors + 1)
-        
-        for i, sensor_id in enumerate(sensors_to_show):
-            label = QLabel(f"{sensor_type} {sensor_id}")
-            label.setStyleSheet(f"color: {self._get_color_for_type(sensor_type)};")
+    def start_calibration(self):
+        """Démarre la calibration des IMU."""
+        if hasattr(self.parent(), 'model_3d_widget'):
+            result = QMessageBox.question(self, "IMU Calibration", 
+                                   "🎯 IMU Calibration Process\n\n"
+                                   "This will calibrate your IMU sensors for better accuracy.\n\n"
+                                   "Instructions:\n"
+                                   "1. Stand in T-pose (arms extended horizontally)\n"
+                                   "2. Face forward and remain completely still\n"
+                                   "3. Calibration will start in 3 seconds and last 3 seconds\n\n"
+                                   "Are you ready to start?",
+                                   QMessageBox.Yes | QMessageBox.No,
+                                   QMessageBox.Yes)
             
-            combo = QComboBox()
-            combo.addItems(body_parts)
-            combo.setStyleSheet("""
-                QComboBox {
-                    border: 1px solid #d0d0d0;
-                    border-radius: 4px;
-                    padding: 5px 10px;
-                    min-height: 30px;
-                    background: white;
-                }
-                QComboBox::drop-down {
-                    subcontrol-origin: padding;
-                    subcontrol-position: top right;
-                    width: 20px;
-                    border-left: 1px solid #d0d0d0;
-                }
-                QComboBox::down-arrow {
-                    image: url(none);
-                    width: 14px;
-                    height: 14px;
-                }
-                QComboBox::down-arrow:on {
-                    /* shift the arrow when popup is open */
-                    top: 1px;
-                    left: 1px;
-                }
-                QComboBox QAbstractItemView {
-                    border: 1px solid #d0d0d0;
-                    selection-background-color: #e0e0e0;
-                    selection-color: black;
-                    background-color: white;
-                    padding: 2px;
-                }
-            """)
-            combo.currentTextChanged.connect(lambda text, s=sensor_type, id=sensor_id: self.on_combo_changed(s, id, text))
-            
-            control_grid.addWidget(label, i, 0)
-            control_grid.addWidget(combo, i, 1)
-            
-            self.sensor_combos[sensor_type][sensor_id] = combo
-        
-        control_layout.addLayout(control_grid)
-        control_layout.addStretch()
-        
-        # Reset button for this sensor type
-        reset_button = QPushButton(f"Reset {sensor_type}")  # Changed from French
-        reset_button.clicked.connect(lambda: self.reset_sensor_type(sensor_type))
-        control_layout.addWidget(reset_button)
-        
-        control_widget.setLayout(control_layout)
-        splitter.addWidget(control_widget)
-        
-        # Set initial sizes
-        splitter.setSizes([int(splitter.width() * 0.6), int(splitter.width() * 0.4)])
-        
-        layout.addWidget(splitter)
-        tab.setLayout(layout)
-        return tab
+            if result == QMessageBox.Yes:
+                # Délai de 3 secondes pour se préparer
+                QTimer.singleShot(3000, lambda: self.parent().model_3d_widget.model_viewer.start_calibration(3))
+                
+                # Désactiver le bouton temporairement
+                self.calibration_button.setEnabled(False)
+                self.calibration_button.setText("🎯 Calibrating...")
+                
+                # Réactiver après 6 secondes (3s préparation + 3s calibration)
+                QTimer.singleShot(6000, self._reset_calibration_button)
+        else:
+            QMessageBox.warning(self, "Error", "3D model viewer not available")
 
-    def update_sensor_list(self, sensor_type):
-        """Mettre à jour la liste des capteurs disponibles en fonction du type sélectionné"""
-        self.sensor_id_combo.clear()
-        sensors_to_show = self.available_sensors.get(sensor_type, [])
-        if not sensors_to_show:
-            # Sinon, utiliser une liste par défaut de 1 à num_sensors
-            num_sensors = 8 if sensor_type in ["EMG", "pMMG"] else 6  # IMU a 6 capteurs, les autres 8
-            sensors_to_show = range(1, num_sensors + 1)
-        for sensor_id in sensors_to_show:
-            self.sensor_id_combo.addItem(f"{sensor_id}")
+    def _reset_calibration_button(self):
+        """Remet le bouton de calibration à l'état normal."""
+        self.calibration_button.setEnabled(True)
+        self.calibration_button.setText("🎯 Start IMU Calibration")
+        QMessageBox.information(self, "Calibration Complete", 
+                               "✅ IMU calibration completed successfully!\n\n"
+                               "Your sensors are now calibrated for optimal tracking accuracy.")
+
+    def toggle_debug(self):
+        """Active/désactive le mode debug."""
+        if hasattr(self.parent(), 'model_3d_widget'):
+            debug_active = self.parent().model_3d_widget.model_viewer.toggle_debug_mode()
+            
+            if debug_active:
+                self.debug_button.setText("🐛 Debug: ON")
+                self.debug_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #4CAF50;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        color: white;
+                        font-size: 12px;
+                        font-weight: 500;
+                        min-height: 30px;
+                        min-width: 120px;
+                    }
+                    QPushButton:hover {
+                        background-color: #43A047;
+                    }
+                """)
+                # Afficher les informations de debug
+                QTimer.singleShot(500, self._show_debug_info)
+            else:
+                self.debug_button.setText("🐛 Debug Mode")
+                self.debug_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #9C27B0;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        color: white;
+                        font-size: 12px;
+                        font-weight: 500;
+                        min-height: 30px;
+                        min-width: 120px;
+                    }
+                    QPushButton:hover {
+                        background-color: #7B1FA2;
+                    }
+                """)
+
+    def _show_debug_info(self):
+        """Affiche les informations de debug dans une fenêtre séparée."""
+        if hasattr(self.parent(), 'model_3d_widget'):
+            debug_info = self.parent().model_3d_widget.model_viewer.get_debug_info()
+            if debug_info:
+                msg = f"""🐛 Debug Information:
+
+📡 Active IMUs: {', '.join(map(str, debug_info['active_imus'])) if debug_info['active_imus'] else 'None'}
+
+📊 Signal Quality:
+{chr(10).join([f"   • IMU {imu_id}: {info['signal_strength']}% @ {info['data_rate']}Hz" 
+               for imu_id, info in debug_info['signal_quality'].items()]) if debug_info['signal_quality'] else '   No active signals'}
+
+🎯 Calibration Status:
+   • Calibrated IMUs: {', '.join(map(str, debug_info['calibration_status']['calibrated_imus'])) if debug_info['calibration_status']['calibrated_imus'] else 'None'}
+   • Calibration Active: {'Yes' if debug_info['calibration_status']['calibration_active'] else 'No'}
+
+🎮 Animation Priorities:
+{chr(10).join([f"   • {part}: {source}" for part, source in debug_info['animation_priorities'].items()]) if debug_info['animation_priorities'] else '   No active animations'}
+"""
+                QMessageBox.information(self, "Debug Information", msg)
 
     def manual_assign(self):
         """Manually assign a sensor to a body part"""
