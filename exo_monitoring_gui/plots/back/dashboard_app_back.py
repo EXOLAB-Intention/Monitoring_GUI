@@ -260,10 +260,6 @@ class DashboardAppBack:
         
         self.packet_size = packet_size
         
-        # Charger les mappages existants avant de mettre à jour l'interface
-        # pour s'assurer que tout mapping sauvegardé est disponible
-        self.load_mappings()
-        
         # Mettre à jour l'interface avec les capteurs disponibles
         # Cela déclenchera aussi l'ouverture de la boîte de dialogue
         self.ui.update_sensor_tree_from_config(self.sensor_config)
