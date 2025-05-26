@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QAction, QFileDialog,
-                             QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout, QApplication)
+                             QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout)
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
 import h5py
@@ -8,7 +8,7 @@ from datetime import datetime
 from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata
 from UI.back.main_window_back import MainAppBack
-from utils.file_receiver import request_files
+
 class MainBar:
     def __init__(self, main_app):
         self.main_app = main_app
@@ -140,11 +140,11 @@ class MainBar:
                         self.main_app.info_window.show()
 
                     else:
-                        self.main_app_back._show_error("Not a valid subject file. Missing required attributes.")
+                        self.main_app_back._show_error(self.main_app,"Not a valid subject file. Missing required attributes.")
                         return
 
             except Exception as e:
-                self.main_app_back._show_error(f"Error loading subject file: {str(e)}")
+                self.main_app_back._show_error(self.main_app,f"Error loading subject file: {str(e)}")
                 return
     
 
@@ -518,41 +518,7 @@ class MainBar:
             )
 
     def request_h5_file(self):
-        from UI.review import Review
-        # Get current file or ask user to select one
-        f = self.main_app.current_subject_file
-        if not f:
-            options = QFileDialog.Options()
-            f, _ = QFileDialog.getOpenFileName(
-                self.main_app,
-                "Open HDF5 File",
-                "",
-                "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
-                options=options
-            )
-            if not f:  # User cancelled file selection
-                return
-        
-        OUT_DIR = os.path.expanduser("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\exo_monitoring_gui\\data\\recuperation")
-
-        request_files()
-
-        received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
-        received_files = [f for f in received_files if os.path.isfile(f)]
-
-        if received_files:
-            latest_file = max(received_files, key=os.path.getmtime)
-
-            self.review = Review(file_path=latest_file)
-
-            for widget in QApplication.topLevelWidgets():
-                widget.close()
-
-            self.review.show()
-        else:
-            print("[WARN] Aucun fichier reçu.")
-
-        
+        print("request_h5_file")
 
     def edit_creation_date(self):
         # Edit menu

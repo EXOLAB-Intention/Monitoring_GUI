@@ -1,11 +1,10 @@
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data, load_metadata
+from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data
 
 import numpy as np
 import h5py
-import pyqtgraph as pg
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QScrollArea, QGraphicsItem, QTextEdit, QGraphicsView, QGraphicsScene, QGraphicsRectItem
@@ -152,26 +151,17 @@ class ZoomBar(QGraphicsView):
 
 
 class Review(QMainWindow):
-    def __init__(self, parent=None, file_path=None):
+    def __init__(self):
         super().__init__()
         self.setWindowTitle("Logiciel de Surveillance des Données")
         self.resize(1600, 900)
         self.setMinimumSize(1400, 800)
         self.loaded_data = {}
-        self.parent = parent
-        self.file_path = file_path
-        self.metadata = load_metadata(file_path) if file_path else None
         self.time_axis = None
-        self.plot_widgets = {}  # Track plot widgets
-        self.displayed_plots = set()  # Track which plots are currently displayed
-        if file_path:
-            self.data = load_hdf5_data(file_path)
-        else:
-            self.data = {"loaded_data": {}}  # Initialize empty data structure
+        self.data = load_hdf5_data('C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\data6.h5')
+        print(f"Données chargées : {self.data}")
         self.setStyleSheet(self.get_stylesheet())
         self.init_ui()
-        if self.file_path:
-            self.load_hdf5_and_populate_tree(self.file_path)
 
     def get_stylesheet(self):
         return """
@@ -253,51 +243,64 @@ class Review(QMainWindow):
         )
         layout.addWidget(load_button)
 
-        return layout    
-    
+        return layout
+
     def create_plot_in_middle_panel(self, data, plot_name=None):
         import pyqtgraph as pg
-        # Check if the plot already exists
+        # Vérifie si le plot existe déjà (par son nom dans le titre caché)
+        plot_titles = [self.middle_layout.itemAt(i).widget().titleLabel.text() for i in range(self.middle_layout.count()) if hasattr(self.middle_layout.itemAt(i).widget(), 'titleLabel')]
         plot_title = plot_name if plot_name else "Données du Capteur"
-        for i in range(self.middle_layout.count()):
-            widget = self.middle_layout.itemAt(i).widget()
-            if isinstance(widget, pg.PlotWidget) and hasattr(widget, 'titleLabel') and widget.titleLabel.text() == plot_title:
-                # Clean up the existing plot widget properly
-                widget.clear()  # Clear all plot items
-                widget.close()  # Close the widget
-                widget.setParent(None)  # Remove parent
-                widget.deleteLater()  # Schedule for deletion
-                break
+        if plot_title in plot_titles:
+            # Si déjà affiché, on le retire
+            for i in range(self.middle_layout.count()):
+                widget = self.middle_layout.itemAt(i).widget()
+                if hasattr(widget, 'titleLabel') and widget.titleLabel.text() == plot_title:
+                    widget.setParent(None)
+                    widget.deleteLater()
+                    break
+            # Recalcule la taille des autres plots
+            count = self.middle_layout.count()
+            for i in range(count):
+                item = self.middle_layout.itemAt(i)
+                widget = item.widget()
+                if widget:
+                    widget.setContentsMargins(0, 0, 0, 0)
+                    widget.setMinimumHeight(200)
+                    widget.setMaximumHeight(200)
+            self.middle_placeholder.setContentsMargins(0, 0, 0, 0)
+            self.middle_layout.setSpacing(0)
+            self.middle_placeholder.setMinimumHeight(count * 200)
+            return
 
-        # Create new plot widget
         plot_widget = pg.PlotWidget()
         plot_widget.full_data = data
         plot_widget.plot(data, pen=pg.mkPen(color='b', width=2))
         plot_widget.setLabel('left', 'Valeur')
         plot_widget.setLabel('bottom', 'Index')
-        plot_widget.setTitle(plot_title)
+        if plot_name:
+            plot_widget.setTitle(f"<span style='font-size:24pt; font-weight:bold'>{plot_name}</span>")
+        else:
+            plot_widget.setTitle("Données du Capteur")
         plot_widget.titleLabel = QLabel(plot_title)
         plot_widget.titleLabel.setVisible(False)
         self.middle_layout.addWidget(plot_widget)
 
-        # Update zoom bar data length if data exists
+        # Mettre à jour la longueur des données dans la zoom bar
         if len(data) > 0:
             self.zoom_bar.set_data_length(len(data))
 
-        # Adjust plot sizes
+        # Ajustez la taille des graphiques pour éviter la barre de défilement
         count = self.middle_layout.count()
         for i in range(count):
             item = self.middle_layout.itemAt(i)
             widget = item.widget()
             if widget:
                 widget.setContentsMargins(0, 0, 0, 0)
-                widget.setMinimumHeight(180)
-                widget.setMaximumHeight(180)
-        
-        # Update container size
+                widget.setMinimumHeight(200)
+                widget.setMaximumHeight(200)
         self.middle_placeholder.setContentsMargins(0, 0, 0, 0)
         self.middle_layout.setSpacing(0)
-        self.middle_placeholder.setMinimumHeight(count * 180)
+        self.middle_placeholder.setMinimumHeight(count * 200)
 
     def build_middle_panel(self):
         layout = QVBoxLayout()
@@ -372,107 +375,62 @@ class Review(QMainWindow):
         self.received_data_text = QTextEdit()
         self.received_data_text.setPlaceholderText("Données Reçues")
         self.received_data_text.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
-        self.received_data_text.setFixedHeight(200)
+        self.received_data_text.setFixedHeight(100)
         box_layout.addWidget(self.received_data_text)
 
         self.experiment_protocol_text = QTextEdit()
         self.experiment_protocol_text.setPlaceholderText("Protocole Expérimental")
         self.experiment_protocol_text.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
-        self.experiment_protocol_text.setFixedHeight(200)
+        self.experiment_protocol_text.setFixedHeight(100)
         box_layout.addWidget(self.experiment_protocol_text)
 
         layout.addLayout(box_layout)
-
-    def reorganize_plots(self):
-        """Réorganise les graphiques après une suppression"""
-        # Collecter tous les widgets
-        widgets = []
-        while self.middle_layout.count():
-            item = self.middle_layout.takeAt(0)
-            if item.widget():
-                widgets.append(item.widget())
-
-        # Réajouter les widgets dans l'ordre
-        for widget in widgets:
-            self.middle_layout.addWidget(widget)
-            widget.setContentsMargins(0, 0, 0, 0)
-            widget.setMinimumHeight(180)
-            widget.setMaximumHeight(180)
-
-        # Mettre à jour la taille du conteneur
-        count = len(widgets)
-        self.middle_placeholder.setMinimumHeight(count * 180 if count > 0 else 0)
-        self.middle_layout.setSpacing(0)
 
     def on_sensor_clickedd(self, item, column):
         if item.data(0, Qt.UserRole) == "disabled":
             self.rienb()
             return
-        
         sensor_name = item.text(0)
         print(f"Capteur cliqué : {sensor_name}")
-        
-        # Si le graphe est déjà affiché, on le supprime
-        if sensor_name in self.displayed_plots:
-            for i in range(self.middle_layout.count()):
-                widget = self.middle_layout.itemAt(i).widget()
-                if isinstance(widget, pg.PlotWidget) and hasattr(widget, 'titleLabel') and widget.titleLabel.text() == sensor_name:
-                    # Clean up the existing plot widget properly
-                    widget.clear()  # Clear all plot items
-                    widget.close()  # Close the widget
-                    widget.setParent(None)  # Remove parent
-                    widget.deleteLater()  # Schedule for deletion
-                    self.displayed_plots.remove(sensor_name)
-                    # Réorganiser les graphiques après la suppression
-                    self.reorganize_plots()
-                    break
-            return
-
-        # Si le graphe n'est pas affiché, on l'ajoute
         match sensor_name:
             case "EMGL1":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGL1"][5:], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGL1"][5:], plot_name="EMGL1")
             case "EMGL2":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGL2"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGL2"], plot_name="EMGL2")
             case "EMGL3":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGL3"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGL3"], plot_name="EMGL3")
             case "EMGL4":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGL4"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGL4"], plot_name="EMGL4")
             case "EMGR1":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGR1"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGR1"], plot_name="EMGR1")
             case "EMGR2":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGR2"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGR2"], plot_name="EMGR2")
             case "EMGR3":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGR3"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGR3"], plot_name="EMGR3")
             case "EMGR4":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGR4"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["EMGR4"], plot_name="EMGR4")
             case "IMU1":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU1"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU1"], plot_name="IMU1")
             case "IMU2":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU2"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU2"], plot_name="IMU2")
             case "IMU3":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU3"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU3"], plot_name="IMU3")
             case "IMU4":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU4"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU4"], plot_name="IMU4")
             case "IMU5":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU5"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU5"], plot_name="IMU5")
             case "IMU6":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU6"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["IMU6"], plot_name="IMU6")
             case "pMMGL1":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL1"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL1"], plot_name="pMMGL1")
             case "pMMGL2":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL2"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL2"], plot_name="pMMGL2")
             case "pMMGL3":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL3"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL3"], plot_name="pMMGL3")
             case "pMMGL4":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL4"], plot_name=sensor_name)
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL4"], plot_name="pMMGL4")
             case "pMMGL5":
-                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL5"], plot_name=sensor_name)
-        
-        # Ajouter le graphe à la liste des graphes affichés
-        self.displayed_plots.add(sensor_name)
-        # Réorganiser les graphiques après l'ajout
-        self.reorganize_plots()
+                self.create_plot_in_middle_panel(self.data["loaded_data"]["pMMGL5"], plot_name="pMMGL5")
 
     def load_emgL_datasets(self, file_path, group_name, dataset_name):
         emgL_data = {}

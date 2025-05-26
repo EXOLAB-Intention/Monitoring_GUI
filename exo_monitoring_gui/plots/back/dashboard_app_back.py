@@ -487,7 +487,7 @@ class DashboardAppBack:
                 pass
 
     def start_recording(self):
-        # Reset corrupted packet counter
+        # Réinitialiser le compteur de paquets corrompus
         self.corrupted_packets_count = 0
         
         self.recording = True
@@ -495,7 +495,8 @@ class DashboardAppBack:
         
         num_imus = self.sensor_config.get('num_imus', 0) if self.sensor_config else 0
         if num_imus == 0:
-            print("[WARNING] No IMU detected in configuration")
+            print("[WARNING] Aucun IMU détecté, initialisation avec 1 IMU par défaut")
+            num_imus = 1
             
         self.recorded_data = {
             "EMG": [[] for _ in range(8)],
@@ -503,10 +504,10 @@ class DashboardAppBack:
             "pMMG": [[] for _ in range(8)]
         }
         
-        print(f"[INFO] Starting recording with {num_imus} IMUs")
+        print(f"[INFO] Début de l'enregistrement avec {num_imus} IMUs")
         print(f"[INFO] Timer starting with 40ms interval")
         self.ui.record_button.setText("Record Stop")
-        self.timer.start(40) # Start timer here
+        self.timer.start(40) # Démarrer le timer ici
         print(f"[INFO] Timer started, is active: {self.timer.isActive()}")
 
     def stop_recording(self):
@@ -531,14 +532,14 @@ class DashboardAppBack:
                     print(f"[ERROR] Error calling edit_Boleen: {e}")
 
     def clear_plots_only(self):
-        """Clears only plots and recording data, maintains all settings."""
-        # Reset state to allow new trial
+        """Nettoie seulement les graphiques et données d'enregistrement, maintient tous les settings."""
+        # Réinitialiser l'état pour permettre un nouveau trial
         self.recording_stopped = False
         
-        # Reset corrupted packet counter
+        # Réinitialiser le compteur de paquets corrompus
         self.corrupted_packets_count = 0
         
-        # Clear recorded data
+        # Vider les données enregistrées
         num_imus = self.sensor_config.get('num_imus', 0) if self.sensor_config else 1
         self.recorded_data = {
             "EMG": [[] for _ in range(8)],
@@ -546,35 +547,38 @@ class DashboardAppBack:
             "pMMG": [[] for _ in range(8)]
         }
         
-        # Clear real-time plot data
+        # Vider les données de plot en temps réel
         self.plot_data.clear()
         self.group_plot_data.clear()
         
-        # Ask UI to clear plots
+        # Demander à l'UI de nettoyer les graphiques
         self.ui.clear_all_plots()
         
-        # Disable Edit menu after clearing
+        # Désactiver le menu Edit après nettoyage
         if hasattr(self.ui, 'main_bar_re') and self.ui.main_bar_re is not None:
             if hasattr(self.ui.main_bar_re, 'edit_Boleen'):
                 try:
-                    self.ui.main_bar_re.edit_Boleen(True)
+                    self.ui.main_bar_re.edit_Boleen(False)
                 except Exception as e:
-                    print(f"Error calling edit_Boleen after clear: {e}")
+                    print(f"[ERROR] Error calling edit_Boleen: {e}")
         
-        # Re-enable record button if we have connection
+        # Réactiver le bouton d'enregistrement si on a une connexion
         if self.client_socket:
+            self.ui.record_button.setText("Record Start")
             self.ui.record_button.setEnabled(True)
+            print("[INFO] System ready for new trial - Record button enabled")
 
     def prepare_new_trial(self):
-        """Prepares interface for new trial by clearing data and plots."""
-        # Stop recording if in progress
+        """Prépare l'interface pour un nouveau trial en nettoyant les données et graphiques."""
+        # Arrêter l'enregistrement si en cours
         if self.recording:
-            self.stop_recording()
+            self.recording = False
+            self.timer.stop()
         
-        # Reset states
+        # Réinitialiser les états
         self.recording_stopped = False
         
-        # Use simple clearing method
+        # Utiliser la méthode de nettoyage simple
         self.clear_plots_only()
 
     def toggle_recording(self):
