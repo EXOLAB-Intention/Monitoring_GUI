@@ -97,14 +97,21 @@ class InformationBack(QWidget):
             QMessageBox.information(self.parent, "Saved", "Information saved successfully.")
             self.parent.info_submitted.emit(data)
             if self.parent.review_mode:
+                # Fermer tous les widgets de niveau supérieur sauf le parent
                 for widget in QApplication.topLevelWidgets():
                     if widget is not self.parent:
-                        widget.close()
-                self.parent.close()
+                        widget.setParent(None)
+                        widget.deleteLater()
 
-                review = Review(self.parent, self.parent.subject_file)
+                # Fermer le parent de manière sécurisée
+                self.parent.setParent(None)
+                self.parent.deleteLater()
+
+                # Créer et afficher la nouvelle fenêtre de révision
+                review = Review(file_path=self.parent.subject_file)
                 review.show()
                 return
+
             else:
                 self.parent.hide()
                 self.parent.exp_dialog = ExperimenterDialog(self.parent)
