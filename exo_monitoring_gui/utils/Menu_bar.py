@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QAction, QFileDialog,
-                             QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout)
+                             QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout, QApplication)
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
 import h5py
@@ -140,11 +140,11 @@ class MainBar:
                         self.main_app.info_window.show()
 
                     else:
-                        self.main_app_back._show_error(self.main_app,"Not a valid subject file. Missing required attributes.")
+                        self.main_app_back._show_error("Not a valid subject file. Missing required attributes.")
                         return
 
             except Exception as e:
-                self.main_app_back._show_error(self.main_app,f"Error loading subject file: {str(e)}")
+                self.main_app_back._show_error(f"Error loading subject file: {str(e)}")
                 return
     
 
@@ -518,7 +518,27 @@ class MainBar:
             )
 
     def request_h5_file(self):
-        print("request_h5_file")
+        from UI.review import Review
+        
+        # Get current file or ask user to select one
+        f = self.main_app.current_subject_file
+        if not f:
+            options = QFileDialog.Options()
+            f, _ = QFileDialog.getOpenFileName(
+                self.main_app,
+                "Open HDF5 File",
+                "",
+                "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
+                options=options
+            )
+            if not f:  # User cancelled file selection
+                return
+                
+        self.review = Review(f)
+        for widget in QApplication.topLevelWidgets():
+            widget.close()
+        self.review.show()
+        
 
     def edit_creation_date(self):
         # Edit menu
