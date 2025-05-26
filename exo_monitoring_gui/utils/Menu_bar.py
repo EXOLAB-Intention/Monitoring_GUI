@@ -519,7 +519,6 @@ class MainBar:
 
     def request_h5_file(self):
         from UI.review import Review
-        
         # Get current file or ask user to select one
         f = self.main_app.current_subject_file
         if not f:
@@ -534,9 +533,11 @@ class MainBar:
             if not f:  # User cancelled file selection
                 return
                 
-        self.review = Review(f)
+        self.review = Review(file_path=f)
+        
         for widget in QApplication.topLevelWidgets():
             widget.close()
+        
         self.review.show()
         
 

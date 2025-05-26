@@ -20,7 +20,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'back'))
 from plots.model_3d_viewer import Model3DWidget
 from plots.sensor_dialogue import SensorMappingDialog
 # Import logic from the backend file
-from dashboard_app_back import DashboardAppBack # Changé d'import relatif à absolu
+from plots.back.dashboard_app_back import DashboardAppBack # Changé d'import relatif à absolu
 
 
 class DashboardApp(QMainWindow):
