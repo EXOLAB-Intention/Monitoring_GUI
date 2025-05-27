@@ -7,7 +7,8 @@ import numpy as np # Kept for np.zeros, np.roll
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QComboBox, 
-    QMessageBox, QRadioButton, QButtonGroup, QScrollArea
+    QMessageBox, QRadioButton, QButtonGroup, QScrollArea, QGroupBox,
+    QSizePolicy  # Added missing QSizePolicy import
 )
 from PyQt5.QtCore import Qt, QTimer # QThread, pyqtSignal are in the backend
 from PyQt5.QtGui import QColor, QBrush # QCursor is no longer directly used here
@@ -20,7 +21,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'back'))
 from plots.model_3d_viewer import Model3DWidget
 from plots.sensor_dialogue import SensorMappingDialog
 # Import logic from the backend file
-from dashboard_app_back import DashboardAppBack # Changé d'import relatif à absolu
+from plots.back.dashboard_app_back import DashboardAppBack  # Utiliser un chemin absolu
 
 
 class DashboardApp(QMainWindow):
@@ -181,21 +182,120 @@ class DashboardApp(QMainWindow):
         label_3d_title.setAlignment(Qt.AlignCenter)
         label_3d_title.setStyleSheet("font-size: 14px; font-weight: bold;")
         right_panel.addWidget(label_3d_title)
+        
+        # Création du modèle 3D dans un conteneur dédié avec une taille fixe
+        self.model_3d_container = QWidget()
+        self.model_3d_container.setMinimumSize(350, 400)
+        self.model_3d_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # Forcer la transparence COMPLÈTE du conteneur
+        self.model_3d_container.setAttribute(Qt.WA_TranslucentBackground)
+        self.model_3d_container.setStyleSheet("background: transparent; border: none;")
+
+        model_3d_layout = QVBoxLayout(self.model_3d_container)
+        # Réduire les marges au minimum absolu
+        model_3d_layout.setContentsMargins(0, 0, 0, 0)
+        model_3d_layout.setSpacing(0)
+
         self.model_3d_widget = Model3DWidget()
-        right_panel.addWidget(self.model_3d_widget, stretch=3)
+        print(f"Created 3D model widget: {self.model_3d_widget}")
+
+        # Forcer des dimensions visibles pour le widget 3D
+        self.model_3d_widget.setMinimumSize(300, 300)
+        self.model_3d_widget.setVisible(True)
+        # Forcer également la transparence du widget 3D
+        self.model_3d_widget.setAttribute(Qt.WA_TranslucentBackground)
+        self.model_3d_widget.setStyleSheet("background: transparent; border: none;")
+
+        # Ajouter au layout et s'assurer qu'il occupe tout l'espace
+        model_3d_layout.addWidget(self.model_3d_widget, 1)
+        right_panel.addWidget(self.model_3d_container, stretch=3)
+        
+        # Réorganisation des boutons en groupes logiques avec des QGroupBox
+        # Groupe 1: Contrôles de visualisation
+        view_controls_group = QGroupBox("Visualisation")
+        view_controls_layout = QHBoxLayout()
+        
         self.animate_button = QPushButton("Start Animation")
         self.animate_button.clicked.connect(self.toggle_animation)
-        right_panel.addWidget(self.animate_button)
+        self.animate_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196f3;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #1e88e5;
+            }
+            QPushButton:pressed {
+                background-color: #1976d2;
+            }
+        """)
+        
         self.reset_view_button = QPushButton("Reset View")
         self.reset_view_button.clicked.connect(self.reset_model_view)
-        right_panel.addWidget(self.reset_view_button)
+        self.reset_view_button.setStyleSheet("""
+            QPushButton {
+                background-color: #9e9e9e;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #8e8e8e;
+            }
+            QPushButton:pressed {
+                background-color: #757575;
+            }
+        """)
+        
+        view_controls_layout.addWidget(self.animate_button)
+        view_controls_layout.addWidget(self.reset_view_button)
+        view_controls_group.setLayout(view_controls_layout)
+        right_panel.addWidget(view_controls_group)
+        
+        # Groupe 2: Configuration des capteurs
+        sensor_config_group = QGroupBox("Configuration des capteurs")
+        sensor_config_layout = QVBoxLayout()
+        
         self.config_button = QPushButton("Configure Sensor Mapping")
-        self.config_button.setStyleSheet("font-size: 14px; padding: 8px 20px;")
+        self.config_button.setStyleSheet("""
+            QPushButton {
+                background-color: #ff9800;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #fb8c00;
+            }
+            QPushButton:pressed {
+                background-color: #f57c00;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """)
         self.config_button.clicked.connect(self.open_sensor_mapping_dialog)
         self.config_button.setEnabled(False)  # Disable the button by default
-        right_panel.addWidget(self.config_button)
+        
         self.default_config_button = QPushButton("Set Up Default Assignments")
-        # Button styles (multi-line escaped strings)
         self.default_config_button.setStyleSheet("""
             QPushButton {
                 background-color: #9C27B0;
@@ -214,11 +314,22 @@ class DashboardApp(QMainWindow):
             QPushButton:pressed {
                 background-color: #7B1FA2;
             }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
         """)
         self.default_config_button.clicked.connect(self.setup_default_mappings)
-        right_panel.addWidget(self.default_config_button)
         
-        # Add a button for smart movement
+        sensor_config_layout.addWidget(self.config_button)
+        sensor_config_layout.addWidget(self.default_config_button)
+        sensor_config_group.setLayout(sensor_config_layout)
+        right_panel.addWidget(sensor_config_group)
+        
+        # Groupe 3: Fonctionnalités avancées
+        advanced_features_group = QGroupBox("Advanced Features")
+        advanced_features_layout = QVBoxLayout()
+        
         self.motion_prediction_button = QPushButton("Enable Smart Movement")
         self.motion_prediction_button.setStyleSheet("""
             QPushButton {
@@ -238,10 +349,128 @@ class DashboardApp(QMainWindow):
             QPushButton:pressed {
                 background-color: #7B1FA2;
             }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
         """)
         self.motion_prediction_button.clicked.connect(self.toggle_motion_prediction)
-        right_panel.addWidget(self.motion_prediction_button)
+        
+        # Ajouter des informations d'état
+        self.motion_state_label = QLabel("Status: Inactive")
+        self.motion_state_label.setStyleSheet("color: #666; font-style: italic;")
+        self.motion_state_label.setAlignment(Qt.AlignCenter)
+        
+        advanced_features_layout.addWidget(self.motion_prediction_button)
+        advanced_features_layout.addWidget(self.motion_state_label)
+        advanced_features_group.setLayout(advanced_features_layout)
+        right_panel.addWidget(advanced_features_group)
+        
+        # Groupe 4: Calibration T-pose
+        calibration_group = QGroupBox("T-pose Calibration")
+        calibration_layout = QVBoxLayout()
+        
+        calibration_buttons_layout = QHBoxLayout()
+        self.calibration_start_button = QPushButton("Calibration T-pose")
+        self.calibration_start_button.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 12px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background-color: #FB8C00;
+            }
+            QPushButton:pressed {
+                background-color: #F57C00;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """)
+        self.calibration_start_button.clicked.connect(self.start_tpose_calibration)
+        self.calibration_start_button.setEnabled(False)
 
+        self.calibration_stop_button = QPushButton("Stop")
+        self.calibration_stop_button.setStyleSheet("""
+            QPushButton {
+                background-color: #F44336;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 12px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 60px;
+            }
+            QPushButton:hover {
+                background-color: #E53935;
+            }
+            QPushButton:pressed {
+                background-color: #D32F2F;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """)
+        self.calibration_stop_button.clicked.connect(self.stop_tpose_calibration)
+        self.calibration_stop_button.setEnabled(False)
+
+        self.calibration_reset_button = QPushButton("Reset")
+        self.calibration_reset_button.setStyleSheet("""
+            QPushButton {
+                background-color: #9E9E9E;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 12px;
+                color: white;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 60px;
+            }
+            QPushButton:hover {
+                background-color: #757575;
+            }
+            QPushButton:pressed {
+                background-color: #616161;
+            }
+            QPushButton:disabled {
+                background-color: #CCCCCC;
+                color: #666666;
+            }
+        """)
+        self.calibration_reset_button.clicked.connect(self.reset_tpose_calibration)
+        self.calibration_reset_button.setEnabled(False)
+        
+        calibration_buttons_layout.addWidget(self.calibration_start_button)
+        calibration_buttons_layout.addWidget(self.calibration_stop_button)
+        calibration_buttons_layout.addWidget(self.calibration_reset_button)
+        
+        # Ajouter un label d'état pour la calibration
+        self.calibration_status_label = QLabel("Status: Calibration required")
+        self.calibration_status_label.setStyleSheet("color: #666; font-style: italic;")
+        self.calibration_status_label.setAlignment(Qt.AlignCenter)
+        
+        calibration_layout.addLayout(calibration_buttons_layout)
+        calibration_layout.addWidget(self.calibration_status_label)
+        calibration_group.setLayout(calibration_layout)
+        right_panel.addWidget(calibration_group)
+
+        # Timer pour mettre à jour le statut de calibration
+        self.calibration_status_timer = QTimer(self)
+        self.calibration_status_timer.timeout.connect(self.update_calibration_status_ui)
+        self.calibration_status_timer.start(500)  # Mise à jour toutes les 500ms
+        
         content_layout.addLayout(left_panel, stretch=1)
         content_layout.addLayout(middle_panel, stretch=4)
         content_layout.addLayout(right_panel, stretch=2)
@@ -375,6 +604,12 @@ class DashboardApp(QMainWindow):
     def reset_sensor_display(self):
         # Completely clear all sensor groups and items
         self.connected_systems.clear()
+        
+        # Disable calibration buttons when disconnecting
+        self.calibration_start_button.setEnabled(False)
+        self.calibration_stop_button.setEnabled(False)
+        self.calibration_reset_button.setEnabled(False)
+        self.calibration_start_button.setText("Calibration (requires IMUs)")
 
     def update_sensor_tree_from_config(self, sensor_config):
         if not sensor_config: return
@@ -428,7 +663,16 @@ class DashboardApp(QMainWindow):
         # Enable the configuration button
         self.config_button.setEnabled(True)
         
-        # Désactiver le menu Edit quand de nouveaux capteurs se connectent
+        # Activer/désactiver les boutons de calibration en fonction de la présence d'IMUs
+        has_imus = bool(sensor_config.get('imu_ids', []))
+        self.calibration_start_button.setEnabled(has_imus)
+        self.calibration_reset_button.setEnabled(has_imus)
+        if not has_imus:
+            self.calibration_start_button.setText("Calibration (requires IMUs)")
+        else:
+            self.calibration_start_button.setText("T-pose Calibration")
+        
+        # Disable Edit menu when new sensors connect
         if hasattr(self, 'main_bar_re') and self.main_bar_re is not None:
             if hasattr(self.main_bar_re, 'edit_Boleen'):
                 try:
@@ -509,10 +753,6 @@ class DashboardApp(QMainWindow):
         dialog.setWindowState(dialog.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
         dialog.activateWindow()
         dialog.raise_()
-        
-        # Exécuter la boîte de dialogue de façon modale
-        dialog.exec_()
-
     def refresh_sensor_tree_with_mappings(self, emg_mappings, pmmg_mappings):
         for i_rf_group in range(self.connected_systems.topLevelItemCount()):
             group_item = self.connected_systems.topLevelItem(i_rf_group)
@@ -556,40 +796,45 @@ class DashboardApp(QMainWindow):
         self.refresh_sensor_tree_with_mappings(self.backend.emg_mappings, self.backend.pmmg_mappings)
 
     def closeEvent(self, event_close):
+        # Force la réinitialisation du modèle 3D avant la fermeture
+        if hasattr(self, 'model_3d_widget') and self.model_3d_widget:
+            try:
+                self.model_3d_widget.reset_view()
+            except:
+                pass
         self.backend.cleanup_on_close()
         event_close.accept()
 
+    # Ajouter cette nouvelle méthode pour réinitialiser l'affichage 3D
+    def force_reset_3d_view(self):
+        """Force la réinitialisation complète de l'affichage 3D."""
+        if hasattr(self, 'model_3d_widget') and self.model_3d_widget:
+            try:
+                # Réinitialise la vue
+                self.model_3d_widget.reset_view()
+                
+                # Force une mise à jour
+                self.model_3d_widget.update()
+                
+                # Réinitialise le conteneur si nécessaire
+                if hasattr(self, 'model_3d_container'):
+                    self.model_3d_container.update()
+                    
+                print("3D view reset successfully")
+            except Exception as e:
+                print(f"Error resetting 3D view: {e}")
+                import traceback
+                traceback.print_exc()
+
     def toggle_motion_prediction(self):
         """Enable or disable smart movement prediction."""
-        # Change button appearance during processing
-        self.motion_prediction_button.setEnabled(False)
-        self.motion_prediction_button.setText("Processing...")
-        self.motion_prediction_button.setStyleSheet("""
-            QPushButton {
-                background-color: #777777;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                color: white;
-                font-size: 14px;
-                font-weight: 500;
-                text-align: center;
-                min-width: 120px;
-            }
-        """)
-        
-        # Allow UI to refresh
-        QApplication.processEvents()
-        
-        # Perform the action
-        is_enabled = self.model_3d_widget.toggle_motion_prediction()
-        
-        # Update button appearance based on result
-        if is_enabled:
-            self.motion_prediction_button.setText("Smart Movement: ACTIVE")
+        try:
+            # Change button appearance during processing
+            self.motion_prediction_button.setEnabled(False)
+            self.motion_prediction_button.setText("Processing...")
             self.motion_prediction_button.setStyleSheet("""
                 QPushButton {
-                    background-color: #4CAF50;
+                    background-color: #777777;
                     border: none;
                     border-radius: 6px;
                     padding: 8px 16px;
@@ -599,36 +844,190 @@ class DashboardApp(QMainWindow):
                     text-align: center;
                     min-width: 120px;
                 }
-                QPushButton:hover {
-                    background-color: #43A047;
-                }
-                QPushButton:pressed {
-                    background-color: #388E3C;
-                }
             """)
-        else:
-            self.motion_prediction_button.setText("Smart Movement: INACTIVE")
-            self.motion_prediction_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #9C27B0;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 8px 16px;
-                    color: white;
-                    font-size: 14px;
-                    font-weight: 500;
-                    text-align: center;
-                    min-width: 120px;
-                }
-                QPushButton:hover {
-                    background-color: #8E24AA;
-                }
-                QPushButton:pressed {
-                    background-color: #7B1FA2;
-                }
-            """)
-        
-        self.motion_prediction_button.setEnabled(True)
+            
+            # Allow UI to refresh
+            QApplication.processEvents()
+            
+            # Perform the action
+            is_enabled = self.model_3d_widget.toggle_motion_prediction()
+            
+            # Update button appearance based on result
+            if is_enabled:
+                self.motion_prediction_button.setText("Smart Movement: ACTIVE")
+                self.motion_state_label.setText("Status: Active - Motion predicted")
+                self.motion_state_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+                self.motion_prediction_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #4CAF50;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        color: white;
+                        font-size: 14px;
+                        font-weight: 500;
+                        text-align: center;
+                        min-width: 120px;
+                    }
+                    QPushButton:hover {
+                        background-color: #43A047;
+                    }
+                    QPushButton:pressed {
+                        background-color: #388E3C;
+                    }
+                """)
+            else:
+                self.motion_prediction_button.setText("Smart Movement: INACTIVE")
+                self.motion_state_label.setText("Status: Inactive")
+                self.motion_state_label.setStyleSheet("color: #666; font-style: italic;")
+                self.motion_prediction_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #9C27B0;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        color: white;
+                        font-size: 14px;
+                        font-weight: 500;
+                        text-align: center;
+                        min-width: 120px;
+                    }
+                    QPushButton:hover {
+                        background-color: #8E24AA;
+                    }
+                    QPushButton:pressed {
+                        background-color: #7B1FA2;
+                    }
+                """)
+            
+            self.motion_prediction_button.setEnabled(True)
+            return is_enabled
+        except Exception as e:
+            QMessageBox.warning(self, "Prediction Error", 
+                               f"An error occurred while activating prediction: {str(e)}")
+            self.motion_prediction_button.setText("Smart Movement: ERROR")
+            self.motion_state_label.setText("Status: Error detected")
+            self.motion_state_label.setStyleSheet("color: #F44336; font-weight: bold;")
+            self.motion_prediction_button.setEnabled(True)
+            return False
+
+    def update_calibration_status_ui(self):
+        """Updates the user interface based on calibration status."""
+        try:
+            if hasattr(self.model_3d_widget, 'get_calibration_status'):
+                status = self.model_3d_widget.get_calibration_status()
+                
+                if status['mode']:  # Calibration in progress
+                    progress = status.get('progress', 0)
+                    self.calibration_start_button.setText(f"Calibration {progress}%")
+                    self.calibration_status_label.setText(f"Status: Calibration in progress ({progress}%)")
+                    self.calibration_status_label.setStyleSheet("color: #FFA000; font-weight: bold;")
+                elif status['complete']:  # Calibration completed
+                    self.calibration_start_button.setText("Completed ✅")
+                    self.calibration_status_label.setText("Status: Calibration successful")
+                    self.calibration_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+                    self.calibration_start_button.setStyleSheet("""
+                        QPushButton {
+                            background-color: #4CAF50;
+                            border: none;
+                            border-radius: 6px;
+                            padding: 6px 12px;
+                            color: white;
+                            font-size: 12px;
+                            font-weight: 500;
+                            text-align: center;
+                            min-width: 100px;
+                        }
+                    """)
+                    self.calibration_start_button.setEnabled(True)
+                    self.calibration_stop_button.setEnabled(False)
+                    self.calibration_reset_button.setEnabled(True)
+                else:  # No calibration or reset
+                    self.calibration_status_label.setText("Status: Calibration required")
+                    self.calibration_status_label.setStyleSheet("color: #666; font-style: italic;")
+                    
+        except Exception as e:
+            print(f"[WARNING] Error updating calibration status: {e}")
+            self.calibration_status_label.setText(f"Status: Error ({str(e)[:20]}...)")
+            self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
+
+    def start_tpose_calibration(self):
+        """Starts T-pose calibration."""
+        try:
+            # Check if sensors are connected
+            if not self.backend.sensor_config or not self.backend.sensor_config.get('imu_ids'):
+                QMessageBox.warning(self, "Calibration not possible", 
+                               "No IMU sensor is connected.\n"
+                               "Please connect IMUs first.")
+                return False
+                
+            # Check if IMUs are mapped
+            if not self.model_3d_widget.get_current_mappings():
+                QMessageBox.warning(self, "Calibration not possible", 
+                               "No IMU sensor is assigned to a body part.\n"
+                               "Please configure sensor mapping first.")
+                return False
+                
+            result = self.model_3d_widget.start_tpose_calibration()
+            if not result:
+                QMessageBox.warning(self, "Calibration not possible", 
+                               "Unable to start calibration.\n"
+                               "Check that IMU sensors are connected.")
+                return False
+                
+            self.calibration_start_button.setEnabled(False)
+            self.calibration_stop_button.setEnabled(True)
+            self.calibration_reset_button.setEnabled(False)
+            self.calibration_start_button.setText("Calibration in progress...")
+            self.calibration_status_label.setText("Status: Waiting for T-pose")
+            self.calibration_status_label.setStyleSheet("color: #FFA000; font-weight: bold;")
+            return result
+        except Exception as e:
+            QMessageBox.critical(self, "Calibration Error", 
+                               f"An error occurred while starting calibration: {str(e)}")
+            self.calibration_status_label.setText(f"Status: Error ({str(e)[:20]}...)")
+            self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
+            return False
+
+    def stop_tpose_calibration(self):
+        """Stops T-pose calibration."""
+        try:
+            result = self.model_3d_widget.stop_tpose_calibration()
+            self.calibration_start_button.setEnabled(True)
+            self.calibration_stop_button.setEnabled(False)
+            self.calibration_reset_button.setEnabled(True)
+            
+            if result:
+                self.calibration_start_button.setText("Completed ✅")
+                self.calibration_status_label.setText("Status: Calibration successful")
+                self.calibration_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            else:
+                self.calibration_start_button.setText("Calibration failed ❌")
+                self.calibration_status_label.setText("Status: Calibration failed")
+                self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
+            return result
+        except Exception as e:
+            QMessageBox.critical(self, "Calibration Error", 
+                               f"An error occurred while stopping calibration: {str(e)}")
+            self.calibration_status_label.setText(f"Status: Error ({str(e)[:20]}...)")
+            self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
+            return False
+
+    def reset_tpose_calibration(self):
+        """Resets T-pose calibration."""
+        try:
+            self.model_3d_widget.reset_calibration()
+            self.calibration_start_button.setText("T-pose Calibration")
+            self.calibration_start_button.setEnabled(True)
+            self.calibration_stop_button.setEnabled(False)
+            self.calibration_reset_button.setEnabled(False)
+            self.calibration_status_label.setText("Status: Calibration reset")
+            self.calibration_status_label.setStyleSheet("color: #666; font-style: italic;")
+        except Exception as e:
+            QMessageBox.critical(self, "Reset Error", 
+                               f"An error occurred during reset: {str(e)}")
+            self.calibration_status_label.setText(f"Status: Error ({str(e)[:20]}...)")
+            self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
 
     def toggle_animation(self):
         """Active ou désactive l'animation du modèle 3D."""
@@ -666,7 +1065,7 @@ class DashboardApp(QMainWindow):
             self.group_plots.clear()
 
     def show_recorded_data_on_plots(self, recorded_data):
-        """Affiche les données enregistrées sur les graphiques."""
+        """Displays recorded data on plots."""
         rec_data = self.backend.recorded_data # Use backend's copy
         has_any_data = False
         for sensor_key in ["EMG", "IMU", "pMMG"]:
@@ -675,7 +1074,7 @@ class DashboardApp(QMainWindow):
                 break
         
         if not has_any_data:
-            QMessageBox.warning(self, 'Warning', "Aucune donnée n'a été enregistrée.")
+            QMessageBox.warning(self, 'Warning', "No data has been recorded.")
             self.record_button.setEnabled(True)
             if self.backend.client_socket: 
                 self.connect_button.setText("Disconnect")
@@ -693,22 +1092,22 @@ class DashboardApp(QMainWindow):
         self.auto_display_all_sensors_with_data()
 
     def auto_display_all_sensors_with_data(self):
-        """Affiche automatiquement tous les capteurs qui ont des données enregistrées."""
+        """Automatically displays all sensors that have recorded data."""
         rec_data = self.backend.recorded_data
         
         # Vérifier si on a une configuration de capteurs
         if not self.backend.sensor_config:
-            print("[WARNING] Aucune configuration de capteurs disponible")
+            print("[WARNING] No sensor configuration available")
             return
         
         # Afficher les informations sur les données enregistrées
-        print(f"[DEBUG] === DONNÉES ENREGISTRÉES ===")
+        print(f"[DEBUG] === RECORDED DATA ===")
         for sensor_type in ["EMG", "pMMG", "IMU"]:
             if rec_data.get(sensor_type):
-                print(f"[DEBUG] {sensor_type}: {len(rec_data[sensor_type])} capteurs")
+                print(f"[DEBUG] {sensor_type}: {len(rec_data[sensor_type])} sensors")
                 for i, data in enumerate(rec_data[sensor_type]):
                     if data:
-                        print(f"[DEBUG]   Capteur {i}: {len(data)} points")
+                        print(f"[DEBUG]   Sensor {i}: {len(data)} points")
         print(f"[DEBUG] =================================")
         
         # Parcourir les données EMG - trier par ordre croissant d'ID
@@ -896,7 +1295,7 @@ class DashboardApp(QMainWindow):
             return
             
         if item_clicked.foreground(0).color() != QColor("green"):
-            QMessageBox.warning(self, "Erreur", "Le capteur n'est pas connecté. Veuillez d'abord connecter le capteur.")
+            QMessageBox.warning(self, "Error", "The sensor is not connected. Please connect the sensor first.")
             return
 
         sensor_name_full = item_clicked.text(0)
@@ -925,7 +1324,7 @@ class DashboardApp(QMainWindow):
                             self.add_sensor_curve_to_group_plot(sensor_name_full, sensor_group_type)
     
     def plot_recorded_sensor_data(self, sensor_name_full, sensor_name_base):
-        """Affiche les données enregistrées pour un capteur spécifique."""
+        """Displays recorded data for a specific sensor."""
         recorded_data = self.backend.recorded_data
         
         # Extraire l'ID du capteur
@@ -965,7 +1364,7 @@ class DashboardApp(QMainWindow):
                                recorded_data["IMU"][sensor_idx])
 
         if not has_data or sensor_idx == -1:
-            QMessageBox.information(self, "Aucune donnée", f"Aucune donnée enregistrée disponible pour {sensor_name_base}.")
+            QMessageBox.information(self, "No data", f"No recorded data available for {sensor_name_base}.")
             return
 
         # Mode groupe: afficher dans les graphiques de groupe
@@ -992,7 +1391,7 @@ class DashboardApp(QMainWindow):
 
             data_to_plot = recorded_data[data_array_key][sensor_idx]
             if data_to_plot:
-                print(f"[DEBUG] Mode groupe - Affichage {sensor_name_base}: {len(data_to_plot)} points de données")
+                print(f"[DEBUG] Group mode - Displaying {sensor_name_base}: {len(data_to_plot)} data points")
                 if sensor_name_base.startswith("IMU"):
                     for i_quat, axis_label in enumerate(['w', 'x', 'y', 'z']):
                         quat_data = [q[i_quat] for q in data_to_plot]
@@ -1050,7 +1449,7 @@ class DashboardApp(QMainWindow):
 
             data_to_plot = recorded_data[data_array_key][sensor_idx]
             if data_to_plot:
-                print(f"[DEBUG] Affichage {sensor_name_base}: {len(data_to_plot)} points de données")
+                print(f"[DEBUG] Displaying {sensor_name_base}: {len(data_to_plot)} data points")
                 if sensor_name_base.startswith("IMU"):
                     for i_quat, axis_label in enumerate(['w', 'x', 'y', 'z']):
                         quat_data = [q[i_quat] for q in data_to_plot]
@@ -1220,6 +1619,7 @@ class DashboardApp(QMainWindow):
         # Nettoyer les dictionnaires de courbes ajoutés pour l'optimisation
         self.curves.clear()
         self.group_curves.clear()
+        
         
         # Réinitialiser les ensembles de capteurs mis en évidence
         self.highlighted_sensors.clear()
@@ -1395,9 +1795,204 @@ class DashboardApp(QMainWindow):
         if plot_widget.legend:
             plot_widget.legend.setVisible(True) 
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    dashboard = DashboardApp()
-    
-    dashboard.show()
-    sys.exit(app.exec_())
+    def start_tpose_calibration(self):
+        """Démarre la calibration T-pose."""
+        # Vérifier si des capteurs sont connectés
+        if not self.backend.sensor_config or not self.backend.sensor_config.get('imu_ids'):
+            QMessageBox.warning(self, "Calibration impossible", 
+                           "Aucun capteur IMU n'est connecté.\n"
+                           "Veuillez d'abord connecter des IMUs.")
+            return False
+            
+        # Vérifier si des IMUs sont mappés
+        if not self.model_3d_widget.get_current_mappings():
+            QMessageBox.warning(self, "Calibration impossible", 
+                           "Aucun capteur IMU n'est assigné à une partie du corps.\n"
+                           "Veuillez d'abord configurer le mapping des capteurs.")
+            return False
+            
+        result = self.model_3d_widget.start_tpose_calibration()
+        if not result:
+            QMessageBox.warning(self, "Calibration impossible", 
+                           "Impossible de démarrer la calibration.\n"
+                           "Vérifiez que des capteurs IMU sont connectés.")
+            return False
+            
+        self.calibration_start_button.setEnabled(False)
+        self.calibration_stop_button.setEnabled(True)
+        self.calibration_reset_button.setEnabled(False)
+        self.calibration_start_button.setText("Calibration en cours...")
+        self.calibration_status_label.setText("Status: Waiting for T-pose")
+        self.calibration_status_label.setStyleSheet("color: #FFA000; font-weight: bold;")
+        return result
+
+    def stop_tpose_calibration(self):
+        """Arrête la calibration T-pose."""
+        result = self.model_3d_widget.stop_tpose_calibration()
+        self.calibration_start_button.setEnabled(True)
+        self.calibration_stop_button.setEnabled(False)
+        self.calibration_reset_button.setEnabled(True)
+        
+        if result:
+            self.calibration_start_button.setText("Terminée ✅")
+            self.calibration_status_label.setText("Status: Calibration successful")
+            self.calibration_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        else:
+            self.calibration_start_button.setText("Calibration échouée ❌")
+            self.calibration_status_label.setText("Status: Calibration failed")
+            self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
+        return result
+
+    def reset_tpose_calibration(self):
+        """Remet à zéro la calibration T-pose."""
+        self.model_3d_widget.reset_calibration()
+        self.calibration_start_button.setText("T-pose Calibration")
+        self.calibration_start_button.setEnabled(True)
+        self.calibration_stop_button.setEnabled(False)
+        self.calibration_reset_button.setEnabled(False)
+        self.calibration_status_label.setText("Status: Calibration reset")
+        self.calibration_status_label.setStyleSheet("color: #666; font-style: italic;")
+
+    def toggle_animation(self):
+        """Active ou désactive l'animation du modèle 3D."""
+        is_walking = self.model_3d_widget.toggle_animation()
+        self.animate_button.setText("Stop Animation" if is_walking else "Start Animation")
+        anim_style_on = """QPushButton { background-color: #f44336; border: none; border-radius: 6px; padding: 8px 16px; color: white; font-size: 14px; font-weight: 500; text-align: center; min-width: 120px; } QPushButton:hover { background-color: #e53935; } QPushButton:pressed { background-color: #d32f2f; }"""
+        anim_style_off = """QPushButton { background-color: #2196f3; border: none; border-radius: 6px; padding: 8px 16px; color: white; font-size: 14px; font-weight: 500; text-align: center; min-width: 120px; } QPushButton:hover { background-color: #1e88e5; } QPushButton:pressed { background-color: #1976d2; }"""
+        self.animate_button.setStyleSheet(anim_style_on if is_walking else anim_style_off)
+
+    def reset_model_view(self):
+        """Réinitialise la vue du modèle 3D à sa position par défaut."""
+        if hasattr(self, 'model_3d_widget') and self.model_3d_widget:
+            self.model_3d_widget.reset_view()
+            self.update()
+
+    def on_display_mode_changed(self, button_clicked=None):
+        """Gère le changement de mode d'affichage (single sensor vs group)."""
+        if self.group_sensor_mode.isChecked():
+            self.update_display_mode_ui()
+            self.create_group_plots()
+        else:
+            self.update_display_mode_ui()
+
+    def update_display_mode_ui(self):
+        """Met à jour l'interface utilisateur lors du changement de mode d'affichage."""
+        if self.group_sensor_mode.isChecked():
+            for plot in self.plots.values():
+                plot.setParent(None)
+                plot.deleteLater()
+            self.plots.clear()
+        else:
+            for group_plot in self.group_plots.values():
+                group_plot.setParent(None)
+                group_plot.deleteLater()
+            self.group_plots.clear()
+
+    def show_recorded_data_on_plots(self, recorded_data):
+        """Displays recorded data on plots."""
+        rec_data = self.backend.recorded_data # Use backend's copy
+        has_any_data = False
+        for sensor_key in ["EMG", "IMU", "pMMG"]:
+            if rec_data.get(sensor_key) and any(rec_data[sensor_key]) and any(d for d in rec_data[sensor_key] if d):
+                has_any_data = True
+                break
+        
+        if not has_any_data:
+            QMessageBox.warning(self, 'Warning', "No data has been recorded.")
+            self.record_button.setEnabled(True)
+            if self.backend.client_socket: 
+                self.connect_button.setText("Disconnect")
+                self.connect_button.setEnabled(True)
+            else: 
+                self.connect_button.setText("Connect")
+                self.connect_button.setEnabled(True)
+            return
+
+        # S'assurer que les graphiques de groupe existent si en mode groupe
+        if self.group_sensor_mode.isChecked():
+            self.create_group_plots()
+        
+        # Afficher automatiquement tous les capteurs avec des données enregistrées
+        self.auto_display_all_sensors_with_data()
+
+    def auto_display_all_sensors_with_data(self):
+        """Automatically displays all sensors that have recorded data."""
+        rec_data = self.backend.recorded_data
+        
+        # Vérifier si on a une configuration de capteurs
+        if not self.backend.sensor_config:
+            print("[WARNING] No sensor configuration available")
+            return
+        
+        # Afficher les informations sur les données enregistrées
+        print(f"[DEBUG] === RECORDED DATA ===")
+        for sensor_type in ["EMG", "pMMG", "IMU"]:
+            if rec_data.get(sensor_type):
+                print(f"[DEBUG] {sensor_type}: {len(rec_data[sensor_type])} sensors")
+                for i, data in enumerate(rec_data[sensor_type]):
+                    if data:
+                        print(f"[DEBUG]   Sensor {i}: {len(data)} points")
+        print(f"[DEBUG] =================================")
+        
+        # Parcourir les données EMG - trier par ordre croissant d'ID
+        if rec_data.get("EMG") and self.backend.sensor_config.get('emg_ids'):
+            emg_ids = self.backend.sensor_config['emg_ids']
+            # Créer une liste de tuples (idx, emg_id, data) et trier par emg_id
+            emg_data_with_ids = []
+            for idx, data in enumerate(rec_data["EMG"]):
+                if data and idx < len(emg_ids):
+                    emg_data_with_ids.append((idx, emg_ids[idx], data))
+            
+            # Trier par emg_id (ordre croissant)
+            emg_data_with_ids.sort(key=lambda x: x[1])
+            
+            for idx, emg_id, data in emg_data_with_ids:
+                sensor_base = f"EMG{emg_id}"
+                # Trouver l'élément dans l'arbre des capteurs
+                item = self.find_sensor_item_by_base_name(sensor_base)
+                sensor_full = item.text(0) if item else sensor_base
+                
+                # Forcer l'affichage des données enregistrées complètes
+                self.plot_recorded_sensor_data(sensor_full, sensor_base)
+        
+        # Parcourir les données pMMG - trier par ordre croissant d'ID
+        if rec_data.get("pMMG") and self.backend.sensor_config.get('pmmg_ids'):
+            pmmg_ids = self.backend.sensor_config['pmmg_ids']
+            # Créer une liste de tuples (idx, pmmg_id, data) et trier par pmmg_id
+            pmmg_data_with_ids = []
+            for idx, data in enumerate(rec_data["pMMG"]):
+                if data and idx < len(pmmg_ids):
+                    pmmg_data_with_ids.append((idx, pmmg_ids[idx], data))
+            
+            # Trier par pmmg_id (ordre croissant)
+            pmmg_data_with_ids.sort(key=lambda x: x[1])
+            
+            for idx, pmmg_id, data in pmmg_data_with_ids:
+                sensor_base = f"pMMG{pmmg_id}"
+                # Trouver l'élément dans l'arbre des capteurs
+                item = self.find_sensor_item_by_base_name(sensor_base)
+                sensor_full = item.text(0) if item else sensor_base
+                
+                # Forcer l'affichage des données enregistrées complètes
+                self.plot_recorded_sensor_data(sensor_full, sensor_base)
+        
+        # Parcourir les données IMU - trier par ordre croissant d'ID
+        if rec_data.get("IMU") and self.backend.sensor_config.get('imu_ids'):
+            imu_ids = self.backend.sensor_config['imu_ids']
+            # Créer une liste de tuples (idx, imu_id, data) et trier par imu_id
+            imu_data_with_ids = []
+            for idx, data in enumerate(rec_data["IMU"]):
+                if data and idx < len(imu_ids):
+                    imu_data_with_ids.append((idx, imu_ids[idx], data))
+            
+            # Trier par imu_id (ordre croissant)
+            imu_data_with_ids.sort(key=lambda x: x[1])
+            
+            for idx, imu_id, data in imu_data_with_ids:
+                sensor_base = f"IMU{imu_id}"
+                # Trouver l'élément dans l'arbre des capteurs
+                item = self.find_sensor_item_by_base_name(sensor_base)
+                sensor_full = item.text(0) if item else sensor_base
+                
+                # Forcer l'affichage des données enregistrées complètes
+                self.plot_recorded_sensor_data(sensor_full, sensor_base)

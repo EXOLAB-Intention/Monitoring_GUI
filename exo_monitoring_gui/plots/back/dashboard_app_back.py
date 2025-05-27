@@ -236,6 +236,12 @@ class DashboardAppBack:
         client_socket, addr = client_info
         self.client_socket = client_socket
         
+        # Ajouter un timeout pour le socket client
+        try:
+            client_socket.settimeout(5.0)  # 5 secondes de timeout
+        except Exception as e:
+            print(f"[WARNING] Failed to set socket timeout: {e}")
+        
         self.client_init_thread = ClientInitThread(client_socket)
         self.client_init_thread.init_success.connect(self.on_client_init_success)
         self.client_init_thread.init_error.connect(self.on_client_init_error)

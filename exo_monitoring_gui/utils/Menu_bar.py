@@ -8,7 +8,7 @@ from datetime import datetime
 from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata
 from UI.back.main_window_back import MainAppBack
-from utils.file_receiver import request_files
+from utils.file_receiver import request_files, SERVER_IP, PORT
 class MainBar:
     def __init__(self, main_app):
         self.main_app = main_app
@@ -518,41 +518,79 @@ class MainBar:
             )
 
     def request_h5_file(self):
-        from UI.review import Review
-        # Get current file or ask user to select one
-        f = self.main_app.current_subject_file
-        if not f:
-            options = QFileDialog.Options()
-            f, _ = QFileDialog.getOpenFileName(
+        """Request and download H5 files from Jetson server"""
+        try:
+            # Define local download directory relative to the application
+            # Go up to project root (exo_monitoring_gui level)
+            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  
+            local_download_dir = os.path.join(app_dir, 'downloaded_h5_files')
+            
+            # Display an information message before starting
+            reply = QMessageBox.question(
                 self.main_app,
-                "Open HDF5 File",
-                "",
-                "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
-                options=options
+                "H5 Files Request",
+                f"Do you want to download H5 files from the Jetson server?\n\n"
+                f"Server: {SERVER_IP}:{PORT}\n"
+                f"Destination: {local_download_dir}\n\n"
+                "Files will be saved in the application's local folder.",
+                QMessageBox.Yes | QMessageBox.No
             )
-            if not f:  # User cancelled file selection
-                return
-        
-        OUT_DIR = os.path.expanduser("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\exo_monitoring_gui\\data\\recuperation")
-
-        request_files()
-
-        received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
-        received_files = [f for f in received_files if os.path.isfile(f)]
-
-        if received_files:
-            latest_file = max(received_files, key=os.path.getmtime)
-
-            self.review = Review(file_path=latest_file)
-
-            for widget in QApplication.topLevelWidgets():
-                widget.close()
-
-            self.review.show()
-        else:
-            print("[WARN] Aucun fichier reçu.")
-
-        
+            
+            if reply == QMessageBox.Yes:
+                # Create a progress bar
+                progress_dialog = QMessageBox(self.main_app)
+                progress_dialog.setWindowTitle("Download in progress...")
+                progress_dialog.setText("Connecting to server and downloading H5 files...")
+                progress_dialog.setStandardButtons(QMessageBox.NoButton)
+                progress_dialog.show()
+                
+                # Process events to display the dialog
+                from PyQt5.QtWidgets import QApplication # Local import for Qt event processing
+                QApplication.processEvents()
+                
+                try:
+                    # Create the local download directory
+                    os.makedirs(local_download_dir, exist_ok=True)
+                    
+                    # Override the OUT_DIR temporarily for this download
+                    import utils.file_receiver as fr
+                    original_out_dir = fr.OUT_DIR # Assumes fr.OUT_DIR is defined
+                    fr.OUT_DIR = local_download_dir
+                    
+                    #file request
+                    request_files()
+                    
+                    # Restore original OUT_DIR
+                    fr.OUT_DIR = original_out_dir
+                    
+                    progress_dialog.close()
+                    
+                    # Display a success message
+                    QMessageBox.information(
+                        self.main_app,
+                        "Download completed",
+                        "H5 files have been downloaded successfully!\n\n"
+                        "You can now load them in the application."
+                    )
+                    
+                except Exception as e:
+                    progress_dialog.close()
+                    QMessageBox.critical(
+                        self.main_app,
+                        "Download error",
+                        f"Error while downloading H5 files:\n\n{str(e)}\n\n"
+                        "Please verify that:\n"
+                        "- The Jetson server is powered on and accessible\n"
+                        "- You are connected to the Jetson WiFi network\n"
+                        f"- The IP address {SERVER_IP}:{PORT} is correct"
+                    )
+                    
+        except ImportError as e:
+            QMessageBox.critical(
+                self.main_app,
+                "Import error",
+                f"Unable to import file_receiver module:\n\n{str(e)}"
+            )
 
     def edit_creation_date(self):
         # Edit menu
