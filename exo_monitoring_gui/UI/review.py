@@ -8,10 +8,11 @@ import h5py
 import pyqtgraph as pg
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QScrollArea, QGraphicsItem, QTextEdit, QGraphicsView, QGraphicsScene, QGraphicsRectItem
+    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QScrollArea, QGraphicsItem, QTextEdit, QGraphicsView, QGraphicsScene, QGraphicsRectItem,
+    QToolBar, QAction, QColorDialog, QComboBox, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QRectF, QPointF, QTimer
-from PyQt5.QtGui import QColor, QBrush, QPen, QPainter, QWheelEvent
+from PyQt5.QtCore import Qt, QRectF, QPointF, QTimer, QSize
+from PyQt5.QtGui import QColor, QBrush, QPen, QPainter, QWheelEvent, QIcon, QTextCharFormat, QFont
 
 class ZoomBar(QGraphicsView):
     def __init__(self, update_zoom_callback):
@@ -211,15 +212,31 @@ class Review(QMainWindow):
         self.build_main_content(main_layout)
         self.build_footer(main_layout)
         self.build_text_areas(main_layout)
+        # Mettre à jour l'état des boutons après leur création
+        self.update_buttons_state()
 
-        # Disable the Start Recording button if existing_load is False
-        if not getattr(self, 'existing_load', False):
-            if hasattr(self, 'record_button'):
-                self.record_button.setEnabled(False)
+    def update_buttons_state(self):
+        """Active/désactive les boutons connect/record selon existing_load"""
+        if hasattr(self, 'connect_button') and hasattr(self, 'record_button'):
+            if not self.existing_load:
+                # Désactiver et griser les boutons
                 self.connect_button.setEnabled(False)
+                self.record_button.setEnabled(False)
+                disabled_style = """
+                QPushButton {
+                    background-color: #cccccc;
+                    color: #888888;
+                    border: 1px solid #aaaaaa;
+                }
+                """
+                self.connect_button.setStyleSheet(disabled_style)
+                self.record_button.setStyleSheet(disabled_style)
             else:
-                # If build_footer hasn't run yet, delay disabling
-                QTimer.singleShot(0, lambda: self.record_button.setEnabled(False))
+                # Activer et remettre le style par défaut
+                self.connect_button.setEnabled(True)
+                self.record_button.setEnabled(True)
+                self.connect_button.setStyleSheet("")
+                self.record_button.setStyleSheet("")
 
     def build_header(self, layout):
         header = QHBoxLayout()
@@ -510,9 +527,41 @@ class Review(QMainWindow):
         footer = QHBoxLayout()
 
         self.connect_button = QPushButton("Connect")
+        self.connect_button.setMinimumHeight(48)
+        self.connect_button.setMinimumWidth(180)
+        self.connect_button.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                padding: 12px 32px;
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #888888;
+            }
+        """)
         footer.addWidget(self.connect_button)
 
         self.record_button = QPushButton("Start Recording")
+        self.record_button.setMinimumHeight(48)
+        self.record_button.setMinimumWidth(180)
+        self.record_button.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                padding: 12px 32px;
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #888888;
+            }
+        """)
         footer.addWidget(self.record_button)
 
         layout.addLayout(footer)
@@ -520,18 +569,83 @@ class Review(QMainWindow):
     def build_text_areas(self, layout):
         box_layout = QHBoxLayout()
 
+        # Received Data section (label only above the box)
+        vbox_received = QVBoxLayout()
+        received_label = QLabel("Received Data")
+        received_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 2px;")
+        vbox_received.addWidget(received_label)
+
         self.received_data_text = QTextEdit()
-        self.received_data_text.setPlaceholderText("Received Data")
-        self.received_data_text.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
-        self.received_data_text.setFixedHeight(200)
-        box_layout.addWidget(self.received_data_text)
+        self.received_data_text.setStyleSheet("""
+            background-color: #fff;
+            border: 1.5px solid #bbb;
+            font-size: 13px;
+        """)
+        self.received_data_text.setMinimumHeight(180)
+        self.received_data_text.setMaximumHeight(180)
+        self.received_data_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        vbox_received.addWidget(self.received_data_text)
+        box_layout.addLayout(vbox_received)
+
+        # Experiment Protocol section (label and buttons on the same line)
+        vbox_protocol = QVBoxLayout()
+        vbox_protocol.setSpacing(4)
+        vbox_protocol.setContentsMargins(0, 0, 0, 0)
+
+        # Horizontal layout for label and buttons
+        hbox_label_toolbar = QHBoxLayout()
+        protocol_label = QLabel("Experimental Protocol (free notes)")
+        protocol_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 2px;")
+        hbox_label_toolbar.addWidget(protocol_label)
+        hbox_label_toolbar.addStretch(1)
+
+        # Bold button (labelled "Bold")
+        bold_btn = QPushButton("Bold")
+        bold_btn.setCheckable(True)
+        bold_btn.setStyleSheet("""
+            QPushButton { font-weight: bold; font-size: 15px; min-width: 48px; min-height: 28px; }
+            QPushButton:checked { background: #e0e0e0; }
+        """)
+        bold_btn.setToolTip("Bold")
+        def set_bold():
+            fmt = QTextCharFormat()
+            weight = QFont.Bold if not self.experiment_protocol_text.fontWeight() == QFont.Bold else QFont.Normal
+            fmt.setFontWeight(weight)
+            self.experiment_protocol_text.mergeCurrentCharFormat(fmt)
+        bold_btn.clicked.connect(set_bold)
+        hbox_label_toolbar.addWidget(bold_btn)
+
+        # Color button
+        color_btn = QPushButton("Color")
+        color_btn.setStyleSheet("""
+            QPushButton { font-size: 13px; min-width: 48px; min-height: 28px; }
+        """)
+        color_btn.setToolTip("Change text color")
+        def set_color():
+            color = QColorDialog.getColor()
+            if color.isValid():
+                fmt = QTextCharFormat()
+                fmt.setForeground(color)
+                self.experiment_protocol_text.mergeCurrentCharFormat(fmt)
+        color_btn.clicked.connect(set_color)
+        hbox_label_toolbar.addWidget(color_btn)
+
+        vbox_protocol.addLayout(hbox_label_toolbar)
 
         self.experiment_protocol_text = QTextEdit()
-        self.experiment_protocol_text.setPlaceholderText("Experimental Protocol")
-        self.experiment_protocol_text.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
-        self.experiment_protocol_text.setFixedHeight(200)
-        box_layout.addWidget(self.experiment_protocol_text)
+        self.experiment_protocol_text.setStyleSheet("""
+            background-color: #fff;
+            border: 1.5px solid #bbb;
+            font-size: 14px;
+        """)
+        self.experiment_protocol_text.setMinimumHeight(180)
+        self.experiment_protocol_text.setMaximumHeight(180)
+        self.experiment_protocol_text.setAcceptRichText(True)
+        self.experiment_protocol_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        vbox_protocol.addWidget(self.experiment_protocol_text)
 
+        # Aligner verticalement les deux sections
+        box_layout.addLayout(vbox_protocol)
         layout.addLayout(box_layout)
 
     def reorganize_plots(self):
