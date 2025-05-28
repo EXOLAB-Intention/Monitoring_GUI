@@ -549,29 +549,44 @@ class MainBar:
                 QApplication.processEvents()
                 
                 try:
-                    # Create the local download directory
-                    os.makedirs(local_download_dir, exist_ok=True)
-                    
-                    # Override the OUT_DIR temporarily for this download
                     import utils.file_receiver as fr
-                    original_out_dir = fr.OUT_DIR # Assumes fr.OUT_DIR is defined
-                    fr.OUT_DIR = local_download_dir
-                    
-                    #file request
+                    from utils.file_receiver import request_files
+
+                    # Lancer le téléchargement
                     request_files()
-                    
-                    # Restore original OUT_DIR
-                    fr.OUT_DIR = original_out_dir
-                    
+
+                    # Fermer le dialogue de progression
                     progress_dialog.close()
-                    
-                    # Display a success message
+
+                    # Chercher le dernier fichier HDF5 dans fr.OUT_DIR
+                    import glob
+                    import os
+                    h5_files = glob.glob(os.path.join(fr.OUT_DIR, "*.h5"))
+                    if not h5_files:
+                        raise FileNotFoundError("Aucun fichier HDF5 trouvé dans le dossier de téléchargement.")
+                    latest_file = max(h5_files, key=os.path.getmtime)
+
+                    # Message de confirmation
                     QMessageBox.information(
                         self.main_app,
                         "Download completed",
-                        "H5 files have been downloaded successfully!\n\n"
-                        "You can now load them in the application."
+                        "H5 file has been downloaded successfully!\n\n"
+                        "You can now load it in the application."
                     )
+
+                    from UI.review import Review
+                    for widget in QApplication.topLevelWidgets():
+                        if widget is not self.parent:
+                            widget.setParent(None)
+                            widget.deleteLater()
+
+                    self.parent.setParent(None)
+                    self.parent.deleteLater()
+
+                    # Ouvrir l'interface Review avec le dernier fichier téléchargé
+                    review = Review(file_path=latest_file)
+                    review.show()
+                    return
                     
                 except Exception as e:
                     progress_dialog.close()

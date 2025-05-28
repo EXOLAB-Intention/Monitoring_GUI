@@ -6,9 +6,7 @@ import time
 
 # ——— Configuration (fixed to script’s folder) ———
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Utilise un chemin relatif au répertoire du projet pour plus de flexibilité
-PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))  # Remonte de 2 niveaux depuis utils/
-OUT_DIR    = os.path.join(PROJECT_ROOT, "exo_monitoring_gui", "data", "recuperation")
+OUT_DIR    = "C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\exo_monitoring_gui\\data\\recuperation"
 SERVER_IP  = '192.168.4.1'        # Jetson AP 기본 IP
 PORT       = 5002                 # file_sender_node 포트
 
