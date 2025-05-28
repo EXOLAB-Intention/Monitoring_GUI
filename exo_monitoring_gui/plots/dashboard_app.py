@@ -25,7 +25,7 @@ from plots.back.dashboard_app_back import DashboardAppBack  # Utiliser un chemin
 
 
 class DashboardApp(QMainWindow):
-    def __init__(self):
+    def __init__(self, subject_file=None):
         super().__init__()
         # Global application style
         self.setStyleSheet("""
@@ -90,7 +90,7 @@ class DashboardApp(QMainWindow):
         self.setWindowTitle("Data Monitoring Software")
         self.resize(1600, 900)
         self.setMinimumSize(1400, 800)
-
+        self.subject_file = subject_file
         self.backend = DashboardAppBack(self)
 
         self.init_ui()
@@ -1100,15 +1100,6 @@ class DashboardApp(QMainWindow):
             print("[WARNING] No sensor configuration available")
             return
         
-        # Afficher les informations sur les données enregistrées
-        print(f"[DEBUG] === RECORDED DATA ===")
-        for sensor_type in ["EMG", "pMMG", "IMU"]:
-            if rec_data.get(sensor_type):
-                print(f"[DEBUG] {sensor_type}: {len(rec_data[sensor_type])} sensors")
-                for i, data in enumerate(rec_data[sensor_type]):
-                    if data:
-                        print(f"[DEBUG]   Sensor {i}: {len(data)} points")
-        print(f"[DEBUG] =================================")
         
         # Parcourir les données EMG - trier par ordre croissant d'ID
         if rec_data.get("EMG") and self.backend.sensor_config.get('emg_ids'):
@@ -1391,13 +1382,11 @@ class DashboardApp(QMainWindow):
 
             data_to_plot = recorded_data[data_array_key][sensor_idx]
             if data_to_plot:
-                print(f"[DEBUG] Group mode - Displaying {sensor_name_base}: {len(data_to_plot)} data points")
                 if sensor_name_base.startswith("IMU"):
                     for i_quat, axis_label in enumerate(['w', 'x', 'y', 'z']):
                         quat_data = [q[i_quat] for q in data_to_plot]
                         color = ['r', 'g', 'b', 'y'][i_quat]
                         curve_name = f"{sensor_name_full}_{axis_label}"
-                        print(f"[DEBUG]   {curve_name}: {len(quat_data)} points")
                         curve = plot_widget.plot(quat_data, pen=pg.mkPen(color, width=2), name=curve_name)
                         self.group_curves[curve_name] = curve
                         if "IMU" not in self.backend.group_plot_data:
@@ -1405,7 +1394,6 @@ class DashboardApp(QMainWindow):
                         self.backend.group_plot_data["IMU"][curve_name] = np.zeros(100)
                 else:
                     color_idx = sensor_idx % 8
-                    print(f"[DEBUG]   {sensor_name_full}: {len(data_to_plot)} points")
                     curve = plot_widget.plot(data_to_plot, pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][color_idx], width=2), name=sensor_name_full)
                     self.group_curves[sensor_name_full] = curve
                     if sensor_group_type not in self.backend.group_plot_data:
@@ -1449,15 +1437,12 @@ class DashboardApp(QMainWindow):
 
             data_to_plot = recorded_data[data_array_key][sensor_idx]
             if data_to_plot:
-                print(f"[DEBUG] Displaying {sensor_name_base}: {len(data_to_plot)} data points")
                 if sensor_name_base.startswith("IMU"):
                     for i_quat, axis_label in enumerate(['w', 'x', 'y', 'z']):
                         quat_data = [q[i_quat] for q in data_to_plot]
-                        print(f"[DEBUG]   {sensor_name_base}_{axis_label}: {len(quat_data)} points")
                         curve = plot_widget_to_use.plot(quat_data, pen=pg.mkPen(['r', 'g', 'b', 'y'][i_quat], width=2), name=axis_label)
                         self.curves[f"{sensor_name_base}_{axis_label}"] = curve
                 else:
-                    print(f"[DEBUG]   {sensor_name_base}: {len(data_to_plot)} points")
                     curve = plot_widget_to_use.plot(data_to_plot, pen=pg.mkPen('b', width=2))
                     self.curves[sensor_name_base] = curve
                 
@@ -1924,15 +1909,6 @@ class DashboardApp(QMainWindow):
             print("[WARNING] No sensor configuration available")
             return
         
-        # Afficher les informations sur les données enregistrées
-        print(f"[DEBUG] === RECORDED DATA ===")
-        for sensor_type in ["EMG", "pMMG", "IMU"]:
-            if rec_data.get(sensor_type):
-                print(f"[DEBUG] {sensor_type}: {len(rec_data[sensor_type])} sensors")
-                for i, data in enumerate(rec_data[sensor_type]):
-                    if data:
-                        print(f"[DEBUG]   Sensor {i}: {len(data)} points")
-        print(f"[DEBUG] =================================")
         
         # Parcourir les données EMG - trier par ordre croissant d'ID
         if rec_data.get("EMG") and self.backend.sensor_config.get('emg_ids'):

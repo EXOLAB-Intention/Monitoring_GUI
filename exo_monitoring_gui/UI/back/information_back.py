@@ -127,7 +127,7 @@ class InformationBack(QWidget):
             QMessageBox.critical(self.parent, "Error", "Failed to save the information.")
 
     def _launch_dashboard_after_experimenter_input(self, experimenter_name):
-        self.parent.dashboard_instance = DashboardApp()
+        self.parent.dashboard_instance = DashboardApp(self.subject_file)
         self.parent.dashboard_instance.showMaximized()
 
         top_level_widgets = QApplication.topLevelWidgets()

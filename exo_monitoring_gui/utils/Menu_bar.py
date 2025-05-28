@@ -518,94 +518,41 @@ class MainBar:
             )
 
     def request_h5_file(self):
-        """Request and download H5 files from Jetson server"""
-        try:
-            # Define local download directory relative to the application
-            # Go up to project root (exo_monitoring_gui level)
-            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  
-            local_download_dir = os.path.join(app_dir, 'downloaded_h5_files')
-            
-            # Display an information message before starting
-            reply = QMessageBox.question(
+        from UI.review import Review
+        # Get current file or ask user to select one
+        f = self.main_app.subject_file
+        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        print(f)
+        if not f:
+            options = QFileDialog.Options()
+            f, _ = QFileDialog.getOpenFileName(
                 self.main_app,
-                "H5 Files Request",
-                f"Do you want to download H5 files from the Jetson server?\n\n"
-                f"Server: {SERVER_IP}:{PORT}\n"
-                f"Destination: {local_download_dir}\n\n"
-                "Files will be saved in the application's local folder.",
-                QMessageBox.Yes | QMessageBox.No
+                "Open HDF5 File",
+                "",
+                "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
+                options=options
             )
-            
-            if reply == QMessageBox.Yes:
-                # Create a progress bar
-                progress_dialog = QMessageBox(self.main_app)
-                progress_dialog.setWindowTitle("Download in progress...")
-                progress_dialog.setText("Connecting to server and downloading H5 files...")
-                progress_dialog.setStandardButtons(QMessageBox.NoButton)
-                progress_dialog.show()
-                
-                # Process events to display the dialog
-                from PyQt5.QtWidgets import QApplication # Local import for Qt event processing
-                QApplication.processEvents()
-                
-                try:
-                    import utils.file_receiver as fr
-                    from utils.file_receiver import request_files
+            if not f:  # User cancelled file selection
+                return
+        
+        OUT_DIR = os.path.expanduser("C:\\Users\\sidib\\Documents\\GitHub\\Monitoring_GUI\\datas\\recuperation")
 
-                    # Lancer le téléchargement
-                    request_files()
+        request_files()
 
-                    # Fermer le dialogue de progression
-                    progress_dialog.close()
+        received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
+        received_files = [f for f in received_files if os.path.isfile(f)]
 
-                    # Chercher le dernier fichier HDF5 dans fr.OUT_DIR
-                    import glob
-                    import os
-                    h5_files = glob.glob(os.path.join(fr.OUT_DIR, "*.h5"))
-                    if not h5_files:
-                        raise FileNotFoundError("Aucun fichier HDF5 trouvé dans le dossier de téléchargement.")
-                    latest_file = max(h5_files, key=os.path.getmtime)
+        if received_files:
+            latest_file = max(received_files, key=os.path.getmtime)
 
-                    # Message de confirmation
-                    QMessageBox.information(
-                        self.main_app,
-                        "Download completed",
-                        "H5 file has been downloaded successfully!\n\n"
-                        "You can now load it in the application."
-                    )
+            self.review = Review(file_path=latest_file)
 
-                    from UI.review import Review
-                    for widget in QApplication.topLevelWidgets():
-                        if widget is not self.parent:
-                            widget.setParent(None)
-                            widget.deleteLater()
+            for widget in QApplication.topLevelWidgets():
+                widget.close()
 
-                    self.parent.setParent(None)
-                    self.parent.deleteLater()
-
-                    # Ouvrir l'interface Review avec le dernier fichier téléchargé
-                    review = Review(file_path=latest_file)
-                    review.show()
-                    return
-                    
-                except Exception as e:
-                    progress_dialog.close()
-                    QMessageBox.critical(
-                        self.main_app,
-                        "Download error",
-                        f"Error while downloading H5 files:\n\n{str(e)}\n\n"
-                        "Please verify that:\n"
-                        "- The Jetson server is powered on and accessible\n"
-                        "- You are connected to the Jetson WiFi network\n"
-                        f"- The IP address {SERVER_IP}:{PORT} is correct"
-                    )
-                    
-        except ImportError as e:
-            QMessageBox.critical(
-                self.main_app,
-                "Import error",
-                f"Unable to import file_receiver module:\n\n{str(e)}"
-            )
+            self.review.show()
+        else:
+            print("[WARN] Aucun fichier reçu.")
 
     def edit_creation_date(self):
         # Edit menu
