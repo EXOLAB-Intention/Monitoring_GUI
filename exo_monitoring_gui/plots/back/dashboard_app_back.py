@@ -37,28 +37,41 @@ class EthernetServerThread(QThread):
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.server_socket.bind((self.listen_ip, self.listen_port))
             self.server_socket.listen(1)
+            self.server_socket.settimeout(None) 
             self.running = True
             
-            print(f"[INFO] Server started on {self.listen_ip}:{self.listen_port}")
+            print(f"[INFO] Server started on {self.listen_ip}:{self.listen_port}. Waiting indefinitely for a client connection...")
             self.server_started.emit()
             
             while self.running:
                 try:
-                    self.server_socket.settimeout(1.0)
-                    try:
-                        client_socket, addr = self.server_socket.accept()
-                        print(f"[INFO] Client connected from {addr}")
-                        self.connection_ready.emit((client_socket, addr))
+                    client_socket, addr = self.server_socket.accept()
+                    
+                    if not self.running:
+                        try:
+                            client_socket.close()
+                        except Exception:
+                            pass 
                         break
-                    except socket.timeout:
-                        continue
-                except Exception as e:
-                    if self.running:
-                        self.server_error.emit(f"Error accepting client: {str(e)}")
+
+                    print(f"[INFO] Client connected from {addr}")
+                    self.connection_ready.emit((client_socket, addr))
+                    self.running = False
                     break
                 
+                except OSError as e:
+                    if self.running:
+                        self.server_error.emit(f"Error accepting client connection: {str(e)}")
+                    self.running = False 
+                    break
+                except Exception as e:
+                    if self.running:
+                        self.server_error.emit(f"Unexpected error in server loop: {str(e)}")
+                    self.running = False 
+                    break 
+                
         except Exception as e:
-            self.server_error.emit(f"Server error: {str(e)}")
+            self.server_error.emit(f"Server setup error: {str(e)}")
         finally:
             self.cleanup()
 
@@ -318,9 +331,7 @@ class DashboardAppBack:
 
     def update_data(self):
         if self.recording:
-            print("[DEBUG] update_data called - recording is active")
             if self.client_socket and self.sensor_config and self.packet_size > 0:
-                print(f"[DEBUG] Reading data - packet_size: {self.packet_size}")
                 try:
                     # Lire le premier byte pour vérifier s'il s'agit du trial end marker
                     first = self.client_socket.recv(1)
@@ -513,6 +524,15 @@ class DashboardAppBack:
         print(f"[INFO] Début de l'enregistrement avec {num_imus} IMUs")
         print(f"[INFO] Timer starting with 40ms interval")
         self.ui.record_button.setText("Record Stop")
+        
+        # Désactiver "Refresh Connected System" pendant l'acquisition de données
+        if hasattr(self.ui, 'main_bar_re') and self.ui.main_bar_re is not None:
+            if hasattr(self.ui.main_bar_re, 'set_refresh_connected_system_enabled'):
+                try:
+                    self.ui.main_bar_re.set_refresh_connected_system_enabled(False)
+                except Exception as e:
+                    print(f"[ERROR] Error disabling refresh_connected_system during recording: {e}")
+        
         self.timer.start(40) # Démarrer le timer ici
         print(f"[INFO] Timer started, is active: {self.timer.isActive()}")
 
@@ -530,12 +550,20 @@ class DashboardAppBack:
         self.ui.record_button.setEnabled(False)
         self.ui.show_recorded_data_on_plots(self.recorded_data) # L'UI gère l'affichage
         
+        #Activer "Clear Plot" et "Request H5 File" après l'arrêt de l'enregistrement
         if hasattr(self.ui, 'main_bar_re') and self.ui.main_bar_re is not None:
             if hasattr(self.ui.main_bar_re, 'edit_Boleen'):
                 try:
-                    self.ui.main_bar_re.edit_Boleen(True)
+                    self.ui.main_bar_re.edit_Boleen(True)  # Active Clear Plot et Request H5 File
                 except Exception as e:
                     print(f"[ERROR] Error calling edit_Boleen: {e}")
+            
+            # Réactiver "Refresh Connected System" si les capteurs sont encore connectés
+            if self.sensor_config and hasattr(self.ui.main_bar_re, 'set_refresh_connected_system_enabled'):
+                try:
+                    self.ui.main_bar_re.set_refresh_connected_system_enabled(True)
+                except Exception as e:
+                    print(f"[ERROR] Error re-enabling refresh_connected_system after recording: {e}")
 
     def clear_plots_only(self):
         """Nettoie seulement les graphiques et données d'enregistrement, maintient tous les settings."""
@@ -560,11 +588,11 @@ class DashboardAppBack:
         # Demander à l'UI de nettoyer les graphiques
         self.ui.clear_all_plots()
         
-        # Désactiver le menu Edit après nettoyage
+        # Désactiver "Clear Plot" et "Request H5 File" après nettoyage (mais garder Refresh Connected System activé)
         if hasattr(self.ui, 'main_bar_re') and self.ui.main_bar_re is not None:
             if hasattr(self.ui.main_bar_re, 'edit_Boleen'):
                 try:
-                    self.ui.main_bar_re.edit_Boleen(False)
+                    self.ui.main_bar_re.edit_Boleen(False)  # Désactive Clear Plot et Request H5 File
                 except Exception as e:
                     print(f"[ERROR] Error calling edit_Boleen: {e}")
         

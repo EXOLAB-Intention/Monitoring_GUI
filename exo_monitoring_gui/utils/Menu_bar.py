@@ -627,10 +627,10 @@ class MainBar:
         edit_menu.addAction(self.request_h5_file_action)
 
     def edit_Boleen(self, boleen):
-        """Active ou désactive les actions du menu Edit."""
+        """Active ou désactive les actions du menu Edit (Clear Plot et Request H5 File seulement)."""
+        # Seules les actions qui doivent être activées après l'arrêt de l'enregistrement
         actions_to_toggle = [
             ('clear_plot_action', 'clear_plot_action'),  
-            ('refresh_connected_system_action', 'refresh_connected_system_action'),
             ('request_h5_file_action', 'request_h5_file_action')
         ]
         
@@ -643,3 +643,14 @@ class MainBar:
                     print(f"[WARNING] {action_name} is None")
             else:
                 print(f"[WARNING] {attr_name} attribute not found")
+
+    def set_refresh_connected_system_enabled(self, enabled):
+        """Active ou désactive spécifiquement l'action Refresh Connected System."""
+        if hasattr(self, 'refresh_connected_system_action'):
+            action = getattr(self, 'refresh_connected_system_action')
+            if action is not None:
+                action.setEnabled(enabled)
+            else:
+                print(f"[WARNING] refresh_connected_system_action is None")
+        else:
+            print(f"[WARNING] refresh_connected_system_action attribute not found")

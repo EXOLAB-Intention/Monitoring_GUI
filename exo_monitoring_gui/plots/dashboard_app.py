@@ -116,6 +116,8 @@ class DashboardApp(QMainWindow):
             # Désactiver le menu Edit au démarrage
             if hasattr(self.main_bar_re, 'edit_Boleen'):
                 self.main_bar_re.edit_Boleen(False)
+            if hasattr(self.main_bar_re, 'set_refresh_connected_system_enabled'):
+                self.main_bar_re.set_refresh_connected_system_enabled(False)
         except Exception as e:
             print(f"[ERROR] Error initializing MainBar: {e}")
             import traceback
@@ -610,6 +612,14 @@ class DashboardApp(QMainWindow):
         self.calibration_stop_button.setEnabled(False)
         self.calibration_reset_button.setEnabled(False)
         self.calibration_start_button.setText("Calibration (requires IMUs)")
+        
+        # Désactiver "Refresh Connected System" lors de la déconnexion
+        if hasattr(self, 'main_bar_re') and self.main_bar_re is not None:
+            if hasattr(self.main_bar_re, 'set_refresh_connected_system_enabled'):
+                try:
+                    self.main_bar_re.set_refresh_connected_system_enabled(False)
+                except Exception as e:
+                    print(f"Error calling set_refresh_connected_system_enabled on disconnect: {e}")
 
     def update_sensor_tree_from_config(self, sensor_config):
         if not sensor_config: return
@@ -672,13 +682,14 @@ class DashboardApp(QMainWindow):
         else:
             self.calibration_start_button.setText("T-pose Calibration")
         
-        # Disable Edit menu when new sensors connect
+        # CORRECTION : Activer le menu Edit quand les capteurs sont connectés au lieu de le désactiver
         if hasattr(self, 'main_bar_re') and self.main_bar_re is not None:
-            if hasattr(self.main_bar_re, 'edit_Boleen'):
+            if hasattr(self.main_bar_re, 'set_refresh_connected_system_enabled'):
                 try:
-                    self.main_bar_re.edit_Boleen(False)
+                    # Activer seulement "Refresh Connected System" lors de la connexion
+                    self.main_bar_re.set_refresh_connected_system_enabled(True)
                 except Exception as e:
-                    print(f"Error calling edit_Boleen on connection: {e}")
+                    print(f"Error calling set_refresh_connected_system_enabled on connection: {e}")
         
         # Create group plots if necessary
         if self.group_sensor_mode.isChecked() and not self.group_plots:
@@ -1020,7 +1031,7 @@ class DashboardApp(QMainWindow):
                 self.calibration_status_label.setText("Status: Calibration successful")
                 self.calibration_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
             else:
-                self.calibration_start_button.setText("Calibration failed ❌")
+                self.calibration_start_button.setText("Calibration échouée ❌")
                 self.calibration_status_label.setText("Status: Calibration failed")
                 self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
             return result
