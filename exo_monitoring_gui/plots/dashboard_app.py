@@ -742,17 +742,35 @@ class DashboardApp(QMainWindow):
             QMessageBox.warning(self, "No Sensors", "Please connect sensors before configuring the mapping.")
             return
         
-        # Si ce n'est pas la première fois, charger les mappages existants
-        curr_maps = self.backend.get_current_mappings_for_dialog()
-        
-        # Créer et afficher la boîte de dialogue
-        dialog = SensorMappingDialog(self, curr_maps, available_sensors)
-        dialog.mappings_updated.connect(self.backend.update_sensor_mappings)
-        
-        # Déplacer la fenêtre de dialogue au premier plan et la mettre en évidence
-        dialog.setWindowState(dialog.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
-        dialog.activateWindow()
-        dialog.raise_()
+        try:
+            print("[DEBUG] Opening sensor mapping dialog from dashboard...")
+            
+            # Si ce n'est pas la première fois, charger les mappages existants
+            curr_maps = self.backend.get_current_mappings_for_dialog()
+            print(f"[DEBUG] Current mappings retrieved: {curr_maps}")
+            
+            # Créer et afficher la boîte de dialogue
+            dialog = SensorMappingDialog(self, curr_maps, available_sensors)
+            dialog.mappings_updated.connect(self.backend.update_sensor_mappings)
+            
+            # ✅ SOLUTION : Utiliser exec_() pour afficher le dialogue de manière modale
+            print("[DEBUG] Showing sensor mapping dialog...")
+            result = dialog.exec_()
+            
+            if result == dialog.Accepted:
+                print("[DEBUG] Sensor mapping dialog accepted")
+            else:
+                print("[DEBUG] Sensor mapping dialog cancelled")
+                
+        except Exception as e:
+            print(f"[ERROR] Exception in open_sensor_mapping_dialog: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(
+                self,
+                "Dialog Error",
+                f"Error opening sensor mapping dialog:\n{str(e)}\n\nPlease try again or restart the application."
+            )
     def refresh_sensor_tree_with_mappings(self, emg_mappings, pmmg_mappings):
         for i_rf_group in range(self.connected_systems.topLevelItemCount()):
             group_item = self.connected_systems.topLevelItem(i_rf_group)
@@ -1813,30 +1831,43 @@ class DashboardApp(QMainWindow):
 
     def stop_tpose_calibration(self):
         """Arrête la calibration T-pose."""
-        result = self.model_3d_widget.stop_tpose_calibration()
-        self.calibration_start_button.setEnabled(True)
-        self.calibration_stop_button.setEnabled(False)
-        self.calibration_reset_button.setEnabled(True)
-        
-        if result:
-            self.calibration_start_button.setText("Terminée ✅")
-            self.calibration_status_label.setText("Status: Calibration successful")
-            self.calibration_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
-        else:
-            self.calibration_start_button.setText("Calibration échouée ❌")
-            self.calibration_status_label.setText("Status: Calibration failed")
+        try:
+            result = self.model_3d_widget.stop_tpose_calibration()
+            self.calibration_start_button.setEnabled(True)
+            self.calibration_stop_button.setEnabled(False)
+            self.calibration_reset_button.setEnabled(True)
+            
+            if result:
+                self.calibration_start_button.setText("Completed ✅")
+                self.calibration_status_label.setText("Status: Calibration successful")
+                self.calibration_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            else:
+                self.calibration_start_button.setText("Calibration échouée ❌")
+                self.calibration_status_label.setText("Status: Calibration failed")
+                self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
+            return result
+        except Exception as e:
+            QMessageBox.critical(self, "Calibration Error", 
+                               f"An error occurred while stopping calibration: {str(e)}")
+            self.calibration_status_label.setText(f"Status: Error ({str(e)[:20]}...)")
             self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
-        return result
+            return False
 
     def reset_tpose_calibration(self):
         """Remet à zéro la calibration T-pose."""
-        self.model_3d_widget.reset_calibration()
-        self.calibration_start_button.setText("T-pose Calibration")
-        self.calibration_start_button.setEnabled(True)
-        self.calibration_stop_button.setEnabled(False)
-        self.calibration_reset_button.setEnabled(False)
-        self.calibration_status_label.setText("Status: Calibration reset")
-        self.calibration_status_label.setStyleSheet("color: #666; font-style: italic;")
+        try:
+            self.model_3d_widget.reset_calibration()
+            self.calibration_start_button.setText("T-pose Calibration")
+            self.calibration_start_button.setEnabled(True)
+            self.calibration_stop_button.setEnabled(False)
+            self.calibration_reset_button.setEnabled(False)
+            self.calibration_status_label.setText("Status: Calibration reset")
+            self.calibration_status_label.setStyleSheet("color: #666; font-style: italic;")
+        except Exception as e:
+            QMessageBox.critical(self, "Reset Error", 
+                               f"An error occurred during reset: {str(e)}")
+            self.calibration_status_label.setText(f"Status: Error ({str(e)[:20]}...)")
+            self.calibration_status_label.setStyleSheet("color: #F44336; font-weight: bold;")
 
     def toggle_animation(self):
         """Active ou désactive l'animation du modèle 3D."""
