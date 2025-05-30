@@ -144,6 +144,10 @@ class Model3DViewer(QGLWidget):
         # Add flag to track widget destruction state
         self.is_being_destroyed = False
         
+        # Add missing attributes to fix errors
+        self._initialized = False
+        self.is_visible_to_user = True
+        
         # Force taille minimale pour assurer la visibilité
         self.setMinimumSize(300, 300)
         self.rotation_x = 0
@@ -153,7 +157,7 @@ class Model3DViewer(QGLWidget):
         self.mouse_pressed = False  # Initialize mouse pressed state
         
         # Initialize camera distance for zoom functionality
-        self.camera_distance = 4.0
+        self.camera_distance = 3.5  # Reduced from 4.0 to bring model closer
         
         self.animation_phase = 0
         self.walking = False
@@ -498,6 +502,10 @@ class Model3DViewer(QGLWidget):
         print("3D view reset complete")
 
     def initializeGL(self):
+        if self._initialized:
+            print("Skipping redundant OpenGL initialization")
+            return
+            
         try:
             # First check if we can safely initialize
             if not self.isValid():
@@ -612,14 +620,10 @@ class Model3DViewer(QGLWidget):
             traceback.print_exc()
 
     def paintGL(self):
-        """Render the OpenGL scene."""
         # Skip rendering if conditions aren't right
-        if self.is_being_destroyed:
+        if self.is_being_destroyed or not self.isVisible() or not self.is_visible_to_user:
             return
             
-        if not self.isValid():
-            return
-        
         try:
             # Make sure we have a valid context before proceeding
             if not self.context() or not self.context().isValid():
@@ -682,7 +686,7 @@ class Model3DViewer(QGLWidget):
     def create_floor(self):
         """Draw a floor grid for reference."""
         # Use a lighter color with transparency for the floor
-        glColor4f(0.3, 0.3, 0.1, 0.8)  # Alpha at 0.8 for slight transparency
+        glColor4f(0.3, 0.3, 0.3, 0.6)  # Darker with more transparency
         
         floor_size = 10.0
         grid_size = 0.5
@@ -1010,7 +1014,7 @@ class Model3DViewer(QGLWidget):
 
     # Also need to add the missing draw_limbs_internal and draw_joints_internal methods
     def draw_limbs_internal(self):
-        glLineWidth(3.0)
+        glLineWidth(4.0)  # Increased from 3.0 to make limbs more visible
         glBegin(GL_LINES)
         
         glColor3f(1.0, 0.8, 0.6)
@@ -1084,20 +1088,22 @@ class Model3DViewer(QGLWidget):
             sensor_type = self._get_mapped_sensor_type(part_name)
             
             if sensor_type == "IMU":
-                glColor3f(0.0, 0.8, 0.2)  # Green
+                glColor3f(0.0, 1.0, 0.2)  # Brighter green
             elif sensor_type == "EMG":
-                glColor3f(0.8, 0.2, 0.0)  # Red
+                glColor3f(1.0, 0.2, 0.0)  # Brighter red
             elif sensor_type == "pMMG":
-                glColor3f(0.0, 0.2, 0.8)  # Blue
+                glColor3f(0.0, 0.3, 1.0)  # Brighter blue
             else:
                 glColor3f(0.9, 0.9, 0.9)  # Gray
 
-            # Draw the joint sphere
+            # Draw the joint sphere with 15% smaller sizes
             if self.quadric:
                 if part_name == 'head':
-                    gluSphere(self.quadric, 0.15, 12, 12)  # Larger head
+                    gluSphere(self.quadric, 0.10, 12, 12)  # Reduced by 15% (from 0.12)
+                elif sensor_type:  # Make mapped sensor joints less obtrusive
+                    gluSphere(self.quadric, 0.043, 8, 8)  # Reduced by 15% (from 0.05)
                 else:
-                    gluSphere(self.quadric, 0.05, 6, 6)  # Other joints
+                    gluSphere(self.quadric, 0.05, 8, 8)  # Reduced by 15% (from 0.06)
             
             # Try to add a label if it's a sensor - with error handling for projection failures
             if sensor_type:
@@ -1167,7 +1173,7 @@ class Model3DViewer(QGLWidget):
         zoom_factor = event.angleDelta().y() / 120.0  # 120 units per wheel notch
         # Zoom by changing the camera position in gluLookAt
         # We'll adjust this in paintGL by modifying the camera distance
-        self.camera_distance = max(2.0, min(10.0, self.camera_distance - zoom_factor * 0.5))
+        self.camera_distance = max(1.5, min(10.0, self.camera_distance - zoom_factor * 0.5))
         self.update()
 
     def map_imu_to_body_part(self, imu_id, body_part):
@@ -1188,8 +1194,11 @@ class Model3DViewer(QGLWidget):
         self.imu_mapping[imu_id] = body_part
         
         # Force update of the display list to show the new mapping
-        self.safely_update_display_list(force=True)
-        self.update()
+        # Réduire les mises à jour de display list qui causent des problèmes
+        # Mettre à jour seulement si le widget est visible
+        if self.isVisible() and self.is_visible_to_user:
+            self.safely_update_display_list(force=True)
+            self.update()
         return True
     
     def apply_imu_data(self, imu_id, quaternion_data):

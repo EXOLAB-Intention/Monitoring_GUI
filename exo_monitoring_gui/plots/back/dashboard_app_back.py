@@ -378,6 +378,7 @@ class DashboardAppBack:
 
                     # Enregistrement des données
                     if 'emg' in packet and packet['emg']:
+                        print(f"Received EMG data: {packet['emg']}")  # Debug log
                         for i, emg_id in enumerate(self.sensor_config.get('emg_ids', [])):
                             if i < len(packet['emg']) and i < len(self.recorded_data["EMG"]):
                                 value = packet['emg'][i]
@@ -406,7 +407,12 @@ class DashboardAppBack:
                                         print(f"Error updating 3D model: {e}")
                     
                     # Mise à jour des graphiques (gérée par l'UI)
-                    self.ui.update_live_plots(packet) # Nouvelle méthode dans l'UI
+                    try:
+                        self.ui.update_live_plots(packet)
+                    except AttributeError:
+                        print("[ERROR] Failed to update_live_plots - method not found")
+                    except Exception as e:
+                        print(f"[ERROR] Failed to update plots: {e}")
 
                 except ConnectionResetError:
                     print("[ERROR] Connection reset by peer.")

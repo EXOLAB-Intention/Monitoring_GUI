@@ -1,18 +1,9 @@
 {
   "EMG": {
+    "1": "biceps_l",
     "2": "biceps_r",
-    "3": "head",
-    "4": "forearm_l",
-    "5": "deltoid_l",
-    "6": "forearm_l",
-    "7": "deltoid_l",
-    "8": "forearm_r",
-    "1": "forearm_l",
-    "25": "dorsalis_major_l",
-    "27": "forearm_r",
-    "30": "biceps_r",
-    "32": "biceps_l",
-    "31": "dorsalis_major_l"
+    "3": "quadriceps_l",
+    "4": "quadriceps_r"
   },
   "IMU": {
     "2": "left_hand",

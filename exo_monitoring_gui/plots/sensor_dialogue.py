@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QLabel, QComboBox, QGroupBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QWidget, QSplitter, QGridLayout, QScrollArea, QSizePolicy
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QColor, QBrush, QFont
 from plots.model_3d_viewer import Model3DWidget
 import re
@@ -177,8 +177,52 @@ class SimplifiedMappingDialog(QDialog):
             'pMMG': []
         }
         
+        # Debug log
+        print(f"Creating sensor mapping dialog with mappings: {self.current_mappings}")
+        print(f"Available sensors: {self.available_sensors}")
+        
+        # Initialize UI immediately instead of delaying
         self.setup_ui()
         
+        # Load mappings
+        try:
+            self.load_current_mappings()
+            print("Current mappings loaded successfully")
+        except Exception as e:
+            print(f"Error loading mappings: {e}")
+        
+        # For logging when dialog is actually shown
+        self.is_visible = False
+    
+    def showEvent(self, event):
+        """Gérer l'affichage de la boîte de dialogue de manière efficace."""
+        super().showEvent(event)
+        if not self.is_visible:
+            print("Sensor mapping dialog is now visible")
+            self.is_visible = True
+            
+            # Update all combo boxes to reflect current selections
+            self.styleAllComboBoxes()
+            
+            # Ensure 3D models in each tab are properly sized and rendered
+            if hasattr(self, 'general_model'):
+                self.general_model.update()
+                
+                # Reset view to ensure all models are properly centered and visible
+                self.general_model.reset_view()
+            
+            # Update all 3D models in all tabs
+            for sensor_type in ['emg', 'imu', 'pmmg']:
+                model_attr = f"{sensor_type}_model"
+                if hasattr(self, model_attr):
+                    model = getattr(self, model_attr)
+                    if model:
+                        model.update()
+                        model.reset_view()
+            
+            # Force repaint
+            self.repaint()
+    
     def setup_ui(self):
         main_layout = QVBoxLayout()
         
@@ -410,17 +454,31 @@ class SimplifiedMappingDialog(QDialog):
         # Create a splitter for horizontal layout
         splitter = QSplitter(Qt.Horizontal)
         
-        # 3D Model - Now in a container on the left
+        # 3D Model - Now in a container on the left with expanded size
         model_container = QWidget()
         model_layout = QVBoxLayout(model_container)
         
         model_group = QGroupBox("3D Model")
         model_inner_layout = QVBoxLayout()
         self.general_model = Model3DWidget()
+        
+        # Ensure the 3D model has sufficient size
+        self.general_model.setMinimumSize(400, 500)  # Increased height for better visibility
+        self.general_model.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Set camera distance to see the entire model including feet
+        self.general_model.model_viewer.camera_distance = 6.0  # Increased from default of 4.0
+        
+        # Fix aspect ratio to prevent stretching
+        self.general_model.setFixedWidth(400)
+        self.general_model.setFixedHeight(600)
+        
         model_inner_layout.addWidget(self.general_model)
         model_group.setLayout(model_inner_layout)
         model_layout.addWidget(model_group)
         
+        # Give the model container a strong size policy to expand
+        model_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         splitter.addWidget(model_container)
         
         # Manual assignment - Now on the right side
@@ -645,8 +703,18 @@ class SimplifiedMappingDialog(QDialog):
         # Split view: 3D model on left, controls on right
         splitter = QSplitter(Qt.Horizontal)
         
-        # 3D Model
+        # 3D Model with improved sizing and fixed aspect ratio
         model_widget = Model3DWidget()
+        model_widget.setMinimumSize(400, 500)  # Increased height for better visibility
+        model_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Set camera distance to see the entire model including feet
+        model_widget.model_viewer.camera_distance = 6.0  # Increased from default of 4.0
+        
+        # Fix aspect ratio to prevent stretching
+        model_widget.setFixedWidth(400)
+        model_widget.setFixedHeight(600)
+        
         splitter.addWidget(model_widget)
         
         # Store model reference
@@ -661,8 +729,11 @@ class SimplifiedMappingDialog(QDialog):
         instructions.setWordWrap(True)
         control_layout.addWidget(instructions)
         
-        # Create controls for each sensor
-        control_grid = QGridLayout()
+        # Use a scroll area to handle many sensors
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        control_grid = QGridLayout(scroll_content)
         
         # ComboBox storage
         self.sensor_combos = getattr(self, "sensor_combos", {})
@@ -683,15 +754,25 @@ class SimplifiedMappingDialog(QDialog):
         
         body_parts = ["-- Not assigned --"] + upper_body + lower_body
         
-        # Si nous avons des capteurs disponibles, utiliser cette liste
+        # Use only the available sensors if they exist, otherwise use empty list
+        # No fallback to default range - only show detected sensors
         sensors_to_show = self.available_sensors.get(sensor_type, [])
+        
+        # Display a message if no sensors are available
         if not sensors_to_show:
-            # Sinon, utiliser une liste par défaut de 1 à num_sensors
-            sensors_to_show = range(1, num_sensors + 1)
+            no_sensors_label = QLabel(f"No {sensor_type} sensors detected")
+            no_sensors_label.setStyleSheet("color: #999; font-style: italic; padding: 20px;")
+            control_grid.addWidget(no_sensors_label, 0, 0, 1, 2)
+        
+        # Group sensors by 5 for better organization when there are many
+        SENSORS_PER_ROW = 1  # One sensor per row for clarity
         
         for i, sensor_id in enumerate(sensors_to_show):
-            label = QLabel(f"{sensor_type} {sensor_id}")
-            label.setStyleSheet(f"color: {self._get_color_for_type(sensor_type)};")
+            row = i // SENSORS_PER_ROW
+            col = (i % SENSORS_PER_ROW) * 2  # *2 because we use 2 columns per sensor
+            
+            label = QLabel(f"{sensor_type} {sensor_id}:")
+            label.setStyleSheet(f"color: {self._get_color_for_type(sensor_type)}; font-weight: bold;")
             
             combo = QComboBox()
             combo.addItems(body_parts)
@@ -709,32 +790,27 @@ class SimplifiedMappingDialog(QDialog):
                     width: 20px;
                     border-left: 1px solid #d0d0d0;
                 }
-                QComboBox::down-arrow {
-                    image: url(none);
-                    width: 14px;
-                    height: 14px;
-                }
-                QComboBox::down-arrow:on {
-                    /* shift the arrow when popup is open */
-                    top: 1px;
-                    left: 1px;
-                }
-                QComboBox QAbstractItemView {
-                    border: 1px solid #d0d0d0;
-                    selection-background-color: #e0e0e0;
-                    selection-color: black;
-                    background-color: white;
-                    padding: 2px;
-                }
             """)
-            combo.currentTextChanged.connect(lambda text, s=sensor_type, id=sensor_id: self.on_combo_changed(s, id, text))
             
-            control_grid.addWidget(label, i, 0)
-            control_grid.addWidget(combo, i, 1)
-            
+            # Store reference to combo box for later access
             self.sensor_combos[sensor_type][sensor_id] = combo
+            
+            # Setup change handler
+            combo.currentTextChanged.connect(
+                lambda text, st=sensor_type, sid=sensor_id: 
+                self.on_combo_changed(st, sid, text)
+            )
+            
+            control_grid.addWidget(label, row, col)
+            control_grid.addWidget(combo, row, col + 1)
         
-        control_layout.addLayout(control_grid)
+        scroll_content.setLayout(control_grid)
+        scroll.setWidget(scroll_content)
+        
+        # Set a reasonable fixed height for the scroll area
+        scroll.setMinimumHeight(300)
+        control_layout.addWidget(scroll)
+        
         control_layout.addStretch()
         
         # Reset button for this sensor type
@@ -745,7 +821,7 @@ class SimplifiedMappingDialog(QDialog):
         control_widget.setLayout(control_layout)
         splitter.addWidget(control_widget)
         
-        # Set initial sizes
+        # Set initial sizes - give more space to the 3D model (60%)
         splitter.setSizes([int(splitter.width() * 0.6), int(splitter.width() * 0.4)])
         
         layout.addWidget(splitter)
@@ -755,13 +831,18 @@ class SimplifiedMappingDialog(QDialog):
     def update_sensor_list(self, sensor_type):
         """Mettre à jour la liste des capteurs disponibles en fonction du type sélectionné"""
         self.sensor_id_combo.clear()
+        
+        # Use only available sensors, no fallback to default range
         sensors_to_show = self.available_sensors.get(sensor_type, [])
+        
+        # If no sensors are available, add a disabled item
         if not sensors_to_show:
-            # Sinon, utiliser une liste par défaut de 1 à num_sensors
-            num_sensors = 8 if sensor_type in ["EMG", "pMMG"] else 6  # IMU a 6 capteurs, les autres 8
-            sensors_to_show = range(1, num_sensors + 1)
-        for sensor_id in sensors_to_show:
-            self.sensor_id_combo.addItem(f"{sensor_id}")
+            self.sensor_id_combo.addItem("No sensors detected")
+            self.sensor_id_combo.setEnabled(False)
+        else:
+            self.sensor_id_combo.setEnabled(True)
+            for sensor_id in sensors_to_show:
+                self.sensor_id_combo.addItem(f"{sensor_id}")
 
     def manual_assign(self):
         """Manually assign a sensor to a body part"""
@@ -801,7 +882,7 @@ class SimplifiedMappingDialog(QDialog):
         )
 
     def auto_suggest_mappings(self):
-        """Suggère automatiquement des mappages pour les IMU basés sur des positions logiques"""
+        """Suggère automatiquement des mappings pour les IMU basés sur des positions logiques"""
         # Mappages suggérés basés sur l'expérience et les positions anatomiques
         suggested_mappings = {
             # IMU mappings - ajustez selon vos besoins spécifiques
@@ -961,21 +1042,33 @@ class SimplifiedMappingDialog(QDialog):
         )
 
     def confirm_mapping(self):
-        """Confirm and save mappings"""
-        # Mappings are already updated in self.current_mappings
-        
-        # Emit signal with mappings
-        self.mappings_updated.emit(
-            self.current_mappings["EMG"],
-            self.current_mappings["IMU"],
-            self.current_mappings["pMMG"]
-        )
-        
-        # Show summary
-        summary = self.generate_mapping_summary(self.current_mappings)
-        QMessageBox.information(self, "Mapping Confirmed", summary)
-        
-        self.accept()
+        """Confirm and emit the mapping values."""
+        try:
+            # Generate final mappings
+            emg_mappings = {}
+            imu_mappings = {}
+            pmmg_mappings = {}
+            
+            for sensor_id, body_part in self.current_mappings["EMG"].items():
+                emg_mappings[sensor_id] = body_part
+            
+            for sensor_id, body_part in self.current_mappings["IMU"].items():
+                imu_mappings[sensor_id] = body_part
+            
+            for sensor_id, body_part in self.current_mappings["pMMG"].items():
+                pmmg_mappings[sensor_id] = body_part
+            
+            # Emit the signals
+            self.mappings_updated.emit(emg_mappings, imu_mappings, pmmg_mappings)
+            print(f"Emitted mappings: EMG={emg_mappings}, IMU={imu_mappings}, pMMG={pmmg_mappings}")
+            
+            # Close the dialog after confirmation
+            self.accept()
+            
+        except Exception as e:
+            print(f"Error in confirm_mapping: {e}")
+            import traceback
+            traceback.print_exc()
 
     def generate_mapping_summary(self, mappings):
         """Generate a textual summary of mappings"""
