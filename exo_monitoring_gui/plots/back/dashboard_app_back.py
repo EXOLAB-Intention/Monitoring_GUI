@@ -9,6 +9,7 @@ import pyqtgraph as pg
 import socket
 import struct
 import threading
+import pandas as pd
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -720,3 +721,22 @@ class DashboardAppBack:
 
         self.ui.reset_sensor_display()
         QMessageBox.warning(self.ui, "Connection Problem", f"Disconnected from device: {reason}")
+
+
+    def export_recorded_data_to_csv(self, filename="recorded_data.csv"):
+        """Export all recorded sensor data to a CSV file."""
+        data = self.recorded_data
+        # Exemple simple pour EMG, IMU, pMMG (à adapter selon la structure réelle)
+        rows = []
+        max_len = max(len(lst) for sensor_type in data for lst in data[sensor_type])
+        for i in range(max_len):
+            row = {}
+            for sensor_type in data:
+                for idx, sensor_data in enumerate(data[sensor_type]):
+                    key = f"{sensor_type}{idx+1}"
+                    value = sensor_data[i] if i < len(sensor_data) else None
+                    row[key] = value
+            rows.append(row)
+        df = pd.DataFrame(rows)
+        df.to_csv(filename, index=False)
+        print(f"Data exported to {filename}")
