@@ -296,3 +296,16 @@ def load_hdf5_data(file_path):
         "data_structure": data_structure,
         "time_axis": time_axis
     }
+
+
+def copy_all_data_preserve_root_metadata(source_path, dest_path):
+    if not os.path.exists(dest_path):
+        with h5py.File(dest_path, 'w') as _:
+            pass
+
+    with h5py.File(source_path, 'r') as src_file, h5py.File(dest_path, 'a') as dst_file:
+        for name in src_file:
+            if name in dst_file:
+                print(f"⚠️  '{name}' existe déjà dans le fichier destination, il ne sera pas écrasé.")
+                continue
+            src_file.copy(name, dst_file)
