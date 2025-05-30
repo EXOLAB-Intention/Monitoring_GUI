@@ -6,7 +6,7 @@ import h5py
 import os
 from datetime import datetime
 from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, save_metadata
+from utils.hdf5_utils import load_metadata, save_metadata, copy_all_data_preserve_root_metadata
 from UI.back.main_window_back import MainAppBack
 from utils.file_receiver import request_files, SERVER_IP, PORT
 class MainBar:
@@ -583,8 +583,10 @@ class MainBar:
 
         if received_files:
             latest_file = max(received_files, key=os.path.getmtime)
+            
+            copy_all_data_preserve_root_metadata(latest_file, self.main_app.subject_file)
 
-            self.review = Review(file_path=latest_file)
+            self.review = Review(file_path=self.main_app.subject_file)
 
             for widget in QApplication.topLevelWidgets():
                 widget.close()
