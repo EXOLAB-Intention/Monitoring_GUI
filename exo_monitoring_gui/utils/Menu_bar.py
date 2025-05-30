@@ -8,7 +8,7 @@ from datetime import datetime
 from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata, copy_all_data_preserve_root_metadata
 from UI.back.main_window_back import MainAppBack
-from utils.file_receiver import request_files, SERVER_IP, PORT
+from utils.file_receiver import request_files, SERVER_IP, PORT, OUT_DIR
 class MainBar:
     def __init__(self, main_app):
         self.main_app = main_app
@@ -221,13 +221,16 @@ class MainBar:
 
     def show_metadata(self):
         """Display metadata of the current subject"""
-        if not self.main_app.current_subject_file:
+        if hasattr(self.main_app, 'current_subject_file'):
+            file_path = self.main_app.current_subject_file
+        elif hasattr(self.main_app, 'file_path'):
+            file_path = self.main_app.file_path
+        else:
             QMessageBox.information(self.main_app, "No Subject", "Please open or create a subject first.")
             return
 
         try:
-            # Load metadata from the current file
-            data, image_path = load_metadata(self.main_app.current_subject_file)
+            data, image_path = load_metadata(file_path)     
 
             if not data:
                 QMessageBox.information(self.main_app, "No Metadata", "No metadata available for this subject.")
@@ -241,34 +244,34 @@ class MainBar:
             metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Personal Information</th></tr>"
 
             # Add personal info fields if they exist
-            for field in ["Name", "Last Name", "Age", "Weight", "Size"]:
+            for field in ["participant_name", "participant_last_name", "participant_age", "participant_weight_kg", "participant_height_cm"]:
                 if field in data:
                     metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{field}</b></td>"
                     metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data[field]}</td></tr>"
 
             metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Anthropometric Measurements</th></tr>"
 
-            for field in ["Thigh length (cm)", "Shank length (cm)", "Upperarm length (cm)", "Forearm length (cm)"]:
+            for field in ["participant_thigh_length_cm", "participant_shank_length_cm", "participant_upperarm_length_cm", "participant_forearm_length_cm"]:
                 if field in data:
                     metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{field}</b></td>"
                     metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data[field]}</td></tr>"
 
             metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Collection Information</th></tr>"
 
-            if "collection_date" in data:
+            if "participant_collection_date" in data:
                 metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>Collection Date</b></td>"
-                metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data['collection_date']}</td></tr>"
+                metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data['participant_collection_date']}</td></tr>"
 
             # Add experimenter name if it exists
-            if "experimenter_name" in data:
-                metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>Experimenter</b></td>"
-                metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data['experimenter_name']}</td></tr>"
+            if "last_modified" in data:
+                metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>Last modification</b></td>"
+                metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data['last_modified']}</td></tr>"
 
             metadata_text += "</table>"
 
             # Description if it exists
-            if "Description" in data and data["Description"]:
-                metadata_text += f"<h3>Description</h3><p>{data['Description']}</p>"
+            if "participant_description" in data and data["participant_description"]:
+                metadata_text += f"<h3>Description</h3><p>{data['participant_description']}</p>"
 
             # Display image if it exists
             if image_path and os.path.exists(image_path):
@@ -574,8 +577,6 @@ class MainBar:
             if not f:  # User cancelled file selection
                 return
         
-        OUT_DIR = os.path.expanduser("C:\\Users\\sidib\\Documents\\GitHub\\Monitoring_GUI\\datas\\recuperation")
-
         request_files()
 
         received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
@@ -583,7 +584,7 @@ class MainBar:
 
         if received_files:
             latest_file = max(received_files, key=os.path.getmtime)
-            
+
             copy_all_data_preserve_root_metadata(latest_file, self.main_app.subject_file)
 
             self.review = Review(file_path=self.main_app.subject_file)
@@ -656,3 +657,8 @@ class MainBar:
                 print(f"[WARNING] refresh_connected_system_action is None")
         else:
             print(f"[WARNING] refresh_connected_system_action attribute not found")
+    
+    def review(self):
+        self.Save_current_trial.setEnabled(True)
+        self.Save_current_trial_as.setEnabled(True)
+        self.show_metadata_action.setEnabled(True)

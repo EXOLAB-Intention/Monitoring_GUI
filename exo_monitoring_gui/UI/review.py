@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QRectF, QPointF, QTimer
 from PyQt5.QtGui import QColor, QBrush, QPen, QPainter, QWheelEvent
 
+
 class ZoomBar(QGraphicsView):
     def __init__(self, update_zoom_callback):
         super().__init__()
@@ -160,6 +161,13 @@ class Review(QMainWindow):
         self.parent = parent
         self.file_path = file_path
         self.existing_load = existing_load
+
+        from utils.Menu_bar import MainBar
+
+        self.main_bar = MainBar(self)
+        self.main_bar._create_menubar()
+        self.main_bar._all_false_or_true(False)
+        self.main_bar.review()
         self.metadata = load_metadata(file_path) if file_path else None
         self.time_axis = None
         self.plot_widgets = {}  # Track plot widgets with proper reference
