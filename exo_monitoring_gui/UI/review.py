@@ -553,7 +553,7 @@ class Review(QMainWindow):
         self.experiment_protocol_text = QTextEdit()
         self.experiment_protocol_text.setPlaceholderText("Experimental Protocol")
         self.experiment_protocol_text.setStyleSheet("background-color: white; border: 1px solid #ccc; font-size: 15px;")
-        self.experiment_protocol_text.setFixedHeight(200)
+        self.experiment_protocol_text.setFixedHeight(170)
         protocol_layout.addWidget(self.experiment_protocol_text)
 
         protocol_widget = QWidget()
