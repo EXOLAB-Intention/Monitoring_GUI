@@ -494,27 +494,66 @@ class MainBar:
 
     def refresh_the_connected_system(self):
         """Refresh the connected system and allow modification of sensor mappings."""
+        from PyQt5.QtWidgets import QMessageBox
+        
         # Vérifier si on a accès à l'interface principale pour ouvrir le dialogue de mapping
-        if hasattr(self.main_app, 'open_sensor_mapping_dialog'):
-            # Vérifier si des capteurs sont connectés
-            if hasattr(self.main_app, 'backend') and hasattr(self.main_app.backend, 'sensor_config') and self.main_app.backend.sensor_config:
-                self.main_app.open_sensor_mapping_dialog()
-            else:
-                from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.information(
-                    self.main_app, 
-                    "Refresh Connected System", 
-                    "No sensors are currently connected.\n\n"
-                    "Please connect sensors first using the 'Connect' button, then use this function to modify hardware settings and sensor-to-segment mappings."
+        if hasattr(self.main_app, 'backend') and hasattr(self.main_app.backend, 'sensor_config') and self.main_app.backend.sensor_config:
+            try:
+                print("[DEBUG] Opening sensor mapping dialog...")
+                
+                # Vérifier que le backend a les méthodes nécessaires
+                if not hasattr(self.main_app.backend, 'get_current_mappings_for_dialog'):
+                    QMessageBox.warning(
+                        self.main_app,
+                        "Configuration Unavailable",
+                        "The sensor configuration method is not available in the backend."
+                    )
+                    return
+                
+                # Obtenir les mappings actuels
+                curr_maps = self.main_app.backend.get_current_mappings_for_dialog()
+                print(f"[DEBUG] Current mappings: {curr_maps}")
+                
+                # Importer et créer le dialogue directement
+                from plots.sensor_dialogue import SensorMappingDialog
+                
+                # Créer le dialogue avec des paramètres explicites
+                dialog = SensorMappingDialog(self.main_app, curr_maps, None)
+                
+                # Connecter le signal
+                if hasattr(self.main_app.backend, 'update_sensor_mappings'):
+                    dialog.mappings_updated.connect(self.main_app.backend.update_sensor_mappings)
+                
+                # ✅ SOLUTION : Utiliser exec_() pour afficher le dialogue de manière modale
+                print("[DEBUG] Showing dialog...")
+                result = dialog.exec_()
+                
+                if result == dialog.Accepted:
+                    print("[DEBUG] Dialog accepted")
+                else:
+                    print("[DEBUG] Dialog cancelled")
+                    
+            except ImportError as e:
+                QMessageBox.critical(
+                    self.main_app,
+                    "Import Error",
+                    f"Unable to import configuration dialog:\n{str(e)}"
                 )
+            except Exception as e:
+                QMessageBox.critical(
+                    self.main_app,
+                    "Configuration Error",
+                    f"Error opening configuration dialog:\n{str(e)}\n\nPlease verify that sensors are properly connected."
+                )
+                print(f"[ERROR] Exception in refresh_the_connected_system: {e}")
+                import traceback
+                traceback.print_exc()
         else:
-            # Fallback: message d'information
-            from PyQt5.QtWidgets import QMessageBox
             QMessageBox.information(
                 self.main_app, 
                 "Refresh Connected System", 
-                "This function allows you to modify hardware settings and sensor-to-segment mappings.\n\n"
-                "Please connect sensors first, then use the 'Configure Sensor Mapping' button in the 3D view panel."
+                "No sensors are currently connected.\n\n"
+                "Please connect sensors first using the 'Connect' button, then use this function to modify hardware settings and sensor-to-segment mappings."
             )
 
     def request_h5_file(self):
@@ -588,10 +627,10 @@ class MainBar:
         edit_menu.addAction(self.request_h5_file_action)
 
     def edit_Boleen(self, boleen):
-        """Active ou désactive les actions du menu Edit."""
+        """Active ou désactive les actions du menu Edit (Clear Plot et Request H5 File seulement)."""
+        # Seules les actions qui doivent être activées après l'arrêt de l'enregistrement
         actions_to_toggle = [
             ('clear_plot_action', 'clear_plot_action'),  
-            ('refresh_connected_system_action', 'refresh_connected_system_action'),
             ('request_h5_file_action', 'request_h5_file_action')
         ]
         
@@ -604,3 +643,14 @@ class MainBar:
                     print(f"[WARNING] {action_name} is None")
             else:
                 print(f"[WARNING] {attr_name} attribute not found")
+
+    def set_refresh_connected_system_enabled(self, enabled):
+        """Active ou désactive spécifiquement l'action Refresh Connected System."""
+        if hasattr(self, 'refresh_connected_system_action'):
+            action = getattr(self, 'refresh_connected_system_action')
+            if action is not None:
+                action.setEnabled(enabled)
+            else:
+                print(f"[WARNING] refresh_connected_system_action is None")
+        else:
+            print(f"[WARNING] refresh_connected_system_action attribute not found")

@@ -196,7 +196,7 @@ class SimplifiedMappingDialog(QDialog):
 
         # Add a message at the top if we have available sensors to assign
         if any(self.available_sensors.values()):
-            available_msg = QLabel("Nouveaux capteurs détectés ! Veuillez les assigner aux parties du corps appropriées.")
+            available_msg = QLabel("New sensors detected! Please match them with the correct body parts.")
             available_msg.setStyleSheet("""
                 background-color: #e3f2fd;
                 color: #0d47a1;
