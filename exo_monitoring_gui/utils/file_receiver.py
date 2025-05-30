@@ -6,7 +6,7 @@ import time
 
 # ——— Configuration (fixed to script’s folder) ———
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR    = "C:\\Users\\sidib\\Documents\\GitHub\\Monitoring_GUI\\datas\\recuperation"
+OUT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'datas', 'recuperation'))
 SERVER_IP  = '192.168.4.1'        # Jetson AP 기본 IP
 PORT       = 5002                 # file_sender_node 포트
 

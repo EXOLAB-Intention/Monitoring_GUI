@@ -513,7 +513,7 @@ class DashboardApp(QMainWindow):
         """)
         record_button_style = ("""
         QPushButton {
-            background-color: #4caf50;
+            background-color: #E0E0E0;
             border: none;
             border-radius: 6px;
             padding: 8px 16px;
