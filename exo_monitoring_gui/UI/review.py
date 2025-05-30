@@ -8,10 +8,10 @@ import h5py
 import pyqtgraph as pg
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QScrollArea, QGraphicsItem, QTextEdit, QGraphicsView, QGraphicsScene, QGraphicsRectItem
+    QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QScrollArea, QGraphicsItem, QTextEdit, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QColorDialog
 )
 from PyQt5.QtCore import Qt, QRectF, QPointF, QTimer
-from PyQt5.QtGui import QColor, QBrush, QPen, QPainter, QWheelEvent
+from PyQt5.QtGui import QColor, QBrush, QPen, QPainter, QWheelEvent, QTextCharFormat, QFont
 
 class ZoomBar(QGraphicsView):
     def __init__(self, update_zoom_callback):
@@ -522,17 +522,62 @@ class Review(QMainWindow):
 
         self.received_data_text = QTextEdit()
         self.received_data_text.setPlaceholderText("Received Data")
-        self.received_data_text.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+        self.received_data_text.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc; font-size: 15px;")
         self.received_data_text.setFixedHeight(200)
         box_layout.addWidget(self.received_data_text)
 
+        # --- Experimental Protocol as a word-like editor ---
+        protocol_layout = QVBoxLayout()
+        toolbar_layout = QHBoxLayout()
+
+        self.bold_button = QPushButton("Bold")
+        self.bold_button.setCheckable(True)
+        self.bold_button.clicked.connect(self.set_protocol_bold)
+        toolbar_layout.addWidget(self.bold_button)
+
+        self.color_button = QPushButton("Color")
+        self.color_button.clicked.connect(self.set_protocol_color)
+        toolbar_layout.addWidget(self.color_button)
+
+        toolbar_layout.addStretch()
+        protocol_layout.addLayout(toolbar_layout)
+
         self.experiment_protocol_text = QTextEdit()
         self.experiment_protocol_text.setPlaceholderText("Experimental Protocol")
-        self.experiment_protocol_text.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+        self.experiment_protocol_text.setStyleSheet("background-color: white; border: 1px solid #ccc; font-size: 15px;")
         self.experiment_protocol_text.setFixedHeight(200)
-        box_layout.addWidget(self.experiment_protocol_text)
+        protocol_layout.addWidget(self.experiment_protocol_text)
+
+        protocol_widget = QWidget()
+        protocol_widget.setLayout(protocol_layout)
+        box_layout.addWidget(protocol_widget)
 
         layout.addLayout(box_layout)
+
+    def set_protocol_bold(self):
+        cursor = self.experiment_protocol_text.textCursor()
+        if cursor.hasSelection():
+            fmt = QTextCharFormat()
+            current_weight = cursor.charFormat().fontWeight()
+            new_weight = QFont.Bold if current_weight != QFont.Bold else QFont.Normal
+            fmt.setFontWeight(new_weight)
+            cursor.mergeCharFormat(fmt)
+        else:
+            # Toggle bold for future typing
+            is_bold = self.bold_button.isChecked()
+            self.experiment_protocol_text.setFontWeight(QFont.Bold if is_bold else QFont.Normal)
+        # Keep button checked state in sync with current format
+        self.bold_button.setChecked(self.experiment_protocol_text.fontWeight() == QFont.Bold)
+
+    def set_protocol_color(self):
+        color = QColorDialog.getColor(parent=self)
+        if color.isValid():
+            cursor = self.experiment_protocol_text.textCursor()
+            if not cursor.hasSelection():
+                return
+            fmt = QTextCharFormat()
+            fmt.setForeground(color)
+            cursor.mergeCharFormat(fmt)
 
     def reorganize_plots(self):
         """Reorganize the graphs after a deletion"""
