@@ -686,7 +686,7 @@ class MainBar:
             latest_file = max(received_files, key=os.path.getmtime)
 
             copy_all_data_preserve_root_metadata(latest_file, self.main_app.subject_file)
-
+            file_dictionary.append(latest_file)
             self.review = Review(parent=None, file_path=file_path, existing_load=False, trials=file_dictionary)
 
             for widget in QApplication.topLevelWidgets():
