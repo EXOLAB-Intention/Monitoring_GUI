@@ -252,7 +252,7 @@ class DashboardAppBack:
         
         # Ajouter un timeout pour le socket client
         try:
-            client_socket.settimeout(5.0)  # 5 secondes de timeout
+            client_socket.settimeout(60.0)  # 60 seconds de timeout
         except Exception as e:
             print(f"[WARNING] Failed to set socket timeout: {e}")
         
@@ -392,7 +392,6 @@ class DashboardAppBack:
 
                     # Enregistrement des données
                     if 'emg' in packet and packet['emg']:
-                        print(f"Received EMG data: {packet['emg']}")  # Debug log
                         for i, emg_id in enumerate(self.sensor_config.get('emg_ids', [])):
                             if i < len(packet['emg']) and i < len(self.recorded_data["EMG"]):
                                 value = packet['emg'][i]
