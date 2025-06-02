@@ -397,7 +397,7 @@ class Model3DViewer(QGLWidget):
         try:
             # Check the availability of animation frames
             if not self.precalculated_animation_frames:
-                print("Error: No precalculated animation frames available.")
+                print("No animation frames available")
                 return
             
             # Increment frame index and limit it to available frames
@@ -405,44 +405,39 @@ class Model3DViewer(QGLWidget):
             
             # Check the index is valid
             if self.precalc_frame >= len(self.precalculated_animation_frames):
-                print(f"Error: Frame index {self.precalc_frame} out of bounds (max: {len(self.precalculated_animation_frames)-1})")
-                self.precalc_frame = 0  # Reset to 0 to avoid error
+                print(f"Invalid frame index: {self.precalc_frame}, max is {len(self.precalculated_animation_frames)-1}")
+                return
             
             # Retrieve current frame data
             current_frame_data = self.precalculated_animation_frames[self.precalc_frame]
             
-            # Store currently mapped IMU body parts to preserve their rotations
+            # Store currently mapped IMU body parts to preserve their rotations if they have active data
             imu_controlled_parts = set(self.imu_mapping.values())
             imu_rotations = {}
             for part_name in imu_controlled_parts:
                 if part_name in self.body_parts:
+                    # Sauvegarder seulement si des données IMU récentes ont été reçues (moins de 1 seconde)
                     imu_rotations[part_name] = self.body_parts[part_name]['rot'].copy()
             
             # Apply data to each body part
             for part_name, data in self.body_parts.items():
-                # Skip IMU-controlled parts to preserve their rotations
-                if part_name in imu_controlled_parts:
-                    continue
-                    
-                # Check that this part exists in the frame data
+                # Ne pas sauter les parties du corps mappées aux IMUs, appliquer l'animation
+                # et restaurer ensuite les rotations IMU si nécessaire
                 if part_name in current_frame_data:
-                    # Retrieve base position and rotation (without animation)
-                    base_pos, _ = self.get_default_state(part_name)
+                    # Appliquer les offsets de position
+                    data['pos'] = self.initial_body_parts_state[part_name]['pos'].copy()
+                    if 'pos_offset' in current_frame_data[part_name]:
+                        data['pos'] += current_frame_data[part_name]['pos_offset']
                     
-                    # Retrieve animation offsets and rotations
-                    anim_data = current_frame_data[part_name]
-                    pos_offset = anim_data.get('pos_offset', np.array([0.0, 0.0, 0.0]))
-                    rot_quat = anim_data.get('rot_quat', np.array([1.0, 0.0, 0.0, 0.0]))
-                    
-                    # Apply position offsets to base position
-                    data['pos'] = base_pos + pos_offset
-                    
-                    # Apply rotation quaternion directly
-                    data['rot'] = rot_quat.copy()  # Important copy to avoid shared references
+                    # Appliquer les rotations d'animation sauf si la partie a des données IMU actives
+                    if part_name not in imu_controlled_parts or part_name not in imu_rotations:
+                        if 'rot_quat' in current_frame_data[part_name]:
+                            data['rot'] = current_frame_data[part_name]['rot_quat'].copy()
             
-            # Restore IMU-controlled part rotations
+            # Restore IMU-controlled part rotations if they have active data
             for part_name, rotation in imu_rotations.items():
                 if part_name in self.body_parts:
+                    # Ne restaurer que si les données IMU sont récentes
                     self.body_parts[part_name]['rot'] = rotation
             
             # If walking animation is active and using motion prediction, apply prediction
@@ -463,7 +458,6 @@ class Model3DViewer(QGLWidget):
             self.update()
         except Exception as e:
             print(f"Error in update_animation_frame: {e}")
-            import traceback
             traceback.print_exc()
 
     def toggle_walking(self):
@@ -745,18 +739,40 @@ class Model3DViewer(QGLWidget):
             font.setBold(False)
             painter.setFont(font)
             
+            # Correction: Le problème est que les coordonnées Y sont inversées par rapport au texte
+            # QPainter utilise le coin supérieur gauche comme origine (0,0)
+            
             # IMU sensors - green
+            rect_height = 16
+            rect_width = 24
+            margin = 4
+            
+            base_y = 30  # Position Y de départ
+            spacing = 20  # Espacement entre les lignes
+            
+            # IMU sensors - green (avec bordure pour une meilleure visibilité)
+            painter.setPen(Qt.darkGray)  # Bordure grise foncée
+            painter.setBrush(QColor(0, 204, 51, 255))  # Vert avec opacité complète
+            painter.drawRect(10, base_y, rect_width, rect_height)
+            
             painter.setPen(Qt.white)
-            painter.drawText(60, 45, "IMU Sensors")
-            painter.fillRect(30, self.height() - 45, 20, 10, QColor(0, 204, 51))  # Green
+            painter.drawText(10 + rect_width + margin, base_y + rect_height - 4, "IMU Sensors")
             
-            # EMG sensors - red
-            painter.drawText(60, 65, "EMG Sensors")
-            painter.fillRect(30, self.height() - 65, 20, 10, QColor(204, 51, 0))  # Red
+            # EMG sensors - red (avec bordure)
+            painter.setPen(Qt.darkGray)
+            painter.setBrush(QColor(204, 51, 0, 255))  # Rouge avec opacité complète
+            painter.drawRect(10, base_y + spacing, rect_width, rect_height)
             
-            # pMMG sensors - blue
-            painter.drawText(60, 85, "pMMG Sensors")
-            painter.fillRect(30, self.height() - 85, 20, 10, QColor(0, 51, 204))  # Blue
+            painter.setPen(Qt.white)
+            painter.drawText(10 + rect_width + margin, base_y + spacing + rect_height - 4, "EMG Sensors")
+            
+            # pMMG sensors - blue (avec bordure)
+            painter.setPen(Qt.darkGray)
+            painter.setBrush(QColor(0, 51, 204, 255))  # Bleu avec opacité complète
+            painter.drawRect(10, base_y + spacing * 2, rect_width, rect_height)
+            
+            painter.setPen(Qt.white)
+            painter.drawText(10 + rect_width + margin, base_y + spacing * 2 + rect_height - 4, "pMMG Sensors")
             
             # Show FPS counter if enabled
             if self.show_fps:
@@ -766,7 +782,8 @@ class Model3DViewer(QGLWidget):
             
             # Draw a border around the legend
             painter.setPen(QColor(180, 180, 180))
-            painter.drawRect(5, self.height() - 95, 175, 90)
+            legend_height = base_y + spacing * 2 + rect_height + 10
+            painter.drawRect(5, 5, 150, legend_height)
             
             painter.end()
         except Exception as e:
@@ -1070,61 +1087,74 @@ class Model3DViewer(QGLWidget):
         """Draws joints with rotations via quaternions."""
         for part_name, data in self.body_parts.items():
             pos = data['pos']
-            quat_rotation = data['rot']
             
-            glPushMatrix()
-            # Move to the position of the body part
-            glTranslatef(pos[0], pos[1], pos[2])
+            # Définir des tailles simplifiées et plus cohérentes pour le modèle
+            # Réduction supplémentaire de la taille de la hanche
+            joint_sizes = {
+                # Tête et torse - plus grands
+                'head': 0.114,      # Réduit de 0.12 à 0.114
+                'neck': 0.076,      # Réduit de 0.08 à 0.076
+                'torso': 0.114,     # Réduit de 0.12 à 0.114
+                'hip': 0.06,        # Réduit davantage (0.077 à 0.06) - environ la moitié de la tête
+                
+                # Bras et jambes - taille moyenne
+                'deltoid_l': 0.0665,  # Réduit de 0.07 à 0.0665
+                'deltoid_r': 0.0665,  # Réduit de 0.07 à 0.0665
+                'biceps_l': 0.0665,   # Réduit de 0.07 à 0.0665
+                'biceps_r': 0.0665,   # Réduit de 0.07 à 0.0665
+                'quadriceps_l': 0.0665, # Réduit de 0.07 à 0.0665
+                'quadriceps_r': 0.0665, # Réduit de 0.07 à 0.0665
+                
+                # Articulations secondaires - plus petites
+                'forearm_l': 0.057,   # Réduit de 0.06 à 0.057
+                'forearm_r': 0.057,   # Réduit de 0.06 à 0.057
+                'calves_l': 0.057,    # Réduit de 0.06 à 0.057
+                'calves_r': 0.057,    # Réduit de 0.06 à 0.057
+                
+                # Extrémités - très petites
+                'left_hand': 0.0475,  # Réduit de 0.05 à 0.0475
+                'right_hand': 0.0475, # Réduit de 0.05 à 0.0475
+                'left_foot': 0.0475,  # Réduit de 0.05 à 0.0475
+                'right_foot': 0.0475, # Réduit de 0.05 à 0.0475
+                
+                # Autres parties (valeur par défaut également réduite)
+                'dorsalis_major_l': 0.057,
+                'dorsalis_major_r': 0.057,
+                'pectorals_l': 0.057,
+                'pectorals_r': 0.057,
+                'glutes_l': 0.057,
+                'glutes_r': 0.057,
+                'ishcio_hamstrings_l': 0.057,
+                'ishcio_hamstrings_r': 0.057
+            }
             
-            # Apply quaternion rotation via a matrix
-            try:
-                rotation_matrix = quaternion_to_matrix(quat_rotation)
-                glMultMatrixf(rotation_matrix)
-            except Exception as e:
-                print(f"Error applying rotation for {part_name}: {e}")
-                # In case of error, do not apply rotation
+            # Taille par défaut pour les parties non spécifiées
+            sphere_size = joint_sizes.get(part_name, 0.057)  # Réduits de 0.06 à 0.057
             
-            # Determine the joint color based on sensor type
+            # Obtenez le type de capteur mappé
             sensor_type = self._get_mapped_sensor_type(part_name)
             
+            glPushMatrix()
+            glTranslatef(pos[0], pos[1], pos[2])
+            
+            # Appliquer la rotation
+            rot = data['rot']
+            if not np.array_equal(rot, [1.0, 0.0, 0.0, 0.0]):
+                matrix = quaternion_to_matrix(rot)
+                glMultMatrixf(matrix)
+            
+            # Couleurs plus vives et distinctes
             if sensor_type == "IMU":
-                glColor3f(0.0, 1.0, 0.2)  # Brighter green
+                glColor3f(0, 0.9, 0.3)  # Vert plus vif
             elif sensor_type == "EMG":
-                glColor3f(1.0, 0.2, 0.0)  # Brighter red
+                glColor3f(0.9, 0.2, 0)  # Rouge plus vif
             elif sensor_type == "pMMG":
-                glColor3f(0.0, 0.3, 1.0)  # Brighter blue
+                glColor3f(0.1, 0.4, 0.9)  # Bleu plus vif
             else:
-                glColor3f(0.9, 0.9, 0.9)  # Gray
-
-            # Draw the joint sphere with 15% smaller sizes
-            if self.quadric:
-                if part_name == 'head':
-                    gluSphere(self.quadric, 0.10, 12, 12)  # Reduced by 15% (from 0.12)
-                elif sensor_type:  # Make mapped sensor joints less obtrusive
-                    gluSphere(self.quadric, 0.043, 8, 8)  # Reduced by 15% (from 0.05)
-                else:
-                    gluSphere(self.quadric, 0.05, 8, 8)  # Reduced by 15% (from 0.06)
+                glColor3f(0.75, 0.75, 0.75)  # Gris clair
             
-            # Try to add a label if it's a sensor - with error handling for projection failures
-            if sensor_type:
-                try:
-                    model = glGetDoublev(GL_MODELVIEW_MATRIX)
-                    proj = glGetDoublev(GL_PROJECTION_MATRIX)
-                    view = glGetIntegerv(GL_VIEWPORT)
-                    
-                    # Catch projection failures and handle them gracefully
-                    try:
-                        win_x, win_y, win_z = gluProject(0, 0, 0, model, proj, view)
-                        if not hasattr(self, 'labels'):
-                            self.labels = []
-                        self.labels.append((win_x, self.height() - win_y, f"{sensor_type}", sensor_type))
-                    except ValueError:
-                        # Skip label creation if projection fails
-                        pass
-                except Exception as e:
-                    # Ignore label errors
-                    pass
-            
+            # Réduire la qualité des sphères pour plus de performance
+            gluSphere(self.quadric, sphere_size, 12, 12)  # Réduits de 16,16 à 12,12
             glPopMatrix()
 
     def _get_mapped_sensor_type(self, part_name):
@@ -1215,13 +1245,18 @@ class Model3DViewer(QGLWidget):
         
         # Apply calibration if available
         if self.calibration_complete and body_part in self.calibration_offsets:
+            # Rotation finale = rotation de calibration * rotation IMU
             offset_quat = self.calibration_offsets[body_part]
-            # Apply the offset by quaternion multiplication
-            corrected_quat = quaternion_multiply(normalized_quat, offset_quat)
-            self.body_parts[body_part]['rot'] = corrected_quat
+            final_quat = quaternion_multiply(offset_quat, normalized_quat)
+            self.body_parts[body_part]['rot'] = final_quat
         else:
-            # Apply the quaternion directly if no calibration
+            # Appliquer directement la rotation IMU
             self.body_parts[body_part]['rot'] = normalized_quat
+            
+        # Marquer cette partie du corps comme ayant des données IMU récentes
+        if not hasattr(self, 'imu_data_timestamp'):
+            self.imu_data_timestamp = {}
+        self.imu_data_timestamp[body_part] = time.time()
             
         return True
     
