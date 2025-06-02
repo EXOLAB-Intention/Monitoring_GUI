@@ -152,12 +152,13 @@ class ZoomBar(QGraphicsView):
         self.update_graphs()
 
 class Review(QMainWindow):
-    def __init__(self, parent=None, file_path=None, existing_load=False):
+    def __init__(self, parent=None, file_path=None, existing_load=False, trials=None):
         super().__init__()
         self.setWindowTitle("Data Monitoring Software")
         self.resize(1600, 900)
         self.setMinimumSize(1400, 800)
         self.loaded_data = {}
+        self.trials = trials
         self.parent = parent
         self.file_path = file_path
         self.existing_load = existing_load
@@ -168,6 +169,12 @@ class Review(QMainWindow):
         self.main_bar._create_menubar()
         self.main_bar._all_false_or_true(False)
         self.main_bar.review()
+        self.main_bar.Save_current_trial.triggered.disconnect()
+        self.main_bar.Save_current_trial.triggered.connect(lambda: self.main_bar.save_experiment_protocol(self))
+
+        self.main_bar.Save_current_trial_as.triggered.disconnect()
+        self.main_bar.Save_current_trial_as.triggered.connect(lambda: self.main_bar.save_experiment_protocol_as(self))
+
         self.metadata = load_metadata(file_path) if file_path else None
         self.time_axis = None
         self.plot_widgets = {}  # Track plot widgets with proper reference
@@ -221,13 +228,13 @@ class Review(QMainWindow):
         self.build_text_areas(main_layout)
 
         # Disable the Start Recording button if existing_load is False
-        if not getattr(self, 'existing_load', False):
-            if hasattr(self, 'record_button'):
-                self.record_button.setEnabled(False)
-                self.connect_button.setEnabled(False)
-            else:
-                # If build_footer hasn't run yet, delay disabling
-                QTimer.singleShot(0, lambda: self.record_button.setEnabled(False))
+        # if not getattr(self, 'existing_load', False):
+        #     if hasattr(self, 'record_button'):
+        #         self.record_button.setEnabled(False)
+        #         self.connect_button.setEnabled(False)
+        #     else:
+        #         # If build_footer hasn't run yet, delay disabling
+        #         QTimer.singleShot(0, lambda: self.record_button.setEnabled(False))
 
     def build_header(self, layout):
         header = QHBoxLayout()
@@ -521,18 +528,43 @@ class Review(QMainWindow):
         footer.addWidget(self.connect_button)
 
         self.record_button = QPushButton("Start Recording")
+        self.record_button.clicked.connect(self.on_start_recording)
         footer.addWidget(self.record_button)
+        
 
         layout.addLayout(footer)
+
+    def on_start_recording(self):
+        from utils.Menu_bar import MainBar
+        self.main_bar.review_start_recording(self,self.trials)
+        print("Start Recording button clicked!")
 
     def build_text_areas(self, layout):
         box_layout = QHBoxLayout()
 
-        self.received_data_text = QTextEdit()
-        self.received_data_text.setPlaceholderText("Received Data")
-        self.received_data_text.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc; font-size: 15px;")
-        self.received_data_text.setFixedHeight(200)
-        box_layout.addWidget(self.received_data_text)
+        # --- Received Data (read-only, shows trials or file_path) ---
+        received_data_widget = QWidget()
+        received_data_layout = QVBoxLayout(received_data_widget)
+        received_data_layout.setContentsMargins(0, 0, 0, 0)
+        received_data_layout.setSpacing(2)
+        box_layout.addWidget(received_data_widget)
+
+        if self.trials and isinstance(self.trials, list) and len(self.trials) > 0:
+            for path in self.trials:
+                label = QLabel(str(path))
+                label.setStyleSheet("color: blue; text-decoration: underline; background-color: #f0f0f0; font-size: 15px; border: 1px solid #ccc; padding: 2px;")
+                label.setCursor(Qt.PointingHandCursor)
+                label.mousePressEvent = lambda event, p=path: self._on_trial_path_click(p)
+                received_data_layout.addWidget(label)
+        elif self.file_path:
+            label = QLabel(self.file_path)
+            label.setStyleSheet("color: blue; text-decoration: underline; background-color: #f0f0f0; font-size: 15px; border: 1px solid #ccc; padding: 2px;")
+            label.setCursor(Qt.PointingHandCursor)
+            label.mousePressEvent = lambda event, p=self.file_path: self._on_trial_path_click(p)
+            received_data_layout.addWidget(label)
+        else:
+            label = QLabel("")
+            received_data_layout.addWidget(label)
 
         # --- Experimental Protocol as a word-like editor ---
         protocol_layout = QVBoxLayout()
@@ -561,6 +593,11 @@ class Review(QMainWindow):
         box_layout.addWidget(protocol_widget)
 
         layout.addLayout(box_layout)
+
+    def _on_trial_path_click(self, path):
+        self.file_path = path
+        self.metadata = load_metadata(path)
+        self.load_hdf5_and_populate_tree(path)
 
     def set_protocol_bold(self):
         cursor = self.experiment_protocol_text.textCursor()
@@ -616,8 +653,6 @@ class Review(QMainWindow):
         if sensor_name in self.data["loaded_data"]:
             data_to_plot = self.data["loaded_data"][sensor_name].copy()  # Make a copy
 
-            if sensor_name.startswith("EMG"):
-                data_to_plot = data_to_plot[5:]
 
             QTimer.singleShot(0, lambda: self.create_plot_in_middle_panel(data_to_plot, plot_name=sensor_name))
             self.displayed_plots.add(sensor_name)
@@ -698,6 +733,8 @@ class Review(QMainWindow):
                 group_item.addChild(sensor_item)
 
             group_item.setExpanded(True)
+        
+        self.main_bar.load_experiment_protocol(self)
 
     def closeEvent(self, event):
         """Clean up resources when closing the application"""
