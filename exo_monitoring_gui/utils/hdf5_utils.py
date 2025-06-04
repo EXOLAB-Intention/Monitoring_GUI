@@ -181,7 +181,7 @@ def extract_group_data(file_path, group_name):
         return read_group(target_group)
     
 def plot_sensor_data(self, sensor_name, data_array):
-    """Trace les données d’un capteur sur un graphique."""
+    """Trace les données d'un capteur sur un graphique."""
     plot_widget = pg.PlotWidget()
     plot_widget.setBackground('w')
     plot_widget.setTitle(sensor_name, color='k', size='14pt')
@@ -299,13 +299,66 @@ def load_hdf5_data(file_path):
 
 
 def copy_all_data_preserve_root_metadata(source_path, dest_path):
+    # Vérifier si le fichier source existe
+    if not os.path.exists(source_path):
+        print(f"Erreur : Le fichier source {source_path} n'existe pas.")
+        return False
+
+    # Vérifier si le fichier source est un fichier HDF5 valide
+    try:
+        with h5py.File(source_path, 'r') as test_file:
+            test_file.attrs.keys()
+    except (OSError, h5py.errors.HDF5Error) as e:
+        print(f"Erreur : Le fichier source {source_path} est corrompu ou invalide : {e}")
+        return False
+
+    # Créer le fichier destination s'il n'existe pas
     if not os.path.exists(dest_path):
         with h5py.File(dest_path, 'w') as _:
             pass
 
-    with h5py.File(source_path, 'r') as src_file, h5py.File(dest_path, 'a') as dst_file:
-        for name in src_file:
-            if name in dst_file:
-                print(f"⚠️  '{name}' existe déjà dans le fichier destination, il ne sera pas écrasé.")
-                continue
-            src_file.copy(name, dst_file)
+    try:
+        with h5py.File(source_path, 'r') as src_file, h5py.File(dest_path, 'a') as dst_file:
+            # Copier les datasets/groupes
+            for name in src_file:
+                if name in dst_file:
+                    print(f"⚠️  '{name}' existe déjà dans le fichier destination, il ne sera pas écrasé.")
+                    continue
+                src_file.copy(name, dst_file)
+
+            # Copier les attributs de la racine
+            for key, value in src_file.attrs.items():
+                dst_file.attrs[key] = value
+
+        return True
+    except Exception as e:
+        print(f"Erreur lors de la copie des données : {e}")
+        return False
+
+
+
+def copy_only_root_metadata(source_path, dest_path):
+    # Vérifier si le fichier source existe
+    if not os.path.exists(source_path):
+        print(f"Erreur : Le fichier source {source_path} n'existe pas.")
+        return False
+
+    # Vérifier si le fichier source est un fichier HDF5 valide
+    try:
+        with h5py.File(source_path, 'r') as test_file:
+            test_file.attrs.keys()
+    except (OSError, h5py.errors.HDF5Error) as e:
+        print(f"Erreur : Le fichier source {source_path} est corrompu ou invalide : {e}")
+        return False
+
+    try:
+        # Créer ou ouvrir le fichier destination
+        with h5py.File(source_path, 'r') as src_file, h5py.File(dest_path, 'w') as dst_file:
+            # Copier uniquement les attributs de la racine
+            for key, value in src_file.attrs.items():
+                dst_file.attrs[key] = value
+            print(f"✅ Métadonnées de la racine copiées avec succès vers {dest_path}.")
+        return True
+    except Exception as e:
+        print(f"Erreur lors de la copie des métadonnées : {e}")
+        return False

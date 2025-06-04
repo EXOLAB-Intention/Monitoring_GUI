@@ -8,7 +8,7 @@ import os
 import re
 from datetime import datetime
 from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, save_metadata, copy_all_data_preserve_root_metadata
+from utils.hdf5_utils import load_metadata, copy_only_root_metadata, copy_all_data_preserve_root_metadata
 from UI.back.main_window_back import MainAppBack
 from utils.file_receiver import request_files, SERVER_IP, PORT, OUT_DIR
 class MainBar:
@@ -646,11 +646,13 @@ class MainBar:
 
         received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
         received_files = [f for f in received_files if os.path.isfile(f)]
-
+        print("2c'est iciiiiiiiiiiiiiiiiiii \n")
         if received_files:
             latest_file = max(received_files, key=os.path.getmtime)
-
-            copy_all_data_preserve_root_metadata(latest_file, self.main_app.subject_file)
+            print("3c'est iciiiiiiiiiiiiiiiiiii \n")
+            print(latest_file)
+            print(self.main_app.subject_file)
+            copy_all_data_preserve_root_metadata(latest_file, f)
 
             self.review = Review(file_path=self.main_app.subject_file)
 
@@ -664,7 +666,7 @@ class MainBar:
     def request_h5_file_review(self, file_path, file_dictionary):
         from UI.review import Review
         f = self.main_app.subject_file
-        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa55")
         print(f)
         if not f:
             options = QFileDialog.Options()
@@ -685,10 +687,11 @@ class MainBar:
 
         if received_files:
             latest_file = max(received_files, key=os.path.getmtime)
-
-            copy_all_data_preserve_root_metadata(latest_file, self.main_app.subject_file)
-            file_dictionary.append(latest_file)
-            self.review = Review(parent=None, file_path=file_path, existing_load=False, trials=file_dictionary)
+            print("dededededededede 4")
+            print(latest_file)
+            copy_all_data_preserve_root_metadata(latest_file, f)
+            file_dictionary.append(f)
+            self.review = Review(parent=None, file_path=f, existing_load=False, trials=file_dictionary)
 
             for widget in QApplication.topLevelWidgets():
                 widget.close()

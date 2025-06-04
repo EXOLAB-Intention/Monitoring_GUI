@@ -125,12 +125,15 @@ class DashboardApp(QMainWindow):
             import traceback
             traceback.print_exc()
             self.main_bar_re = None
-                
-        if parent_revi is not None:
+
+        print("Debug 56")
+        print(self.parent_revi)      
+        if self.parent_revi is not None:
+            print("[Debug 2 le s]")
             self.main_bar_re.request_h5_file_action.disconnect()
             self.main_bar_re.request_h5_file_action.triggered.connect(
-    lambda: self.main_bar_re.request_h5_file_review(self.subject_file, self.file_list)
-        )
+                lambda: self.main_bar_re.request_h5_file_review(self.subject_file, self.file_list)
+            )
 
     def init_ui(self):
         central_widget = QWidget()

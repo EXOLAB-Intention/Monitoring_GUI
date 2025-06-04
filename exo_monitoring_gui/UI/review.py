@@ -159,21 +159,27 @@ class Review(QMainWindow):
         self.setMinimumSize(1400, 800)
         self.loaded_data = {}
         self.trials = trials
+        if self.trials == None:
+            self.trials = []
+        if self.trials == []:
+            self.trials.append(file_path)
         self.parent = parent
         self.file_path = file_path
         self.existing_load = existing_load
-        if self.trials == None or self.trials == []:
-            self.trials = [file_path]
+
         from utils.Menu_bar import MainBar
+
         self.main_bar = MainBar(self)
         self.main_bar._create_menubar()
         self.main_bar._all_false_or_true(False)
         self.main_bar.review()
+
         self.main_bar.Save_current_trial.triggered.disconnect()
         self.main_bar.Save_current_trial.triggered.connect(lambda: self.main_bar.save_experiment_protocol(self))
 
         self.main_bar.Save_current_trial_as.triggered.disconnect()
         self.main_bar.Save_current_trial_as.triggered.connect(lambda: self.main_bar.save_experiment_protocol_as(self))
+        
 
         self.metadata = load_metadata(file_path) if file_path else None
         self.time_axis = None
@@ -759,8 +765,8 @@ class Review(QMainWindow):
                 widget.setParent(None)
                 widget.deleteLater()
 
-        # Let Qt handle the rest
-        QTimer.singleShot(500, lambda: super().closeEvent(event))
+        # Let Qt handle the rest - fix super() issue in lambda
+        QTimer.singleShot(500, lambda: QMainWindow.closeEvent(self, event))
 
     def rien(self):
         pass
