@@ -5,6 +5,7 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
 import h5py
 import os
+import re
 from datetime import datetime
 from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, save_metadata, copy_all_data_preserve_root_metadata
@@ -764,19 +765,29 @@ class MainBar:
         self.show_metadata_action.setEnabled(True)
 
 
+
     def review_start_recording(self, parent, file_dictionary):
         if not parent.file_path:
             print("⚠️ Aucun fichier source (parent.file_path) défini.")
             return
-        if file_dictionary == None:
+        if file_dictionary is None:
             file_dictionary = []
+
         # Obtenir dossier et nom de base sans extension
         base_dir = os.path.dirname(parent.file_path)
         base_name = os.path.splitext(os.path.basename(parent.file_path))[0]
 
         # Déterminer le numéro de trial
         trial_number = len(file_dictionary) + 1
-        new_file_name = f"{base_name}_trial_{trial_number}.h5"
+
+        # Rechercher si _trial_{nombre} est déjà présent
+        match = re.match(r"^(.*)_trial_\d+$", base_name)
+        if match:
+            base_name_clean = match.group(1)
+        else:
+            base_name_clean = base_name
+
+        new_file_name = f"{base_name_clean}_trial_{trial_number}.h5"
         new_file_path = os.path.join(base_dir, new_file_name)
 
         try:
@@ -793,6 +804,7 @@ class MainBar:
 
         except Exception as e:
             print(f"❌ Erreur lors de la création du fichier : {e}")
+
         from plots.dashboard_app import DashboardApp
         parent.dashboard_instance = DashboardApp(new_file_path, parent, file_dictionary)
         parent.dashboard_instance.showMaximized()

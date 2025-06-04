@@ -162,9 +162,9 @@ class Review(QMainWindow):
         self.parent = parent
         self.file_path = file_path
         self.existing_load = existing_load
-
+        if self.trials == None or self.trials == []:
+            self.trials = [file_path]
         from utils.Menu_bar import MainBar
-
         self.main_bar = MainBar(self)
         self.main_bar._create_menubar()
         self.main_bar._all_false_or_true(False)
