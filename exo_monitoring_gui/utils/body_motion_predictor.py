@@ -7,224 +7,163 @@ import pickle
 import math
 
 class SimpleBodyPredictor:
-    """
-    Classe de prédiction simple basée sur des règles biomécaniques
-    pour générer des mouvements cohérents des parties du corps sans capteurs.
-    """
-    def __init__(self):
-        self.joint_relations = {
-            # Relations entre articulations (parent -> enfants)
-            'torso': ['neck', 'deltoid_l', 'deltoid_r', 'hip'],
-            'neck': ['head'],
-            'deltoid_l': ['biceps_l', 'pectorals_l'],
-            'biceps_l': ['forearm_l'],
-            'forearm_l': ['left_hand'],
-            'deltoid_r': ['biceps_r', 'pectorals_r'],
-            'biceps_r': ['forearm_r'],
-            'forearm_r': ['right_hand'],
-            'hip': ['quadriceps_l', 'quadriceps_r', 'glutes_l', 'glutes_r'],
-            'quadriceps_l': ['calves_l', 'ishcio_hamstrings_l'],
-            'quadriceps_r': ['calves_r', 'ishcio_hamstrings_r'],
-            'calves_l': ['left_foot'],
-            'calves_r': ['right_foot']
-        }
-        
-        # Facteurs d'influence pour la propagation du mouvement
-        self.influence_factors = {
-            'torso': 1.0,
-            'neck': 0.8,
-            'head': 0.5,
-            'deltoid_l': 0.9,
-            'biceps_l': 0.8,
-            'forearm_l': 0.7,
-            'left_hand': 0.5,
-            'deltoid_r': 0.9,
-            'biceps_r': 0.8,
-            'forearm_r': 0.7,
-            'right_hand': 0.5,
-            'hip': 0.9,
-            'quadriceps_l': 0.8,
-            'calves_l': 0.7,
-            'left_foot': 0.5,
-            'quadriceps_r': 0.8,
-            'calves_r': 0.7,
-            'right_foot': 0.5,
-            'glutes_l': 0.6,
-            'glutes_r': 0.6,
-            'ishcio_hamstrings_l': 0.6,
-            'ishcio_hamstrings_r': 0.6,
-            'pectorals_l': 0.6,
-            'pectorals_r': 0.6,
-            'dorsalis_major_l': 0.6,
-            'dorsalis_major_r': 0.6
-        }
-        
-        # Contraintes angulaires pour éviter les mouvements impossibles
-        self.joint_constraints = {
-            'neck': {'x': (-30, 60), 'y': (-70, 70), 'z': (-50, 50)},
-            'elbow': {'x': (0, 160)},  # Pour forearm_l et forearm_r
-            'knee': {'x': (0, 160)},   # Pour calves_l et calves_r
-            'ankle': {'x': (-20, 45)}, # Pour left_foot et right_foot
-            'wrist': {'x': (-80, 80), 'y': (-20, 35), 'z': (-90, 90)}, # Pour les mains
-            'shoulder': {'x': (-180, 60), 'y': (-90, 180), 'z': (-90, 90)}, # Pour deltoid_l et deltoid_r
-            'hip_joint': {'x': (-120, 45), 'y': (-45, 45), 'z': (-30, 90)} # Pour quadriceps_l et quadriceps_r
-        }
-        
-        # Cache pour mémoriser les mouvements récents
-        self.movement_history = {}
-        self.smoothing_factor = 0.3  # Pour lisser les mouvements
-        
-    def quaternion_to_euler(self, q):
-        """Convertit un quaternion en angles d'Euler (degrés)"""
-        w, x, y, z = q
-        
-        # Roll (rotation autour de X)
-        sinr_cosp = 2 * (w * x + y * z)
-        cosr_cosp = 1 - 2 * (x * x + y * y)
-        roll = math.degrees(math.atan2(sinr_cosp, cosr_cosp))
-        
-        # Pitch (rotation autour de Y)
-        sinp = 2 * (w * y - z * x)
-        if abs(sinp) >= 1:
-            pitch = math.degrees(math.copysign(math.pi / 2, sinp))
-        else:
-            pitch = math.degrees(math.asin(sinp))
-        
-        # Yaw (rotation autour de Z)
-        siny_cosp = 2 * (w * z + x * y)
-        cosy_cosp = 1 - 2 * (y * y + z * z)
-        yaw = math.degrees(math.atan2(siny_cosp, cosy_cosp))
-        
-        return np.array([roll, pitch, yaw])
+    """Un prédicteur simple pour le mouvement du corps basé sur les parties avec des IMUs"""
     
-    def euler_to_quaternion(self, euler_angles):
-        """Convertit des angles d'Euler en quaternion"""
-        roll, pitch, yaw = np.radians(euler_angles)
+    def __init__(self, model_path=None):
+        self.model_path = model_path
+        # Définir les relations entre les parties du corps
+        self.body_relations = {
+            # La tête suit le cou
+            'head': ['neck'],
+            # Les mains suivent les avant-bras
+            'left_hand': ['forearm_l'],
+            'right_hand': ['forearm_r'],
+            # Les avant-bras suivent les biceps
+            'forearm_l': ['biceps_l'],
+            'forearm_r': ['biceps_r'],
+            # Les biceps suivent les deltoïdes
+            'biceps_l': ['deltoid_l', 'torso'],
+            'biceps_r': ['deltoid_r', 'torso'],
+            # Les deltoïdes suivent le torse
+            'deltoid_l': ['torso'],
+            'deltoid_r': ['torso'],
+            # Les muscles du dos et de la poitrine suivent le torse
+            'dorsalis_major_l': ['torso'],
+            'dorsalis_major_r': ['torso'],
+            'pectorals_l': ['torso'],
+            'pectorals_r': ['torso'],
+            # Le cou suit le torse
+            'neck': ['torso'],
+            # Les jambes suivent les hanches
+            'quadriceps_l': ['hip'],
+            'quadriceps_r': ['hip'],
+            'ishcio_hamstrings_l': ['hip'],
+            'ishcio_hamstrings_r': ['hip'],
+            'glutes_l': ['hip'],
+            'glutes_r': ['hip'],
+            # Les mollets suivent les jambes
+            'calves_l': ['quadriceps_l', 'ishcio_hamstrings_l'],
+            'calves_r': ['quadriceps_r', 'ishcio_hamstrings_r'],
+            # Les pieds suivent les mollets
+            'left_foot': ['calves_l'],
+            'right_foot': ['calves_r'],
+            # Les hanches suivent le torse
+            'hip': ['torso']
+        }
         
-        cy = math.cos(yaw * 0.5)
-        sy = math.sin(yaw * 0.5)
-        cp = math.cos(pitch * 0.5)
-        sp = math.sin(pitch * 0.5)
-        cr = math.cos(roll * 0.5)
-        sr = math.sin(roll * 0.5)
-        
-        w = cr * cp * cy + sr * sp * sy
-        x = sr * cp * cy - cr * sp * sy
-        y = cr * sp * cy + sr * cp * sy
-        z = cr * cp * sy - sr * sp * cy
-        
-        return np.array([w, x, y, z])
+        # Chargement d'un modèle ML si disponible
+        self.ml_model = None
+        if model_path and os.path.exists(model_path):
+            try:
+                self.ml_model = torch.load(model_path)
+                self.ml_model.eval()
+                print(f"[INFO] Modèle de prédiction chargé: {model_path}")
+            except Exception as e:
+                print(f"[WARNING] Impossible de charger le modèle ML: {e}")
     
-    def predict_joint_movement(self, body_parts, monitored_parts, is_walking=False):
+    def predict_from_partial_state(self, imu_data):
         """
-        Prédit les mouvements des articulations non surveillées en fonction des
-        capteurs présents et du mouvement des articulations surveillées.
+        Prédit les positions des parties du corps sans IMU à partir des parties avec IMU.
         
         Args:
-            body_parts: Dictionnaire des parties du corps avec leurs positions et rotations
-            monitored_parts: Liste des noms des parties surveillées par des capteurs
-            is_walking: Booléen indiquant si le mode marche est activé
-            
+            imu_data: Dictionnaire {part_name: {'pos': np.array, 'rot': np.array}}
+                pour les parties avec des IMUs
+                
         Returns:
-            Dictionnaire mis à jour avec les rotations prédites pour toutes les parties
+            Dictionnaire des positions/rotations prédites pour les parties sans IMU
         """
-        # Copier les données d'entrée pour ne pas les modifier directement
-        updated_body_parts = {k: {
-            'pos': v['pos'].copy(), 
-            'rot': v['rot'].copy()
-        } for k, v in body_parts.items()}
-        
-        # Si l'animation de marche est active, ne pas interférer
-        if is_walking:
-            return updated_body_parts
+        # Si aucune donnée IMU n'est disponible, retourner un dict vide
+        if not imu_data:
+            return {}
             
-        # Étape 1: Extraire les données capteurs comme base de prédiction
-        sensor_data = {}
-        for part_name in monitored_parts:
-            if part_name in body_parts:
-                # Convertir quaternion en angles d'Euler pour la prédiction
-                quat = body_parts[part_name]['rot']
-                euler = self.quaternion_to_euler(quat)
-                sensor_data[part_name] = euler
+        # Essayer d'abord le modèle ML si disponible
+        if self.ml_model:
+            try:
+                ml_predictions = self._predict_with_ml(imu_data)
+                if ml_predictions:
+                    return ml_predictions
+            except Exception as e:
+                print(f"[WARNING] Erreur de prédiction ML: {e}, utilisation du fallback")
         
-        # Étape 2: Propager les mouvements aux articulations non surveillées
-        # Effectuer plusieurs passes pour propager l'influence
-        for _ in range(3):  # 3 passes de propagation
-            for parent, children in self.joint_relations.items():
-                # Si le parent est surveillé, propager son mouvement à ses enfants
-                if parent in sensor_data:
-                    parent_euler = sensor_data[parent]
-                    parent_influence = self.influence_factors[parent]
-                    
-                    for child in children:
-                        if child not in monitored_parts:
-                            # Ne mettre à jour que si l'enfant n'est pas déjà surveillé
-                            if child not in sensor_data:
-                                # Initialiser les données de cet enfant ou obtenir sa valeur actuelle
-                                child_euler = sensor_data.get(child, np.zeros(3))
-                                
-                                # Calculer le nouveau mouvement (avec un facteur d'influence)
-                                child_influence = self.influence_factors[child]
-                                influence_factor = parent_influence * child_influence
-                                
-                                # Appliquer l'influence du parent en tenant compte de l'historique
-                                updated_euler = child_euler * (1 - influence_factor) + parent_euler * influence_factor
-                                
-                                # Appliquer les contraintes appropriées
-                                updated_euler = self._apply_constraints(child, updated_euler)
-                                
-                                # Mettre à jour les données de capteur pour les prochaines passes
-                                sensor_data[child] = updated_euler
+        # Fallback: Utiliser l'algorithme de propagation simple
+        predictions = {}
+        
+        # Pour chaque partie du corps dans les relations
+        for part_name, related_parts in self.body_relations.items():
+            # Si la partie a déjà un IMU, on l'ignore
+            if part_name in imu_data:
+                continue
+                
+            # Chercher des parties liées qui ont des IMUs
+            available_related = [p for p in related_parts if p in imu_data]
             
-        # Étape 3: Appliquer le lissage temporel en utilisant l'historique
-        for part_name, euler in sensor_data.items():
-            if part_name not in monitored_parts:
-                if part_name in self.movement_history:
-                    # Lisser le mouvement avec les valeurs précédentes
-                    smoothed_euler = self.movement_history[part_name] * self.smoothing_factor + euler * (1 - self.smoothing_factor)
-                    euler = smoothed_euler
+            if available_related:
+                # Moyenne des rotations des parties liées
+                rot_sum = np.zeros(4)
+                for rel_part in available_related:
+                    rot_sum += imu_data[rel_part]['rot']
                 
-                # Mettre à jour l'historique
-                self.movement_history[part_name] = euler
+                avg_rot = rot_sum / len(available_related)
+                predictions[part_name] = {'rot': avg_rot}
                 
-                # Convertir en quaternion et mettre à jour la partie du corps
-                quat = self.euler_to_quaternion(euler)
-                updated_body_parts[part_name]['rot'] = quat
-        
-        return updated_body_parts
+        return predictions
     
-    def _apply_constraints(self, part_name, euler_angles):
-        """Applique des contraintes biomécaniques aux angles d'Euler."""
-        constrained_angles = euler_angles.copy()
-        
-        # Appliquer le type de contrainte approprié selon la partie du corps
-        constraint_type = None
-        if part_name in ['forearm_l', 'forearm_r']:
-            constraint_type = 'elbow'
-        elif part_name in ['calves_l', 'calves_r']:
-            constraint_type = 'knee'
-        elif part_name in ['left_foot', 'right_foot']:
-            constraint_type = 'ankle'
-        elif part_name in ['left_hand', 'right_hand']:
-            constraint_type = 'wrist'
-        elif part_name in ['deltoid_l', 'deltoid_r']:
-            constraint_type = 'shoulder'
-        elif part_name in ['quadriceps_l', 'quadriceps_r']:
-            constraint_type = 'hip_joint'
-        elif part_name == 'neck':
-            constraint_type = 'neck'
-        
-        # Appliquer les contraintes si un type approprié a été trouvé
-        if constraint_type and constraint_type in self.joint_constraints:
-            constraints = self.joint_constraints[constraint_type]
+    def _predict_with_ml(self, imu_data):
+        """Utilise le modèle ML pour prédire les mouvements."""
+        if not self.ml_model:
+            return {}
             
-            for axis, (min_val, max_val) in constraints.items():
-                axis_idx = {'x': 0, 'y': 1, 'z': 2}[axis]
-                if axis_idx < len(constrained_angles):
-                    angle = constrained_angles[axis_idx]
-                    constrained_angles[axis_idx] = max(min_val, min(max_val, angle))
-        
-        return constrained_angles
+        try:
+            # Préparation des données d'entrée
+            input_features = []
+            
+            # Parties du corps que nous attendons en entrée du modèle
+            expected_parts = ['torso', 'head', 'left_hand', 'right_hand', 
+                              'left_foot', 'right_foot']
+            
+            # Convertir les données IMU en vecteurs de caractéristiques
+            for part in expected_parts:
+                if part in imu_data:
+                    # Ajouter la rotation quaternion [w,x,y,z]
+                    input_features.extend(imu_data[part]['rot'])
+                else:
+                    # Si pas de données, ajouter des zéros
+                    input_features.extend([0.0, 0.0, 0.0, 0.0])
+            
+            # Convertir en tenseur PyTorch
+            input_tensor = torch.tensor(input_features, dtype=torch.float32).unsqueeze(0)
+            
+            # Prédiction
+            with torch.no_grad():
+                output = self.ml_model(input_tensor)
+            
+            # Traiter les résultats
+            predictions = {}
+            output = output.squeeze(0).numpy()
+            
+            # Mapper les sorties aux parties du corps
+            # Le format de sortie dépend de l'architecture du modèle
+            idx = 0
+            all_parts = list(self.body_relations.keys())
+            
+            for part_name in all_parts:
+                if part_name not in imu_data:  # Uniquement les parties sans IMU
+                    # Chaque partie a une rotation quaternion [w,x,y,z]
+                    if idx + 4 <= len(output):
+                        rot = output[idx:idx+4]
+                        # Normaliser le quaternion
+                        norm = np.linalg.norm(rot)
+                        if norm > 1e-6:  # Éviter division par zéro
+                            rot = rot / norm
+                        predictions[part_name] = {'rot': rot}
+                        idx += 4
+            
+            return predictions
+        except Exception as e:
+            print(f"[ERROR] Erreur lors de la prédiction ML: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
 
 
 class ImprovedBodyMotionNetwork(nn.Module):

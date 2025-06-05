@@ -29,7 +29,7 @@ def main():
             if "QObject" in message and "destroyed" in message:
                 return
             
-            # Afficher les autres messages importants
+            # Afficher les autres messages importants   3
             if mode == QtCriticalMsg or mode == QtFatalMsg:
                 print(f"Critical: {message}")
             elif mode == QtWarningMsg and "QFont" not in message:  # Ignorer les avertissements de police

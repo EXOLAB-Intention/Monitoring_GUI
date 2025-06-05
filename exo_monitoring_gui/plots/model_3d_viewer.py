@@ -370,14 +370,15 @@ class Model3DViewer(QGLWidget):
             
             # Right leg
             if abs(leg_swing_angle_right_rad) > 1e-6:
+                # Create rotation quaternions for each part
                 q_leg_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad)
-                q_knee_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad * 0.5)
-                q_foot_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad * 0.2)
+                q_knee_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad * 1.5)
+                q_foot_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad)
 
-                frame_data['quadriceps_r']['rot_quat'] = q_leg_r
-                frame_data['ishcio_hamstrings_r']['rot_quat'] = q_leg_r
-                frame_data['calves_r']['rot_quat'] = q_knee_r
                 frame_data['right_foot']['rot_quat'] = q_foot_r
+                frame_data['calves_r']['rot_quat'] = q_knee_r
+                frame_data['ishcio_hamstrings_r']['rot_quat'] = q_leg_r
+                frame_data['quadriceps_r']['rot_quat'] = q_leg_r
             
             animation_frames.append(frame_data)
         
@@ -436,22 +437,32 @@ class Model3DViewer(QGLWidget):
             
             # Restore IMU-controlled part rotations if they have active data
             for part_name, rotation in imu_rotations.items():
-                if part_name in self.body_parts:
-                    # Ne restaurer que si les données IMU sont récentes
-                    self.body_parts[part_name]['rot'] = rotation
+                self.body_parts[part_name]['rot'] = rotation
             
             # If walking animation is active and using motion prediction, apply prediction
             # only to non-IMU parts
             if self.use_motion_prediction:
                 try:
-                    # Predict and apply movements of unmonitored parts
-                    updated_body_parts = self.motion_predictor.predict_joint_movement(
-                        self.body_parts, imu_controlled_parts, self.walking)
+                    # Get all parts that don't have active IMU data
+                    non_imu_parts = set(self.body_parts.keys()) - set(imu_rotations.keys())
                     
-                    # Apply predictions only to parts not controlled by IMUs
-                    for part_name, data in updated_body_parts.items():
-                        if part_name not in imu_controlled_parts and part_name in self.body_parts:
-                            self.body_parts[part_name]['rot'] = data['rot']
+                    # Get current state of body parts with IMU data
+                    imu_data = {}
+                    for part_name in imu_rotations.keys():
+                        imu_data[part_name] = {
+                            'pos': self.body_parts[part_name]['pos'].copy(),
+                            'rot': self.body_parts[part_name]['rot'].copy()
+                        }
+                    
+                    # Use the motion predictor to predict positions for non-IMU parts
+                    predicted_positions = self.motion_predictor.predict_from_partial_state(imu_data)
+                    
+                    # Apply predicted positions to non-IMU parts
+                    for part_name in non_imu_parts:
+                        if part_name in predicted_positions:
+                            # Only apply predicted rotation if we don't have IMU data for this part
+                            if 'rot' in predicted_positions[part_name]:
+                                self.body_parts[part_name]['rot'] = predicted_positions[part_name]['rot']
                 except Exception as e:
                     print(f"Error in motion prediction: {e}")
         
@@ -718,6 +729,46 @@ class Model3DViewer(QGLWidget):
         self.draw_direction_marker(floor_size - 0.5, 0.02, -floor_size + 0.5, 0.5)
         self.draw_direction_marker(-floor_size + 0.5, 0.02, floor_size - 0.5, 0.5)
         self.draw_direction_marker(floor_size - 0.5, 0.02, floor_size - 0.5, 0.5)
+
+    def draw_direction_marker(self, x, y, z, size=1.0):
+        """Draws a direction marker at the specified position."""
+        glPushMatrix()
+        glTranslatef(x, y, z)
+        
+        # X axis - Red
+        glColor3f(1.0, 0.0, 0.0)
+        glBegin(GL_LINES)
+        glVertex3f(0, 0, 0)
+        glVertex3f(size, 0, 0)
+        glEnd()
+        
+        # Y axis - Green
+        glColor3f(0.0, 1.0, 0.0)
+        glBegin(GL_LINES)
+        glVertex3f(0, 0, 0)
+        glVertex3f(0, size, 0)
+        glEnd()
+        
+        # Z axis - Blue
+        glColor3f(0.0, 0.0, 1.0)
+        glBegin(GL_LINES)
+        glVertex3f(0, 0, 0)
+        glVertex3f(0, 0, size)
+        glEnd()
+        
+        glPopMatrix()
+    
+    def get_current_mappings(self):
+        """Returns the current IMU to body part mappings."""
+        return self.imu_mapping
+
+    def set_emg_mapping(self, emg_mapping):
+        """Sets the EMG to body part mappings."""
+        self.emg_mapping = emg_mapping
+        
+    def set_pmmg_mapping(self, pmmg_mapping):
+        """Sets the pMMG to body part mappings."""
+        self.pmmg_mapping = pmmg_mapping
 
     def _draw_legend(self):
         """Draws a legend showing the different sensor types."""
@@ -1092,30 +1143,30 @@ class Model3DViewer(QGLWidget):
             # Réduction supplémentaire de la taille de la hanche
             joint_sizes = {
                 # Tête et torse - plus grands
-                'head': 0.114,      # Réduit de 0.12 à 0.114
-                'neck': 0.076,      # Réduit de 0.08 à 0.076
-                'torso': 0.114,     # Réduit de 0.12 à 0.114
-                'hip': 0.06,        # Réduit davantage (0.077 à 0.06) - environ la moitié de la tête
+                'head': 0.114,      # Réduits de 0.12 à 0.114
+                'neck': 0.076,      # Réduits de 0.08 à 0.076
+                'torso': 0.114,     # Réduits de 0.12 à 0.114
+                'hip': 0.06,        # Réduits davantage (0.077 à 0.06) - environ la moitié de la tête
                 
                 # Bras et jambes - taille moyenne
-                'deltoid_l': 0.0665,  # Réduit de 0.07 à 0.0665
-                'deltoid_r': 0.0665,  # Réduit de 0.07 à 0.0665
-                'biceps_l': 0.0665,   # Réduit de 0.07 à 0.0665
-                'biceps_r': 0.0665,   # Réduit de 0.07 à 0.0665
-                'quadriceps_l': 0.0665, # Réduit de 0.07 à 0.0665
-                'quadriceps_r': 0.0665, # Réduit de 0.07 à 0.0665
+                'deltoid_l': 0.0665,  # Réduits de 0.07 à 0.0665
+                'deltoid_r': 0.0665,  # Réduits de 0.07 à 0.0665
+                'biceps_l': 0.0665,   # Réduits de 0.07 à 0.0665
+                'biceps_r': 0.0665,   # Réduits de 0.07 à 0.0665
+                'quadriceps_l': 0.0665, # Réduits de 0.07 à 0.0665
+                'quadriceps_r': 0.0665, # Réduits de 0.07 à 0.0665
                 
                 # Articulations secondaires - plus petites
-                'forearm_l': 0.057,   # Réduit de 0.06 à 0.057
-                'forearm_r': 0.057,   # Réduit de 0.06 à 0.057
-                'calves_l': 0.057,    # Réduit de 0.06 à 0.057
-                'calves_r': 0.057,    # Réduit de 0.06 à 0.057
+                'forearm_l': 0.057,   # Réduits de 0.06 à 0.057
+                'forearm_r': 0.057,   # Réduits de 0.06 à 0.057
+                'calves_l': 0.057,    # Réduits de 0.06 à 0.057
+                'calves_r': 0.057,    # Réduits de 0.06 à 0.057
                 
                 # Extrémités - très petites
-                'left_hand': 0.0475,  # Réduit de 0.05 à 0.0475
-                'right_hand': 0.0475, # Réduit de 0.05 à 0.0475
-                'left_foot': 0.0475,  # Réduit de 0.05 à 0.0475
-                'right_foot': 0.0475, # Réduit de 0.05 à 0.0475
+                'left_hand': 0.0475,  # Réduits de 0.05 à 0.0475
+                'right_hand': 0.0475, # Réduits de 0.05 à 0.0475
+                'left_foot': 0.0475,  # Réduits de 0.05 à 0.0475
+                'right_foot': 0.0475, # Réduits de 0.05 à 0.0475
                 
                 # Autres parties (valeur par défaut également réduite)
                 'dorsalis_major_l': 0.057,
@@ -1232,158 +1283,5 @@ class Model3DViewer(QGLWidget):
         return True
     
     def apply_imu_data(self, imu_id, quaternion_data):
-        """Applies IMU quaternion data to the mapped body part."""
-        if imu_id not in self.imu_mapping:
-            return False
-            
-        body_part = self.imu_mapping[imu_id]
-        if body_part not in self.body_parts:
-            return False
-            
-        # Normalize the quaternion to ensure valid rotation
-        normalized_quat = normalize_quaternion(quaternion_data)
-        
-        # Apply calibration if available
-        if self.calibration_complete and body_part in self.calibration_offsets:
-            # Rotation finale = rotation de calibration * rotation IMU
-            offset_quat = self.calibration_offsets[body_part]
-            final_quat = quaternion_multiply(offset_quat, normalized_quat)
-            self.body_parts[body_part]['rot'] = final_quat
-        else:
-            # Appliquer directement la rotation IMU
-            self.body_parts[body_part]['rot'] = normalized_quat
-            
-        # Marquer cette partie du corps comme ayant des données IMU récentes
-        if not hasattr(self, 'imu_data_timestamp'):
-            self.imu_data_timestamp = {}
-        self.imu_data_timestamp[body_part] = time.time()
-            
-        return True
-    
-    def get_current_mappings(self):
-        """Returns the current IMU to body part mappings."""
-        return self.imu_mapping
-
-    def set_emg_mapping(self, emg_mapping):
-        """Set EMG sensor mappings."""
-        self.emg_mapping = emg_mapping
-        
-    def set_pmmg_mapping(self, pmmg_mapping):
-        """Set pMMG sensor mappings."""
-        self.pmmg_mapping = pmmg_mapping
-    
-    def start_tpose_calibration(self):
-        """Start T-pose calibration."""
-        if not self.imu_mapping:
-            print("Cannot start calibration - no IMUs are mapped")
-            return False
-            
-        print("Starting T-pose calibration...")
-        self.calibration_mode = True
-        self.calibration_complete = False
-        self.calibration_samples = []
-        self.calibration_duration = 0
-        self.calibration_status_text = "Starting calibration - Assume T-pose and hold still"
-        
-        # Start the timer for regular status updates
-        self.calibration_timer.start(100)  # 100ms interval
-        return True
-        
-    def stop_tpose_calibration(self):
-        """Stop T-pose calibration and calculate offsets."""
-        if not self.calibration_mode:
-            return False
-            
-        self.calibration_timer.stop()
-        self.calibration_mode = False
-        
-        # Check if we have enough data
-        if len(self.calibration_samples) < 10:
-            print("Insufficient calibration data collected")
-            self.calibration_status_text = "Calibration failed - insufficient data"
-            return False
-            
-        # Calculate the average quaternion for each body part
-        average_quats = {}
-        for body_part in self.imu_mapping.values():
-            samples = []
-            for sample in self.calibration_samples:
-                if body_part in sample:
-                    samples.append(sample[body_part])
-            
-            if samples:
-                # Simple averaging for quaternions (not ideal but works for small variations)
-                avg_quat = np.mean(samples, axis=0)
-                avg_quat = normalize_quaternion(avg_quat)
-                average_quats[body_part] = avg_quat
-        
-        # Now calculate the offset quaternions 
-        # The offset is what needs to be applied to go from the calibrated T-pose to the ideal T-pose
-        self.calibration_offsets = {}
-        for body_part, avg_quat in average_quats.items():
-            # For a T-pose, we'd expect identity quaternion in the ideal case
-            # So the offset is the inverse of the average quaternion
-            # For quaternions, the inverse is the conjugate when normalized
-            w, x, y, z = avg_quat
-            # Conjugate: w, -x, -y, -z
-            offset_quat = normalize_quaternion(np.array([w, -x, -y, -z]))
-            self.calibration_offsets[body_part] = offset_quat
-        
-        self.calibration_complete = True
-        self.calibration_status_text = "✅ Calibration complete - T-pose correction active"
-        print(f"Calibration complete for {len(self.calibration_offsets)} body parts")
-        
-        # Apply calibration to current pose
-        for imu_id, body_part in self.imu_mapping.items():
-            if body_part in self.body_parts and body_part in self.calibration_offsets:
-                current_quat = self.body_parts[body_part]['rot']
-                offset_quat = self.calibration_offsets[body_part]
-                corrected_quat = quaternion_multiply(current_quat, offset_quat)
-                self.body_parts[body_part]['rot'] = corrected_quat
-        
-        # Update the display
-        self.safely_update_display_list(force=True)
-        self.update()
-        return True
-    
-    def reset_calibration(self):
-        """Reset calibration data."""
-        self.calibration_mode = False
-        self.calibration_complete = False
-        self.calibration_timer.stop()
-        self.calibration_samples = []
-        self.calibration_offsets = {}
-        self.calibration_status_text = "🔄 Calibration reset - No correction active"
-        
-        # Update the display
-        self.safely_update_display_list(force=True)
-        self.update()
-        return True
-
-    def draw_direction_marker(self, x, y, z, size=1.0):
-        """Draws a direction marker at the specified position."""
-        glPushMatrix()
-        glTranslatef(x, y, z)
-        
-        # X axis - Red
-        glColor3f(1.0, 0.0, 0.0)
-        glBegin(GL_LINES)
-        glVertex3f(0, 0, 0)
-        glVertex3f(size, 0, 0)
-        glEnd()
-        
-        # Y axis - Green
-        glColor3f(0.0, 1.0, 0.0)
-        glBegin(GL_LINES)
-        glVertex3f(0, 0, 0)
-        glVertex3f(0, size, 0)
-        glEnd()
-        
-        # Z axis - Blue
-        glColor3f(0.0, 0.0, 1.0)
-        glBegin(GL_LINES)
-        glVertex3f(0, 0, 0)
-        glVertex3f(0, 0, size)
-        glEnd()
-        
-        glPopMatrix()
+        """Forward IMU data to the internal viewer."""
+        return self.model_viewer.apply_imu_data(imu_id, quaternion_data)

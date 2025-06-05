@@ -9,7 +9,6 @@ import pyqtgraph as pg
 import socket
 import struct
 import threading
-import pandas as pd
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -252,7 +251,7 @@ class DashboardAppBack:
         
         # Ajouter un timeout pour le socket client
         try:
-            client_socket.settimeout(60.0)  # 60 seconds de timeout
+            client_socket.settimeout(60.0)  # 5 secondes de timeout
         except Exception as e:
             print(f"[WARNING] Failed to set socket timeout: {e}")
         
@@ -290,19 +289,6 @@ class DashboardAppBack:
         self.ui.connect_button.setText("Disconnect")
         self.ui.connect_button.setEnabled(True)
         self.ui.record_button.setEnabled(True)
-        record_button_style = """
-        QPushButton {
-            background-color: #4caf50;
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            color: white;
-            font-size: 14px;
-            font-weight: 500;
-            text-align: center;
-            min-width: 120px;
-        }"""
-        self.ui.record_button.setStyleSheet(record_button_style)
 
     def on_client_init_error(self, error_msg):
         print(f"[ERROR] {error_msg}")
@@ -392,6 +378,7 @@ class DashboardAppBack:
 
                     # Enregistrement des données
                     if 'emg' in packet and packet['emg']:
+                        print(f"Received EMG data: {packet['emg']}")  # Debug log
                         for i, emg_id in enumerate(self.sensor_config.get('emg_ids', [])):
                             if i < len(packet['emg']) and i < len(self.recorded_data["EMG"]):
                                 value = packet['emg'][i]
@@ -767,22 +754,3 @@ class DashboardAppBack:
 
         self.ui.reset_sensor_display()
         QMessageBox.warning(self.ui, "Connection Problem", f"Disconnected from device: {reason}")
-
-
-    def export_recorded_data_to_csv(self, filename="recorded_data.csv"):
-        """Export all recorded sensor data to a CSV file."""
-        data = self.recorded_data
-        # Exemple simple pour EMG, IMU, pMMG (à adapter selon la structure réelle)
-        rows = []
-        max_len = max(len(lst) for sensor_type in data for lst in data[sensor_type])
-        for i in range(max_len):
-            row = {}
-            for sensor_type in data:
-                for idx, sensor_data in enumerate(data[sensor_type]):
-                    key = f"{sensor_type}{idx+1}"
-                    value = sensor_data[i] if i < len(sensor_data) else None
-                    row[key] = value
-            rows.append(row)
-        df = pd.DataFrame(rows)
-        df.to_csv(filename, index=False)
-        print(f"Data exported to {filename}")
