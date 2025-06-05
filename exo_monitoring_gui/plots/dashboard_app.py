@@ -1257,10 +1257,10 @@ class DashboardApp(QMainWindow):
                             self.add_sensor_curve_to_group_plot(sensor_name_full, sensor_group_type)
     
     def create_individual_plot(self, sensor_name_full, sensor_name_base, is_group_mode_imu=False):
-        """Creates an individual plot for a sensor."""
+        """Creates an individual plot for a sensor with a fixed-size numpy buffer (sliding window)."""
         if sensor_name_base in self.plots:
             return  # Plot already exists
-            
+
         # Extract data type (EMG, IMU, pMMG)
         sensor_type = None
         if sensor_name_base.startswith("EMG"):
@@ -1272,7 +1272,7 @@ class DashboardApp(QMainWindow):
         else:
             print(f"Unknown sensor type for {sensor_name_base}")
             return
-            
+
         # Create plot widget
         plot_widget = pg.PlotWidget(title=sensor_name_full)
         plot_widget.setBackground('#1e1e1e')
@@ -1280,19 +1280,28 @@ class DashboardApp(QMainWindow):
         plot_widget.getAxis('bottom').setTextPen('white')
         plot_widget.showGrid(x=True, y=True, alpha=0.3)
         plot_widget.setTitle(sensor_name_full, color='white', size='14pt')
-        
-        # Add the plot to the middle layout
+
         self.middle_layout.addWidget(plot_widget)
         self.plots[sensor_name_base] = plot_widget
-        
-        # Initialize plot data in backend
-        self.backend.plot_data[sensor_name_base] = []
-        
+
+        # --- Fenêtre glissante numpy ---
+        window_size = 100
+        if sensor_type == "IMU":
+            components = ['w', 'x', 'y', 'z']
+            for j, axis in enumerate(components):
+                key = f"{sensor_name_base}_{axis}"
+                self.backend.plot_data[key] = np.zeros(window_size)
+                pen = pg.mkPen(['w', 'r', 'g', 'b'][j], width=2)
+                self.curves[key] = plot_widget.plot(self.backend.plot_data[key], pen=pen, name=axis)
+        else:
+            self.backend.plot_data[sensor_name_base] = np.zeros(window_size)
+            pen = pg.mkPen('c' if sensor_type == "EMG" else 'm', width=2)
+            self.curves[sensor_name_base] = plot_widget.plot(self.backend.plot_data[sensor_name_base], pen=pen)
+
         # If this is recorded data mode, plot the recorded data
         if self.backend.recording_stopped:
             self.plot_recorded_sensor_data(sensor_name_full, sensor_name_base)
-            
-        # Add sensor to highlighted set
+
         self.highlighted_sensors.add(sensor_name_base)
     
     def remove_sensor_plot(self, sensor_name_base):
@@ -1374,182 +1383,98 @@ class DashboardApp(QMainWindow):
                 self.add_sensor_curve_to_group_plot(sensor_name_full, sensor_type)
     
     def update_live_plots(self, packet):
-        """Updates plots with live data from the packet."""
-        # Skip if not recording or no packet data
-        if not packet or not self.backend.recording:
-            return
-            
-        # Process different sensor types
-        # EMG data
-        if 'emg' in packet and packet['emg'] and self.backend.sensor_config.get('emg_ids'):
-            for i, emg_id in enumerate(self.backend.sensor_config.get('emg_ids', [])):
-                if i < len(packet['emg']):
-                    sensor_name = f"EMG{emg_id}"
-                    value = packet['emg'][i]
-                    
-                    # Update individual plot if visible
-                    if sensor_name in self.highlighted_sensors and sensor_name in self.plots:
-                        if sensor_name not in self.backend.plot_data:
-                            self.backend.plot_data[sensor_name] = []
-                        
-                        data = self.backend.plot_data[sensor_name]
-                        data.append(value)
-                        
-                        # Limit data length for performance
-                        if len(data) > 500:
-                            data = data[-500:]
-                            self.backend.plot_data[sensor_name] = data
-                            
-                        # Update the plot
-                        plot_widget = self.plots[sensor_name]
-                        plot_widget.clear()
-                        x_values = list(range(len(data)))
-                        pen = pg.mkPen(color=(0, 255, 255), width=2)
-                        plot_widget.plot(x_values, data, pen=pen)
-                    
-                    # Update group plot if in group mode
-                    if self.group_sensor_mode.isChecked() and "EMG" in self.group_plots:
-                        if "EMG" not in self.backend.group_plot_data:
-                            self.backend.group_plot_data["EMG"] = {}
-                        
-                        if sensor_name not in self.backend.group_plot_data["EMG"]:
-                            self.backend.group_plot_data["EMG"][sensor_name] = []
-                            
-                        group_data = self.backend.group_plot_data["EMG"][sensor_name]
-                        group_data.append(value)
-                        
-                        # Limit data length
-                        if len(group_data) > 500:
-                            group_data = group_data[-500:]
-                            self.backend.group_plot_data["EMG"][sensor_name] = group_data
-                            
-                        # Update the group plot
-                        if sensor_name in self.curves:
-                            self.group_plots["EMG"].removeItem(self.curves[sensor_name])
-                            
-                        x_values = list(range(len(group_data)))
-                        color = self._get_curve_color(i)
-                        pen = pg.mkPen(color=color, width=2)
-                        self.curves[sensor_name] = self.group_plots["EMG"].plot(
-                            x_values, group_data, pen=pen, name=f"EMG{emg_id}")
-        
-        # pMMG data
-        if 'pmmg' in packet and packet['pmmg'] and self.backend.sensor_config.get('pmmg_ids'):
-            for i, pmmg_id in enumerate(self.backend.sensor_config.get('pmmg_ids', [])):
-                if i < len(packet['pmmg']):
-                    sensor_name = f"pMMG{pmmg_id}"
-                    value = packet['pmmg'][i]
-                    
-                    # Update individual plot if visible
-                    if sensor_name in self.highlighted_sensors and sensor_name in self.plots:
-                        if sensor_name not in self.backend.plot_data:
-                            self.backend.plot_data[sensor_name] = []
-                        
-                        data = self.backend.plot_data[sensor_name]
-                        data.append(value)
-                        
-                        # Limit data length for performance
-                        if len(data) > 500:
-                            data = data[-500:]
-                            self.backend.plot_data[sensor_name] = data
-                            
-                        # Update the plot
-                        plot_widget = self.plots[sensor_name]
-                        plot_widget.clear()
-                        x_values = list(range(len(data)))
-                        pen = pg.mkPen(color=(255, 0, 255), width=2)
-                        plot_widget.plot(x_values, data, pen=pen)
-                    
-                    # Update group plot if in group mode
-                    if self.group_sensor_mode.isChecked() and "pMMG" in self.group_plots:
-                        if "pMMG" not in self.backend.group_plot_data:
-                            self.backend.group_plot_data["pMMG"] = {}
-                        
-                        if sensor_name not in self.backend.group_plot_data["pMMG"]:
-                            self.backend.group_plot_data["pMMG"][sensor_name] = []
-                            
-                        group_data = self.backend.group_plot_data["pMMG"][sensor_name]
-                        group_data.append(value)
-                        
-                        # Limit data length
-                        if len(group_data) > 500:
-                            group_data = group_data[-500:]
-                            self.backend.group_plot_data["pMMG"][sensor_name] = group_data
-                            
-                        # Update the group plot
-                        if sensor_name in self.curves:
-                            self.group_plots["pMMG"].removeItem(self.curves[sensor_name])
-                            
-                        x_values = list(range(len(group_data)))
-                        color = self._get_curve_color(i)
-                        pen = pg.mkPen(color=color, width=2)
-                        self.curves[sensor_name] = self.group_plots["pMMG"].plot(
-                            x_values, group_data, pen=pen, name=f"pMMG{pmmg_id}")
-        
-        # IMU data (quaternions)
-        if 'imu' in packet and packet['imu'] and self.backend.sensor_config.get('imu_ids'):
-            for i, imu_id in enumerate(self.backend.sensor_config.get('imu_ids', [])):
-                if i < len(packet['imu']):
-                    sensor_name = f"IMU{imu_id}"
-                    quaternion = packet['imu'][i]
-                    
-                    # Update individual plot if visible
-                    if sensor_name in self.highlighted_sensors and sensor_name in self.plots:
-                        if sensor_name not in self.backend.plot_data:
-                            self.backend.plot_data[sensor_name] = [[] for _ in range(4)]  # 4 components: w, x, y, z
-                        
-                        # Append each component
-                        for j in range(4):
-                            self.backend.plot_data[sensor_name][j].append(quaternion[j])
-                            
-                            # Limit data length
-                            if len(self.backend.plot_data[sensor_name][j]) > 500:
-                                self.backend.plot_data[sensor_name][j] = self.backend.plot_data[sensor_name][j][-500:]
-                        
-                        # Update the plot
-                        plot_widget = self.plots[sensor_name]
-                        plot_widget.clear()
-                        
-                        components = ['w', 'x', 'y', 'z']
-                        colors = [(255, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 255)]
-                        
-                        for j in range(4):
-                            data = self.backend.plot_data[sensor_name][j]
-                            x_values = list(range(len(data)))
-                            pen = pg.mkPen(color=colors[j], width=2)
-                            plot_widget.plot(x_values, data, pen=pen, name=components[j])
-                    
-                    # Update group plot if in group mode
-                    if self.group_sensor_mode.isChecked() and "IMU" in self.group_plots:
-                        if "IMU" not in self.backend.group_plot_data:
-                            self.backend.group_plot_data["IMU"] = {}
-                        
-                        if sensor_name not in self.backend.group_plot_data["IMU"]:
-                            self.backend.group_plot_data["IMU"][sensor_name] = [[] for _ in range(4)]
-                        
-                        # Append each component
-                        for j in range(4):
-                            self.backend.group_plot_data["IMU"][sensor_name][j].append(quaternion[j])
-                            
-                            # Limit data length
-                            if len(self.backend.group_plot_data["IMU"][sensor_name][j]) > 500:
-                                self.backend.group_plot_data["IMU"][sensor_name][j] = self.backend.group_plot_data["IMU"][sensor_name][j][-500:]
-                        
-                        # Update curves in group plot
-                        components = ['w', 'x', 'y', 'z']
-                        colors = [(255, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 255)]
-                        
-                        for j in range(4):
-                            curve_name = f"{sensor_name}_{components[j]}"
-                            
-                            if curve_name in self.curves:
-                                self.group_plots["IMU"].removeItem(self.curves[curve_name])
-                            
-                            data = self.backend.group_plot_data["IMU"][sensor_name][j]
-                            x_values = list(range(len(data)))
-                            pen = pg.mkPen(color=colors[j], width=2)
-                            self.curves[curve_name] = self.group_plots["IMU"].plot(
-                                x_values, data, pen=pen, name=f"IMU{imu_id} {components[j]}")
+        """Met à jour les graphiques en temps réel avec les nouvelles données,
+        en remplaçant clear()/plot() par setData() pour réduire l'overhead Qt."""
+        # EMG individuel
+        if 'emg' in packet and packet['emg']:
+            for i, emg_value in enumerate(packet['emg']):
+                sensor_name = (f"EMG{self.backend.sensor_config['emg_ids'][i]}"
+                            if i < len(self.backend.sensor_config.get('emg_ids', []))
+                            else f"EMG{i+1}")
+                if sensor_name in self.curves:
+                    self.backend.plot_data[sensor_name] = np.roll(self.backend.plot_data[sensor_name], -1)
+                    self.backend.plot_data[sensor_name][-1] = emg_value
+                    self.curves[sensor_name].setData(self.backend.plot_data[sensor_name])
+
+        # EMG groupe
+        if 'emg' in packet and packet['emg'] and "EMG" in self.group_plots:
+            group_plot_widget_emg = self.group_plots["EMG"]
+            for i, emg_value in enumerate(packet['emg']):
+                sensor_name_full = (f"EMG{self.backend.sensor_config['emg_ids'][i]}"
+                                    if i < len(self.backend.sensor_config.get('emg_ids', []))
+                                    else f"EMG{i+1}")
+                item = self.find_sensor_item_by_base_name(sensor_name_full.split()[0])
+                display_name_emg = item.text(0) if item else sensor_name_full # Utiliser le nom de l'arbre avec mapping
+
+                gp_emg = self.backend.group_plot_data.get("EMG", {})
+                if display_name_emg in gp_emg:
+                    gp_emg[display_name_emg] = np.roll(gp_emg[display_name_emg], -1)
+                    gp_emg[display_name_emg][-1] = emg_value
+                    if display_name_emg in self.group_curves:
+                        self.group_curves[display_name_emg].setData(gp_emg[display_name_emg])
+                # else: pass
+
+        # pMMG individuel
+        if 'pmmg' in packet and packet['pmmg']:
+            for i, pmmg_value in enumerate(packet['pmmg']):
+                sensor_name = (f"pMMG{self.backend.sensor_config['pmmg_ids'][i]}"
+                            if i < len(self.backend.sensor_config.get('pmmg_ids', []))
+                            else f"pMMG{i+1}")
+                if sensor_name in self.curves:
+                    self.backend.plot_data[sensor_name] = np.roll(self.backend.plot_data[sensor_name], -1)
+                    self.backend.plot_data[sensor_name][-1] = pmmg_value
+                    self.curves[sensor_name].setData(self.backend.plot_data[sensor_name])
+
+        # pMMG groupe
+        if 'pmmg' in packet and packet['pmmg'] and "pMMG" in self.group_plots:
+            group_plot_widget_pmmg = self.group_plots["pMMG"]
+            for i, pmmg_value in enumerate(packet['pmmg']):
+                sensor_name_full = (f"pMMG{self.backend.sensor_config['pmmg_ids'][i]}"
+                                    if i < len(self.backend.sensor_config.get('pmmg_ids', []))
+                                    else f"pMMG{i+1}")
+                item = self.find_sensor_item_by_base_name(sensor_name_full.split()[0])
+                display_name_pmmg = item.text(0) if item else sensor_name_full
+
+                gp_pmmg = self.backend.group_plot_data.get("pMMG", {})
+                if display_name_pmmg in gp_pmmg:
+                    gp_pmmg[display_name_pmmg] = np.roll(gp_pmmg[display_name_pmmg], -1)
+                    gp_pmmg[display_name_pmmg][-1] = pmmg_value
+                    if display_name_pmmg in self.group_curves:
+                        self.group_curves[display_name_pmmg].setData(gp_pmmg[display_name_pmmg])
+                # else: pass
+
+        # IMU individuel (4 composantes)
+        if 'imu' in packet and packet['imu']:
+            for i, quaternion in enumerate(packet['imu']):
+                sensor_name = (f"IMU{self.backend.sensor_config['imu_ids'][i]}"
+                            if i < len(self.backend.sensor_config.get('imu_ids', []))
+                            else f"IMU{i+1}")
+                for j, axis_label in enumerate(['w', 'x', 'y', 'z']):
+                    key = f"{sensor_name}_{axis_label}"
+                    if key in self.curves:
+                        self.backend.plot_data[key] = np.roll(self.backend.plot_data[key], -1)
+                        self.backend.plot_data[key][-1] = quaternion[j]
+                        self.curves[key].setData(self.backend.plot_data[key])
+
+        # IMU groupe
+        if 'imu' in packet and packet['imu'] and "IMU" in self.group_plots:
+            group_plot_widget_imu = self.group_plots["IMU"]
+            for i, quaternion in enumerate(packet['imu']):
+                sensor_name_base = (f"IMU{self.backend.sensor_config['imu_ids'][i]}"
+                                if i < len(self.backend.sensor_config.get('imu_ids', []))
+                                else f"IMU{i+1}")
+                item = self.find_sensor_item_by_base_name(sensor_name_base)
+                sensor_name_full_imu = item.text(0) if item else sensor_name_base
+
+                gp_imu = self.backend.group_plot_data.get("IMU", {})
+                for j, axis_label in enumerate(['w', 'x', 'y', 'z']):
+                    curve_name_imu = f"{sensor_name_full_imu}_{axis_label}"
+                    if curve_name_imu in gp_imu:
+                        gp_imu[curve_name_imu] = np.roll(gp_imu[curve_name_imu], -1)
+                        gp_imu[curve_name_imu][-1] = quaternion[j]
+                        if curve_name_imu in self.group_curves:
+                            self.group_curves[curve_name_imu].setData(gp_imu[curve_name_imu])
+                    # else: pass
 
     def find_sensor_item_by_base_name(self, base_name):
         """Finds a sensor item in the tree by its base name."""
