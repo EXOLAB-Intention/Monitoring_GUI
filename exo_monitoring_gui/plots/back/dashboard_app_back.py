@@ -393,18 +393,28 @@ class DashboardAppBack:
                                     self.recorded_data["pMMG"][i].append(value)
                     
                     if 'imu' in packet and packet['imu']:
+                        # Add debug log to verify IMU data is coming through
+                        print(f"Received IMU data: {len(packet['imu'])} quaternions")
+                        
                         for i, imu_id in enumerate(self.sensor_config.get('imu_ids', [])):
                             if i < len(packet['imu']) and i < len(self.recorded_data["IMU"]):
                                 quaternion = packet['imu'][i]
                                 if self._is_valid_quaternion(quaternion):
                                     self.recorded_data["IMU"][i].append(quaternion)
                                     try:
+                                        # Add more detailed debug log
+                                        print(f"Applying IMU{imu_id} data to 3D model: {quaternion}")
+                                        
                                         # La mise à jour du modèle 3D doit se faire via l'UI
-                                        self.ui.model_3d_widget.apply_imu_data(imu_id, quaternion)
+                                        result = self.ui.model_3d_widget.apply_imu_data(imu_id, quaternion)
+                                        if not result:
+                                            print(f"[WARNING] Failed to apply IMU{imu_id} data to 3D model")
                                     except AttributeError: # model_3d_widget might not be ready
                                         print(f"[WARNING] model_3d_widget not available for IMU update.")
                                     except Exception as e:
                                         print(f"Error updating 3D model: {e}")
+                                else:
+                                    print(f"[WARNING] Invalid quaternion received for IMU{imu_id}: {quaternion}")
                     
                     # Mise à jour des graphiques (gérée par l'UI)
                     try:

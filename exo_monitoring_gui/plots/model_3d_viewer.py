@@ -68,19 +68,155 @@ class Model3DWidget(QWidget):
     
     def start_tpose_calibration(self):
         """Start T-pose calibration."""
-        return self.model_viewer.start_tpose_calibration()
-    
+        if self.model_viewer.calibration_mode:
+            print("[WARNING] T-pose calibration already in progress")
+            return False
+        
+        if not self.model_viewer.imu_mapping:
+            print("[WARNING] No IMU mappings defined. Cannot start calibration.")
+            return False
+        
+        print("[INFO] Starting T-pose calibration")
+        self.model_viewer.calibration_mode = True
+        self.model_viewer.calibration_complete = False
+        self.model_viewer.calibration_duration = 0
+        self.model_viewer.calibration_samples = []
+        self.model_viewer.calibration_status_text = "🟡 Waiting for stable T-pose position"
+        
+        # Start the calibration timer
+        self.model_viewer.calibration_timer.start(100)
+        
+        # Set calibration state for UI feedback
+        self.model_viewer.calibration_progress = 0
+        
+        print("[INFO] T-pose calibration started")
+        return True
+
     def stop_tpose_calibration(self):
         """Stop T-pose calibration."""
-        return self.model_viewer.stop_tpose_calibration()
+        if not self.model_viewer.calibration_mode and not self.model_viewer.calibration_complete:
+            print("[WARNING] No T-pose calibration in progress")
+            return False
+        
+        # Force completion with current samples
+        if self.model_viewer.calibration_mode:
+            if self.model_viewer.calibration_samples:
+                self.model_viewer.compute_calibration_offsets()
+                self.model_viewer.calibration_complete = True
+                self.model_viewer.calibration_status_text = "🟢 Calibration saved successfully"
+                print("[INFO] T-pose calibration completed on manual stop")
+            else:
+                self.model_viewer.calibration_complete = False
+                self.model_viewer.calibration_status_text = "🔴 Calibration failed - no samples collected"
+                print("[WARNING] T-pose calibration failed - no samples collected")
+        
+        # Stop the calibration timer
+        self.model_viewer.calibration_timer.stop()
+        self.model_viewer.calibration_mode = False
+        
+        return self.model_viewer.calibration_complete
+
+    def update_calibration_status(self):
+        """Updates calibration status in real-time."""
+        if not self.calibration_mode:
+            return
+        
+        self.calibration_duration += 100
+        
+        # Collect current data from mapped IMUs
+        current_sample = {}
+        stability_check = True
+        
+        # Check if we have any IMU mappings
+        if not self.imu_mapping:
+            print("[ERROR] No IMU mappings defined. Stopping calibration.")
+            self.calibration_timer.stop()
+            self.calibration_mode = False
+            return
+        
+        for imu_id, body_part in self.imu_mapping.items():
+            if body_part in self.body_parts:
+                current_quat = self.body_parts[body_part]['rot'].copy()
+                current_sample[body_part] = current_quat
+                
+                # Check stability against previous samples
+                if self.calibration_samples:
+                    for prev_sample in self.calibration_samples[-3:]:  # Check last 3 samples
+                        if body_part in prev_sample:
+                            # Calculate difference between current and previous quaternion
+                            diff = np.sum(np.abs(current_quat - prev_sample[body_part]))
+                            if diff > self.calibration_stability_threshold:
+                                stability_check = False
+                                break
     
-    def reset_calibration(self):
-        """Reset T-pose calibration."""
-        self.model_viewer.reset_calibration()
+    # Add sample if stable
+    if stability_check and current_sample:
+        self.calibration_samples.append(current_sample)
+        progress = min(100, int((len(self.calibration_samples) / 30) * 100))
+        self.calibration_status_text = f"🟡 Hold T-pose... {progress}%"
+        print(f"[INFO] Calibration progress: {progress}%")
+    else:
+        # If not stable, give feedback
+        self.calibration_status_text = "🟠 Movement detected. Please hold T-pose still."
+        print("[INFO] Movement detected during calibration")
     
+    # Check if calibration is complete
+    if len(self.calibration_samples) >= 30:
+        self.compute_calibration_offsets()
+        self.calibration_timer.stop()
+        self.calibration_mode = False
+        self.calibration_complete = True
+        self.calibration_status_text = "🟢 Calibration complete! T-pose reference saved."
+        print("[INFO] T-pose calibration completed successfully")
+    
+    # Timeout after 30 seconds
+    if self.calibration_duration > 30000:
+        self.calibration_timer.stop()
+        self.calibration_mode = False
+        self.calibration_status_text = "🔴 Calibration timed out. Please try again."
+        print("[WARNING] T-pose calibration timed out")
+    
+    # Force update to show calibration progress
+    self.update()
+
+    def compute_calibration_offsets(self):
+        """Computes calibration offsets from collected samples."""
+        if not self.calibration_samples:
+            print("[ERROR] No calibration samples to compute offsets from")
+            return
+        
+        self.calibration_offsets = {}
+        
+        # Compute average quaternion for each body part
+        for body_part in self.body_parts:
+            samples = []
+            for sample in self.calibration_samples:
+                if body_part in sample:
+                    samples.append(sample[body_part])
+            
+            if samples:
+                # Simple average - could be improved with proper quaternion averaging
+                avg_quat = np.mean(samples, axis=0)
+                avg_quat = normalize_quaternion(avg_quat)
+                self.calibration_offsets[body_part] = avg_quat
+                print(f"[INFO] Computed calibration offset for {body_part}")
+        
+        print(f"[INFO] Calibration offsets computed for {len(self.calibration_offsets)} body parts")
+
     def get_calibration_status(self):
-        """Get calibration status."""
-        return self.model_viewer.get_calibration_status()
+        """Returns current calibration status."""
+        progress = 0
+        if self.model_viewer.calibration_mode and self.model_viewer.calibration_samples:
+            progress = min(100, int((len(self.model_viewer.calibration_samples) / 30) * 100))
+        elif self.model_viewer.calibration_complete:
+            progress = 100
+        
+        return {
+            'mode': self.model_viewer.calibration_mode,
+            'complete': self.model_viewer.calibration_complete,
+            'progress': progress,
+            'status_text': self.model_viewer.calibration_status_text
+        }
 
 # --- Quaternion Utility Functions ---
 def normalize_quaternion(q):
@@ -949,56 +1085,6 @@ class Model3DViewer(QGLWidget):
             'status_text': self.calibration_status_text
         }
 
-    def update_calibration_status(self):
-        """Updates calibration status in real-time."""
-        if not self.calibration_mode:
-            return
-        
-        self.calibration_duration += 100
-        
-        # Collect current data from mapped IMUs
-        current_sample = {}
-        stability_check = True
-        
-        for imu_id, body_part in self.imu_mapping.items():
-            if body_part in self.body_parts:
-                current_quat = self.body_parts[body_part]['rot'].copy()
-                current_sample[body_part] = current_quat
-                
-                # Check stability
-                if len(self.calibration_samples) > 5:
-                    last_sample = self.calibration_samples[-1].get(body_part)
-                    if last_sample is not None:
-                        # Calculate angular difference
-                        diff = np.linalg.norm(current_quat - last_sample)
-                        if diff > self.calibration_stability_threshold:
-                            stability_check = False
-        
-        # Add sample if stable
-        if stability_check and current_sample:
-            self.calibration_samples.append(current_sample)
-            
-            # Update status text
-            progress = min(100, (len(self.calibration_samples) * 100) // 30)  # 30 samples = 3 seconds
-            self.calibration_status_text = f"🟡 Calibration: {progress}% - Maintain T-pose"
-        else:
-            # If not stable, slightly reduce samples
-            if len(self.calibration_samples) > 2:
-                self.calibration_samples = self.calibration_samples[:-1]
-            self.calibration_status_text = "🟠 Move less - Keep T-pose stable"
-        
-        # Check if calibration is complete
-        if len(self.calibration_samples) >= 30:  # 3 seconds of stable data
-            self.stop_tpose_calibration()
-        
-        # Timeout after 30 seconds
-        if self.calibration_duration > 30000:
-            self.calibration_status_text = "⏰ Timeout - Restart calibration"
-            self.calibration_mode = False
-            self.calibration_timer.stop()
-        
-        self.update()
-
     def safely_update_display_list(self, force=False):
         """Updates the OpenGL display list with proper error checking."""
         # Don't update if widget is being destroyed
@@ -1283,5 +1369,44 @@ class Model3DViewer(QGLWidget):
         return True
     
     def apply_imu_data(self, imu_id, quaternion_data):
-        """Forward IMU data to the internal viewer."""
-        return self.model_viewer.apply_imu_data(imu_id, quaternion_data)
+        """Applies IMU data (quaternion) to the corresponding mapped body part."""
+        try:
+            # Check if this IMU is mapped to a body part
+            if imu_id not in self.imu_mapping:
+                # Not yet mapped, can't apply data
+                return False
+                
+            body_part = self.imu_mapping[imu_id]
+            if body_part not in self.body_parts:
+                print(f"[WARNING] IMU {imu_id} mapped to unknown body part: {body_part}")
+                return False
+                
+            # Check if the quaternion is valid
+            if not isinstance(quaternion_data, (list, tuple)) or len(quaternion_data) != 4:
+                print(f"[WARNING] Invalid quaternion data for IMU {imu_id}: {quaternion_data}")
+                return False
+                
+            # Apply calibration offset if calibration is complete
+            if self.calibration_complete and imu_id in self.calibration_offsets:
+                # Apply the calibration offset to the incoming quaternion
+                calibrated_quat = quaternion_multiply(
+                    self.calibration_offsets[imu_id],
+                    quaternion_data
+                )
+                self.body_parts[body_part]['rot'] = calibrated_quat
+            else:
+                # Apply directly if no calibration
+                self.body_parts[body_part]['rot'] = quaternion_data
+                
+            # Update the display list if widget is visible
+            if self.isVisible() and not self.is_being_destroyed:
+                self.safely_update_display_list()
+                self.update()  # Request repaint
+                
+            return True
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to apply IMU data: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
