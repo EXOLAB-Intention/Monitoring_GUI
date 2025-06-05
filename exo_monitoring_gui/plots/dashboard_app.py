@@ -14,12 +14,8 @@ from PyQt5.QtCore import Qt, QTimer # QThread, pyqtSignal are in the backend
 from PyQt5.QtGui import QColor, QBrush # QCursor is no longer directly used here
 import pyqtgraph as pg
 
-# Add the parent directory and backend folder to the path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'back')))
-
 from .model_3d_viewer import Model3DWidget
-from exo_monitoring_gui.plots.sensor_dialog import SensorMappingDialog
+from exo_monitoring_gui.plots.sensor_dialogue import SensorMappingDialog # Changed sensor_dialog to sensor_dialogue
 # Import logic from the backend file
 from .back.dashboard_app_back import DashboardAppBack  # Utiliser un chemin relatif
 from .calibration_guide import CalibrationGuideDialog, should_show_guide
@@ -105,7 +101,7 @@ class DashboardApp(QMainWindow):
         
         # Initialiser main_bar_re correctement
         try:
-            from ..utils.Menu_bar import MainBar
+            from exo_monitoring_gui.utils.Menu_bar import MainBar # Changed from ..utils.Menu_bar
             self.main_bar_re = MainBar(self)
             
             if hasattr(self.main_bar_re, '_create_menubar'):
@@ -1387,7 +1383,7 @@ class DashboardApp(QMainWindow):
                         
                         # Create time axis
                         x_values = list(range(len(rec_data[sensor_type][idx])))
-                        
+
                         # Plot each component
                         for i in range(4):
                             y_values = [q[i] for q in rec_data[sensor_type][idx]]
@@ -1581,33 +1577,3 @@ class DashboardApp(QMainWindow):
                     name=sensor_name_full
                 )
                 self.group_curves[sensor_name_full] = curve
-                
-    # Add missing methods
-
-    def highlight_sensor_item(self, sensor_base_name):
-        """Highlight a sensor item in the tree."""
-        item = self.find_sensor_item_by_base_name(sensor_base_name)
-        if item:
-            item.setBackground(0, QBrush(QColor(220, 255, 220)))  # Light green background
-            self.highlighted_sensors.add(sensor_base_name)
-            print(f"[DEBUG] Highlighted sensor: {sensor_base_name}")
-
-    def _replot_sorted_curves_in_group_plot(self, sensor_group_type):
-        """Ensure curves are displayed in a consistent order."""
-        if sensor_group_type not in self.group_plots:
-            return
-            
-        try:
-            # Force the plot to update
-            self.group_plots[sensor_group_type].update()
-        except Exception as e:
-            print(f"[ERROR] Failed to replot {sensor_group_type} curves: {e}")
-
-    # Add a method to clear all plots that will be called from backend
-    def clear_all_plots(self):
-        """Clear all plots when requested by the backend."""
-        # Clear individual plots
-        for plot in self.plots.values():
-            plot.clear()
-        
-        # Clear group plots

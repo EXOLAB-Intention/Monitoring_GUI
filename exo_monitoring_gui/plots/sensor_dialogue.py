@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QColor, QBrush, QFont
-from plots.model_3d_viewer import Model3DWidget
+from .model_3d_viewer import Model3DWidget
 import re
 import json
 import os
@@ -152,9 +152,9 @@ class SimplifiedMappingDialog(QDialog):
     def __init__(self, parent=None, current_mappings=None, available_sensors=None):
         super().__init__(parent)
         self.setWindowTitle("Configuration des capteurs sur le modèle 3D")
-        # Augmenter significativement la taille de la fenêtre
-        self.resize(1200, 900)  # Augmenté de 1000x700 à 1200x900
-        self.setMinimumSize(1100, 800)  # Augmenté de 900x650 à 1100x800
+        # Adjust window size - not too big, not too small
+        self.resize(1000, 800)  # Reduced size for better proportion
+        self.setMinimumSize(800, 600)  # Smaller minimum size
         
         # Store current mappings
         self.current_mappings = current_mappings or {
@@ -454,42 +454,41 @@ class SimplifiedMappingDialog(QDialog):
         # Create a splitter for horizontal layout
         splitter = QSplitter(Qt.Horizontal)
         
-        # 3D Model - Now in a container on the left with expanded size
+        # 3D Model - Using proper size policies instead of fixed sizes
         model_container = QWidget()
         model_layout = QVBoxLayout(model_container)
+        model_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
         
         model_group = QGroupBox("3D Model")
         model_inner_layout = QVBoxLayout()
         self.general_model = Model3DWidget()
         
-        # Ensure the 3D model has sufficient size
-        self.general_model.setMinimumSize(400, 500)  # Increased height for better visibility
+        # Use minimum size and proper size policy instead of fixed size
+        self.general_model.setMinimumSize(300, 400)
         self.general_model.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Set camera distance to see the entire model including feet
-        self.general_model.model_viewer.camera_distance = 6.0  # Increased from default of 4.0
-        
-        # Fix aspect ratio to prevent stretching
-        self.general_model.setFixedWidth(400)
-        self.general_model.setFixedHeight(600)
+        self.general_model.model_viewer.camera_distance = 5.0  # Reduced distance
         
         model_inner_layout.addWidget(self.general_model)
         model_group.setLayout(model_inner_layout)
         model_layout.addWidget(model_group)
         
-        # Give the model container a strong size policy to expand
-        model_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # Set better size policy
+        model_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         splitter.addWidget(model_container)
         
         # Manual assignment - Now on the right side
         assign_container = QWidget()
-        assign_container_layout = QVBoxLayout(assign_container)
+        assign_layout = QVBoxLayout(assign_container)
+        assign_layout.setContentsMargins(5, 5, 5, 5)  # Reduced margins
         
         assign_group = QGroupBox("Assign a Sensor")
-        assign_layout = QGridLayout()
+        assign_inner_layout = QGridLayout()
+        assign_inner_layout.setVerticalSpacing(10)  # Add spacing between rows
         
         # Body part selection
-        assign_layout.addWidget(QLabel("Body part:"), 0, 0)
+        assign_inner_layout.addWidget(QLabel("Body part:"), 0, 0)
         self.body_part_combo = QComboBox()
         
         # Upper body parts
@@ -540,10 +539,10 @@ class SimplifiedMappingDialog(QDialog):
                 padding: 2px;
             }
         """)
-        assign_layout.addWidget(self.body_part_combo, 0, 1)
+        assign_inner_layout.addWidget(self.body_part_combo, 0, 1)
         
         # Sensor type
-        assign_layout.addWidget(QLabel("Sensor type:"), 1, 0)
+        assign_inner_layout.addWidget(QLabel("Sensor type:"), 1, 0)
         self.sensor_type_combo = QComboBox()
         self.sensor_type_combo.addItems(["EMG", "IMU", "pMMG"])
         self.sensor_type_combo.currentTextChanged.connect(self.update_sensor_list)
@@ -579,10 +578,10 @@ class SimplifiedMappingDialog(QDialog):
                 padding: 2px;
             }
         """)
-        assign_layout.addWidget(self.sensor_type_combo, 1, 1)
+        assign_inner_layout.addWidget(self.sensor_type_combo, 1, 1)
         
         # Sensor number
-        assign_layout.addWidget(QLabel("Sensor:"), 2, 0)
+        assign_inner_layout.addWidget(QLabel("Sensor:"), 2, 0)
         self.sensor_id_combo = QComboBox()
         self.sensor_id_combo.setStyleSheet("""
             QComboBox {
@@ -616,10 +615,10 @@ class SimplifiedMappingDialog(QDialog):
                 padding: 2px;
             }
         """)
-        assign_layout.addWidget(self.sensor_id_combo, 2, 1)
+        assign_inner_layout.addWidget(self.sensor_id_combo, 2, 1)
         self.update_sensor_list("IMU")
         
-        # Assignment button
+        # Assignment button with proper sizing
         self.manual_assign_button = QPushButton("Assign this Sensor")
         self.manual_assign_button.clicked.connect(self.manual_assign)
         self.manual_assign_button.setStyleSheet("""
@@ -627,9 +626,9 @@ class SimplifiedMappingDialog(QDialog):
                 background-color: #4CAF50;
                 border: none;
                 border-radius: 6px;
-                padding: 10px 20px;
+                padding: 8px 15px;  /* Reduced padding */
                 color: white;
-                font-size: 14px;
+                font-size: 13px;    /* Smaller font */
                 font-weight: 500;
             }
             QPushButton:hover {
@@ -639,7 +638,7 @@ class SimplifiedMappingDialog(QDialog):
                 background-color: #388E3C;
             }
         """)
-        assign_layout.addWidget(self.manual_assign_button, 3, 0, 1, 2)
+        assign_inner_layout.addWidget(self.manual_assign_button, 3, 0, 1, 2)
         
         # Auto-suggest button
         self.auto_suggest_button = QPushButton("Suggest IMU Mappings")
@@ -661,29 +660,19 @@ class SimplifiedMappingDialog(QDialog):
                 background-color: #1976D2;
             }
         """)
-        assign_layout.addWidget(self.auto_suggest_button, 4, 0, 1, 2)
+        assign_inner_layout.addWidget(self.auto_suggest_button, 4, 0, 1, 2)
         
-        assign_group.setLayout(assign_layout)
-        assign_container_layout.addWidget(assign_group)
-        assign_container_layout.addStretch(1)  # Add stretch to keep the assign group at the top
+        assign_group.setLayout(assign_inner_layout)
+        assign_layout.addWidget(assign_group)
         
-        # Add a help section below the assignment controls
-        help_group = QGroupBox("Help")
-        help_layout = QVBoxLayout()
-        help_text = QLabel(
-            "Use this panel to assign sensors to body parts. "
-            "Select the body part first, then choose the sensor type and number. "
-            "Click 'Assign this Sensor' to complete the mapping."
-        )
-        help_text.setWordWrap(True)
-        help_layout.addWidget(help_text)
-        help_group.setLayout(help_layout)
-        assign_container_layout.addWidget(help_group)
+        # Better size policy for the right panel
+        assign_container.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+        assign_container.setMaximumWidth(350)  # Limit maximum width
         
         splitter.addWidget(assign_container)
         
-        # Set the proportion (70% model, 30% controls)
-        splitter.setSizes([int(splitter.width() * 0.7), int(splitter.width() * 0.3)])
+        # Set better proportion (60% model, 40% controls)
+        splitter.setSizes([600, 400])
         
         layout.addWidget(splitter)
         tab.setLayout(layout)
@@ -694,46 +683,58 @@ class SimplifiedMappingDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout()
         
-        # Header
-        header = QLabel(f"{sensor_type} Sensor Configuration")  # Changed from French
+        # Header with reduced margins
+        header = QLabel(f"{sensor_type} Sensor Configuration")
         header.setFont(QFont("Arial", 12, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
+        header.setContentsMargins(0, 5, 0, 5)  # Reduced vertical margins
         layout.addWidget(header)
         
         # Split view: 3D model on left, controls on right
         splitter = QSplitter(Qt.Horizontal)
         
-        # 3D Model with improved sizing and fixed aspect ratio
+        # 3D Model with proper size policy instead of fixed size
+        model_container = QWidget()
+        model_layout = QVBoxLayout(model_container)
+        model_layout.setContentsMargins(0, 0, 0, 0)  # Reduced margins
+        
         model_widget = Model3DWidget()
-        model_widget.setMinimumSize(400, 500)  # Increased height for better visibility
+        model_widget.setMinimumSize(300, 400)  # Reduced minimum size
         model_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Set camera distance to see the entire model including feet
-        model_widget.model_viewer.camera_distance = 6.0  # Increased from default of 4.0
+        model_widget.model_viewer.camera_distance = 5.0  # Reduced distance
         
-        # Fix aspect ratio to prevent stretching
-        model_widget.setFixedWidth(400)
-        model_widget.setFixedHeight(600)
+        model_layout.addWidget(model_widget)
+        model_container.setLayout(model_layout)
         
-        splitter.addWidget(model_widget)
+        splitter.addWidget(model_container)
         
         # Store model reference
         setattr(self, f"{sensor_type.lower()}_model", model_widget)
         
-        # Assignment controls
+        # Assignment controls with better sizing
         control_widget = QWidget()
         control_layout = QVBoxLayout()
+        control_layout.setContentsMargins(5, 5, 5, 5)  # Reduced margins
         
-        # Instructions
-        instructions = QLabel(f"Assign {sensor_type} sensors to different body parts")  # Changed from French
+        # Instructions with less space
+        instructions = QLabel(f"Assign {sensor_type} sensors to different body parts")
         instructions.setWordWrap(True)
+        instructions.setContentsMargins(0, 0, 0, 5)  # Reduced bottom margin
         control_layout.addWidget(instructions)
         
-        # Use a scroll area to handle many sensors
+        # Use a scroll area to handle many sensors - with better sizing
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
         scroll_content = QWidget()
         control_grid = QGridLayout(scroll_content)
+        control_grid.setVerticalSpacing(8)  # Reduced spacing
+        control_grid.setHorizontalSpacing(10)
+        control_grid.setContentsMargins(5, 5, 5, 5)  # Reduced margins
         
         # ComboBox storage
         self.sensor_combos = getattr(self, "sensor_combos", {})
@@ -807,22 +808,32 @@ class SimplifiedMappingDialog(QDialog):
         scroll_content.setLayout(control_grid)
         scroll.setWidget(scroll_content)
         
-        # Set a reasonable fixed height for the scroll area
-        scroll.setMinimumHeight(300)
+        # Better size for the scroll area
+        scroll.setMinimumHeight(200)
         control_layout.addWidget(scroll)
         
         control_layout.addStretch()
         
-        # Reset button for this sensor type
-        reset_button = QPushButton(f"Reset {sensor_type}")  # Changed from French
+        # Reset button with better sizing
+        reset_button = QPushButton(f"Reset {sensor_type}")
         reset_button.clicked.connect(lambda: self.reset_sensor_type(sensor_type))
-        control_layout.addWidget(reset_button)
+        reset_button.setMaximumWidth(200)  # Limit width
+        reset_button.setStyleSheet("""
+            QPushButton {
+                padding: 6px 12px;  /* Reduced padding */
+                font-size: 13px;    /* Smaller font */
+            }
+        """)
+        control_layout.addWidget(reset_button, 0, Qt.AlignCenter)
         
         control_widget.setLayout(control_layout)
+        control_widget.setMaximumWidth(350)  # Limit maximum width
+        control_widget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+        
         splitter.addWidget(control_widget)
         
-        # Set initial sizes - give more space to the 3D model (60%)
-        splitter.setSizes([int(splitter.width() * 0.6), int(splitter.width() * 0.4)])
+        # Set better proportions
+        splitter.setSizes([600, 400])
         
         layout.addWidget(splitter)
         tab.setLayout(layout)
@@ -987,6 +998,10 @@ class SimplifiedMappingDialog(QDialog):
                 
         new_badges = MappingBadgesWidget(all_mappings, self)
         self.scroll_badges.setWidget(new_badges)
+        
+        # Force refresh to prevent display glitches
+        self.scroll_badges.setVisible(False)
+        self.scroll_badges.setVisible(True)
 
     def reset_sensor_type(self, sensor_type):
         """Reset a specific sensor type"""

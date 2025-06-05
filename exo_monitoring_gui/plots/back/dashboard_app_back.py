@@ -11,13 +11,13 @@ import struct
 import threading
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from utils.ethernet_receiver import recv_all, decode_packet
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))) # Removed
+from exo_monitoring_gui.utils.ethernet_receiver import recv_all, decode_packet # Changed import
 
 # Constante pour le trial end marker
 TRIAL_END_MARKER = b'\x4E'
 
-from plots.model_3d_viewer import Model3DWidget # Garder pour la logique 3D
+from exo_monitoring_gui.plots.model_3d_viewer import Model3DWidget # Changed import
 
 class EthernetServerThread(QThread):
     connection_ready = pyqtSignal(tuple)
