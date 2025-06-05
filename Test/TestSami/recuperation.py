@@ -80,17 +80,44 @@ import h5py
 # save_metadata("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\data6.h5",get_root_metadata("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\d.h5"))
 
 
-def show_root_metadata(hdf5_file_path):
-    try:
-        with h5py.File(hdf5_file_path, 'r') as f:
-            root_attrs = dict(f.attrs)
-            if root_attrs:
-                print(f"Métadonnées à la racine de '{hdf5_file_path}':")
-                for key, value in root_attrs.items():
-                    print(f"  - {key}: {value}")
-            else:
-                print(f"Aucune métadonnée à la racine du fichier '{hdf5_file_path}'.")
-    except Exception as e:
-        print(f"Erreur lors de la lecture du fichier HDF5 : {e}")
+# def show_root_metadata(hdf5_file_path):
+#     try:
+#         with h5py.File(hdf5_file_path, 'r') as f:
+#             root_attrs = dict(f.attrs)
+#             if root_attrs:
+#                 print(f"Métadonnées à la racine de '{hdf5_file_path}':")
+#                 for key, value in root_attrs.items():
+#                     print(f"  - {key}: {value}")
+#             else:
+#                 print(f"Aucune métadonnée à la racine du fichier '{hdf5_file_path}'.")
+#     except Exception as e:
+#         print(f"Erreur lors de la lecture du fichier HDF5 : {e}")
 
-show_root_metadata("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\d.h5")
+# show_root_metadata("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\d.h5")
+
+import h5py
+
+def set_subject_file_true(h5_path):
+    try:
+        with h5py.File(h5_path, 'a') as f:  # 'a' = lecture/écriture sans écrasement
+            f.attrs['subject_created'] = True
+        print(f"✅ Attribut 'subject_file = True' ajouté à la racine de {h5_path}.")
+        return True
+    except Exception as e:
+        print(f"❌ Erreur lors de la modification du fichier : {e}")
+        return False
+
+set_subject_file_true("C:\\Users\\sidib\\Documents\\GitHub\\Monitoring_GUI\\datas\\recuperation\\sensor_20250604_224334_trial1.h5")
+
+def read_root_metadata(h5_path):
+    try:
+        with h5py.File(h5_path, 'r') as f:
+            metadata = dict(f.attrs)
+            print(f"📄 Métadonnées de la racine dans {h5_path} :")
+            for key, value in metadata.items():
+                print(f"  {key} = {value}")
+            return metadata
+    except Exception as e:
+        print(f"❌ Erreur lors de la lecture des métadonnées : {e}")
+        return None
+
