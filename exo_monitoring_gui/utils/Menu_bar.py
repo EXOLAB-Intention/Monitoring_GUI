@@ -459,28 +459,28 @@ class MainBar:
         self.load_existing_trial = self._create_action(
             "Load existing trial",
             lambda: self.load_existing_subject(True),
-            "Ctrl+F",
+            "Ctrl+L",
             tip="Load an existing trial"
         )
 
         self.Save_current_trial = self._create_action(
             "&Save current trial",
             lambda: self.save_experiment_protocol(),
-            "Ctrl+M",
+            "Ctrl+T",
             tip="Save a current trial"
         )
 
         self.Save_current_trial_as = self._create_action(
             "&Save current trial as...",
             lambda: self.save_experiment_protocol_as(),
-            "Ctrl+M",
+            "Ctrl+Shift+T",
             tip="Save current trial in a new file"
         )
 
         self.Save_current_plotas_image = self._create_action(
             "&Save current plotas image",
             lambda: self.show_metadata(),
-            "Ctrl+M",
+            "Ctrl+I",
             tip="Save current plotas image"
         )
 
