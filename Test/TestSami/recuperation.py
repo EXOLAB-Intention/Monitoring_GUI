@@ -108,16 +108,3 @@ def set_subject_file_true(h5_path):
         return False
 
 set_subject_file_true("C:\\Users\\sidib\\Documents\\GitHub\\Monitoring_GUI\\datas\\recuperation\\sensor_20250604_224334_trial1.h5")
-
-def read_root_metadata(h5_path):
-    try:
-        with h5py.File(h5_path, 'r') as f:
-            metadata = dict(f.attrs)
-            print(f"📄 Métadonnées de la racine dans {h5_path} :")
-            for key, value in metadata.items():
-                print(f"  {key} = {value}")
-            return metadata
-    except Exception as e:
-        print(f"❌ Erreur lors de la lecture des métadonnées : {e}")
-        return None
-

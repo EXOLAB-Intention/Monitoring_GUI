@@ -603,6 +603,9 @@ class Review(QMainWindow):
     def _on_trial_path_click(self, path):
         self.file_path = path
         self.metadata = load_metadata(path)
+        # Charger les données du fichier sélectionné
+        self.data = load_hdf5_data(path)
+        # Réinitialiser les widgets de plot et l'arbre
         self.load_hdf5_and_populate_tree(path)
 
     def set_protocol_bold(self):

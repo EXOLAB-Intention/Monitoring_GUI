@@ -692,7 +692,7 @@ class MainBar:
             copy_all_data_preserve_root_metadata(latest_file, f)
             file_dictionary.append(f)
             self.review = Review(parent=None, file_path=f, existing_load=False, trials=file_dictionary)
-
+            print(file_dictionary)
             for widget in QApplication.topLevelWidgets():
                 widget.close()
 
