@@ -252,7 +252,7 @@ class DashboardAppBack:
         
         # Ajouter un timeout pour le socket client
         try:
-            client_socket.settimeout(5.0)  # 5 secondes de timeout
+            client_socket.settimeout(60.0)  # 5 secondes de timeout
         except Exception as e:
             print(f"[WARNING] Failed to set socket timeout: {e}")
         
