@@ -629,6 +629,7 @@ class Model3DViewer(QGLWidget):
 
     def paintGL(self):
         """Render the OpenGL scene."""
+        print("[3D_DEBUG] paintGL called")
         # Skip rendering if conditions aren't right
         if self.is_being_destroyed:
             return
@@ -654,6 +655,10 @@ class Model3DViewer(QGLWidget):
                     for part in imu_parts[:2]:  # Log first 2 parts to avoid spam
                         rot = self.body_parts[part]['rot']
                         print(f"[3D_DEBUG] {part} rotation: {rot}")
+            
+            # Log body part positions and rotations for debugging
+            for part_name, data in self.body_parts.items():
+                print(f"[3D_DEBUG] {part_name}: pos={data['pos']}, rot={data['rot']}")
             
             try:
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -1088,14 +1093,17 @@ class Model3DViewer(QGLWidget):
         for part_name, data in self.body_parts.items():
             pos = data['pos']
             quat_rotation = data['rot']
-            
+
             glPushMatrix()
             # Move to the position of the body part
             glTranslatef(pos[0], pos[1], pos[2])
-            
+
             # Apply quaternion rotation via a matrix
             try:
                 rotation_matrix = quaternion_to_matrix(quat_rotation)
+                # DEBUG: Print rotation for the arm joints
+                if part_name in ['biceps_l', 'forearm_l', 'left_hand', 'biceps_r', 'forearm_r', 'right_hand']:
+                    print(f"[3D_DRAW] {part_name} rot={quat_rotation}")
                 glMultMatrixf(rotation_matrix)
             except Exception as e:
                 print(f"Error applying rotation for {part_name}: {e}")
@@ -1214,7 +1222,8 @@ class Model3DViewer(QGLWidget):
         return True
     
     def apply_imu_data(self, imu_id, quaternion_data):
-        """Applies IMU quaternion data to the mapped body part - VERSION OPTIMISÉE."""
+        print(f"[3D_DEBUG] apply_imu_data called: imu_id={imu_id}, quat={quaternion_data}")
+        print(f"[3D_DEBUG] Current IMU mapping: {self.imu_mapping}")
         if imu_id not in self.imu_mapping:
             return False
             
@@ -1270,16 +1279,16 @@ class Model3DViewer(QGLWidget):
         if not self.imu_mapping:
             print("Cannot start calibration - no IMUs are mapped")
             return False
-            
+
         print(f"[3D_DEBUG] IMU mapping at calibration start: {self.imu_mapping}")
-        self.force_tpose()  # Ajout ici pour forcer la T-pose visuelle
-        
+        # self.force_tpose()  # <-- SUPPRIMER CETTE LIGNE pour ne pas forcer la T-pose à chaque calibration
+
         self.calibration_mode = True
         self.calibration_complete = False
         self.calibration_samples = []
         self.calibration_duration = 0
         self.calibration_status_text = "Starting calibration - Assume T-pose and hold still"
-        
+
         # Start the timer for regular status updates
         self.calibration_timer.start(100)  # 100ms interval
         return True
@@ -1393,3 +1402,70 @@ class Model3DViewer(QGLWidget):
     def get_current_mappings(self):
         """Return the current IMU to body part mapping."""
         return dict(self.imu_mapping)
+
+    def update_kinematic_chains(self):
+        """Propagate parent rotation to child positions for arms and legs (simple forward kinematics)."""
+        # Longueurs (en mètres) : ajuster selon le modèle
+        upper_arm_length = 0.22
+        forearm_length = 0.22
+        thigh_length = 0.25
+        shank_length = 0.23
+        foot_length = 0.12
+
+        # --- BRAS GAUCHE ---
+        biceps_l_pos = self.body_parts['biceps_l']['pos']
+        biceps_l_rot = self.body_parts['biceps_l']['rot']
+        forearm_l_vec = np.array([-upper_arm_length, -0.2, 0.0])
+        forearm_l_world = biceps_l_pos + self.rotate_vector_by_quaternion(forearm_l_vec, biceps_l_rot)
+        self.body_parts['forearm_l']['pos'] = forearm_l_world
+
+        forearm_l_rot = self.body_parts['forearm_l']['rot']
+        hand_l_vec = np.array([-forearm_length, -0.15, 0.0])
+        left_hand_world = forearm_l_world + self.rotate_vector_by_quaternion(hand_l_vec, forearm_l_rot)
+        self.body_parts['left_hand']['pos'] = left_hand_world
+
+        # --- BRAS DROIT ---
+        biceps_r_pos = self.body_parts['biceps_r']['pos']
+        biceps_r_rot = self.body_parts['biceps_r']['rot']
+        forearm_r_vec = np.array([upper_arm_length, -0.2, 0.0])
+        forearm_r_world = biceps_r_pos + self.rotate_vector_by_quaternion(forearm_r_vec, biceps_r_rot)
+        self.body_parts['forearm_r']['pos'] = forearm_r_world
+
+        forearm_r_rot = self.body_parts['forearm_r']['rot']
+        hand_r_vec = np.array([forearm_length, -0.15, 0.0])
+        right_hand_world = forearm_r_world + self.rotate_vector_by_quaternion(hand_r_vec, forearm_r_rot)
+        self.body_parts['right_hand']['pos'] = right_hand_world
+
+        # --- JAMBE GAUCHE ---
+        quadriceps_l_pos = self.body_parts['quadriceps_l']['pos']
+        quadriceps_l_rot = self.body_parts['quadriceps_l']['rot']
+        calves_l_vec = np.array([-0.05, -thigh_length, 0.0])
+        calves_l_world = quadriceps_l_pos + self.rotate_vector_by_quaternion(calves_l_vec, quadriceps_l_rot)
+        self.body_parts['calves_l']['pos'] = calves_l_world
+
+        calves_l_rot = self.body_parts['calves_l']['rot']
+        foot_l_vec = np.array([-0.02, -shank_length, foot_length])
+        left_foot_world = calves_l_world + self.rotate_vector_by_quaternion(foot_l_vec, calves_l_rot)
+        self.body_parts['left_foot']['pos'] = left_foot_world
+
+        # --- JAMBE DROITE ---
+        quadriceps_r_pos = self.body_parts['quadriceps_r']['pos']
+        quadriceps_r_rot = self.body_parts['quadriceps_r']['rot']
+        calves_r_vec = np.array([0.05, -thigh_length, 0.0])
+        calves_r_world = quadriceps_r_pos + self.rotate_vector_by_quaternion(calves_r_vec, quadriceps_r_rot)
+        self.body_parts['calves_r']['pos'] = calves_r_world
+
+        calves_r_rot = self.body_parts['calves_r']['rot']
+        foot_r_vec = np.array([0.02, -shank_length, foot_length])
+        right_foot_world = calves_r_world + self.rotate_vector_by_quaternion(foot_r_vec, calves_r_rot)
+        self.body_parts['right_foot']['pos'] = right_foot_world
+
+    def rotate_vector_by_quaternion(self, v, q):
+        """Rotate vector v by quaternion q."""
+        # v: np.array shape (3,)
+        # q: np.array shape (4,) [w, x, y, z]
+        w, x, y, z = q
+        q_vec = np.array([x, y, z])
+        uv = np.cross(q_vec, v)
+        uuv = np.cross(q_vec, uv)
+        return v + 2 * (w * uv + uuv)

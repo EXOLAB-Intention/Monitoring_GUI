@@ -52,6 +52,15 @@ def main():
                 print(f"ERROR: Required package '{package}' is not installed.")
                 return
         
+        # --- Initialization order ---
+        # 1. PyQt application and main window are created.
+        # 2. The 3D widget (Model3DWidget) is constructed, which loads the ML model if present.
+        #    (The actual loading of the predictor is done in model_3d_viewer.py)
+        # 3. IMU mapping and calibration can be performed in any order after connection.
+        #    - Calibration only affects IMU correction, not ML predictor.
+        #    - Motion prediction (ML) is independent and can be toggled at any time.
+        # 4. IMU data is displayed as soon as mapping is done and data is received.
+        
         from app import launch
         print("Imported launch function")
         launch()

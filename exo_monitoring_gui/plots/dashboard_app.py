@@ -704,10 +704,17 @@ class DashboardApp(QMainWindow):
 
         configured_imu_ids = self.backend.sensor_config['imu_ids']
         
+        # DEBUG: Afficher les données IMU reçues
+        print(f"[DASHBOARD] apply_imu_data_to_3d_model called with {len(imu_data_list)} IMUs")
+        for i, quaternion_data in enumerate(imu_data_list):
+            print(f"  IMU {i}: {quaternion_data}")
+
         for i, quaternion_data in enumerate(imu_data_list):
             if i < len(configured_imu_ids):
                 imu_id = configured_imu_ids[i]
                 try:
+                    # DEBUG: Afficher la transmission à model_3d_widget
+                    print(f"[DASHBOARD] Transmitting IMU {imu_id} quaternion {quaternion_data} to model_3d_widget")
                     success = self.model_3d_widget.apply_imu_data(imu_id, quaternion_data)
                     if not success:
                         print(f"[DASHBOARD_DEBUG] Failed to apply IMU {imu_id} data")
@@ -1381,13 +1388,6 @@ class DashboardApp(QMainWindow):
                 self.curves[curve_key] = curve
         else:
             self.backend.plot_data[sensor_name_base] = np.zeros(100)
-            curve = plot_widget.plot(self.backend.plot_data[sensor_name_base], pen=pg.mkPen('b', width=2))
-            self.curves[sensor_name_base] = curve
-
-        if is_group_mode_imu:
-            self.highlighted_sensors.add(sensor_name_base)
-
-    def add_sensor_curve_to_group_plot(self, sensor_name_full, sensor_group_type):
         """Ajoute une courbe pour un capteur spécifique à un graphique de groupe."""
         if sensor_group_type not in self.group_plots:
             self.create_group_plots()
