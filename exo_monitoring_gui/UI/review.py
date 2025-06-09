@@ -233,14 +233,10 @@ class Review(QMainWindow):
         self.build_footer(main_layout)
         self.build_text_areas(main_layout)
 
-        # Disable the Start Recording button if existing_load is False
-        # if not getattr(self, 'existing_load', False):
-        #     if hasattr(self, 'record_button'):
-        #         self.record_button.setEnabled(False)
-        #         self.connect_button.setEnabled(False)
-        #     else:
-        #         # If build_footer hasn't run yet, delay disabling
-        #         QTimer.singleShot(0, lambda: self.record_button.setEnabled(False))
+        if not self.existing_load:
+            self.record_button.setEnabled(False)
+        else:
+            self.record_button.setEnabled(True)
 
     def build_header(self, layout):
         header = QHBoxLayout()
@@ -530,8 +526,6 @@ class Review(QMainWindow):
     def build_footer(self, layout):
         footer = QHBoxLayout()
 
-        self.connect_button = QPushButton("Connect")
-        footer.addWidget(self.connect_button)
 
         self.record_button = QPushButton("Start Recording")
         self.record_button.clicked.connect(self.on_start_recording)
@@ -603,10 +597,19 @@ class Review(QMainWindow):
     def _on_trial_path_click(self, path):
         self.file_path = path
         self.metadata = load_metadata(path)
-        # Charger les données du fichier sélectionné
         self.data = load_hdf5_data(path)
-        # Réinitialiser les widgets de plot et l'arbre
         self.load_hdf5_and_populate_tree(path)
+        # Mettre à jour la zone de texte du protocole expérimental selon la métadonnée
+        protocol_text = ""
+        try:
+            with h5py.File(path, 'r') as f:
+                if 'experiment_protocol' in f.attrs:
+                    protocol_text = f.attrs['experiment_protocol']
+                    if isinstance(protocol_text, bytes):
+                        protocol_text = protocol_text.decode('utf-8')
+        except Exception as e:
+            print(f"Erreur lecture experiment_protocol: {e}")
+        self.experiment_protocol_text.setPlainText(protocol_text)
 
     def set_protocol_bold(self):
         cursor = self.experiment_protocol_text.textCursor()

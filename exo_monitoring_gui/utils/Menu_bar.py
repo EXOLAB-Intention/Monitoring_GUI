@@ -8,7 +8,7 @@ import os
 import re
 from datetime import datetime
 from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, copy_only_root_metadata, copy_all_data_preserve_root_metadata
+from utils.hdf5_utils import load_metadata, copy_only_root_metadata, copy_all_data_preserve_root_metadata, inject_metadata_to_hdf
 from UI.back.main_window_back import MainAppBack
 from utils.file_receiver import request_files, SERVER_IP, PORT, OUT_DIR
 class MainBar:
@@ -653,8 +653,9 @@ class MainBar:
             print(latest_file)
             print(self.main_app.subject_file)
             copy_all_data_preserve_root_metadata(latest_file, f)
+            inject_metadata_to_hdf("sensor_mappings.json", f)
 
-            self.review = Review(file_path=self.main_app.subject_file)
+            self.review = Review(file_path=self.main_app.subject_file,existing_load=True)
 
             for widget in QApplication.topLevelWidgets():
                 widget.close()
@@ -690,8 +691,10 @@ class MainBar:
             print("dededededededede 4")
             print(latest_file)
             copy_all_data_preserve_root_metadata(latest_file, f)
+            inject_metadata_to_hdf("sensor_mappings.json", f)
+
             file_dictionary.append(f)
-            self.review = Review(parent=None, file_path=f, existing_load=False, trials=file_dictionary)
+            self.review = Review(parent=None, file_path=f, existing_load=True, trials=file_dictionary)
             print(file_dictionary)
             for widget in QApplication.topLevelWidgets():
                 widget.close()

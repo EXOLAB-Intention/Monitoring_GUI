@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QBrush, QColor
 import numpy as np
 import pyqtgraph as pg
-
+import json
 
 
 def load_metadata(subject_file):
@@ -362,3 +362,18 @@ def copy_only_root_metadata(source_path, dest_path):
     except Exception as e:
         print(f"Erreur lors de la copie des métadonnées : {e}")
         return False
+
+def inject_metadata_to_hdf(json_relative_path, hdf_path):
+    base_dir = os.path.dirname(__file__)  # répertoire de ici.py
+    json_full_path = os.path.join(base_dir, '..', 'plots', json_relative_path)
+    json_full_path = os.path.abspath(json_full_path)
+
+    # Charger le JSON
+    with open(json_full_path, 'r') as f:
+        metadata = json.load(f)
+
+    # Injecter dans le HDF
+    with h5py.File(hdf_path, 'a') as hdf:
+        if "metadata" in hdf.attrs:
+            del hdf.attrs["metadata"]
+        hdf.attrs["metadata"] = json.dumps(metadata)

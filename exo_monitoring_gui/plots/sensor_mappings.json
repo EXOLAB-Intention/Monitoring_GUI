@@ -1,15 +1,5 @@
 {
-  "EMG": {
-    "1": "biceps_l",
-    "2": "biceps_r",
-    "3": "quadriceps_l",
-    "4": "quadriceps_r"
-  },
-  "IMU": {
-    "2": "left_hand",
-    "3": "quadriceps_l",
-    "17": "left_hand",
-    "21": "right_hand"
-  },
+  "EMG": {},
+  "IMU": {},
   "pMMG": {}
 }
