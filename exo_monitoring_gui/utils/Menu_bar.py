@@ -795,6 +795,11 @@ class MainBar:
 
         new_file_name = f"{base_name_clean}_trial_{trial_number}.h5"
         new_file_path = os.path.join(base_dir, new_file_name)
+        
+        while os.path.exists(new_file_path):
+            base_name_clean += "_"
+            new_file_name = f"{base_name_clean}_trial_{trial_number}.h5"
+            new_file_path = os.path.join(base_dir, new_file_name)
 
         try:
             # Lire les métadonnées du fichier source
