@@ -4,7 +4,12 @@ import os
 
 # Assurez-vous que le répertoire principal est dans le chemin Python
 script_dir = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(script_dir)
+
+# The parent directory of script_dir is the project root that contains the 'exo_monitoring_gui' package.
+# This directory needs to be in sys.path for 'from exo_monitoring_gui...' imports to work.
+project_root_dir = os.path.dirname(script_dir)
+if project_root_dir not in sys.path:
+    sys.path.insert(0, project_root_dir) # Insert at the beginning to ensure it's checked first
 
 def main():
     try:
@@ -29,7 +34,7 @@ def main():
             if "QObject" in message and "destroyed" in message:
                 return
             
-            # Afficher les autres messages importants
+            # Afficher les autres messages importants   3
             if mode == QtCriticalMsg or mode == QtFatalMsg:
                 print(f"Critical: {message}")
             elif mode == QtWarningMsg and "QFont" not in message:  # Ignorer les avertissements de police
@@ -67,7 +72,7 @@ def main():
                 print(f"ERROR: Required package '{package}' is not installed.")
                 return
         
-        from app import launch
+        from exo_monitoring_gui.app import launch # Changed from 'from app import launch'
         print("Imported launch function")
         launch()
         print("Application launched")
