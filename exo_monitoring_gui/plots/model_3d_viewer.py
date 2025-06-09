@@ -1,29 +1,18 @@
 import sys
 import os
-import math
 import numpy as np
-import traceback
-
-# Add required PyQt5 imports
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
 from PyQt5.QtCore import Qt, QTimer, QElapsedTimer
 from PyQt5.QtOpenGL import QGLWidget, QGLFormat
-from PyQt5.QtGui import QFont, QPainter, QColor
-
-# Add OpenGL imports
-try:
-    from OpenGL.GL import *
-    from OpenGL.GLU import *
-except ImportError:
-    print("Warning: OpenGL not available. 3D model will not function.")
+from PyQt5.QtGui import QFont, QPainter, QColor  # Added QColor import
+from OpenGL.GL import *
+from OpenGL.GLU import *
+import math
+import time  # Import time module for optimized updates
 
 # Add parent directory to path for proper module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.body_motion_predictor import MotionPredictorFactory
-
-# Define module-level variables to avoid NameError
-stability_check = True  # Default: stability check is on. Set to False if not needed.
-current_sample = None    # Default: no current sample. Initialize as appropriate for your application.
 
 # Définir la classe Model3DWidget au début pour qu'elle soit disponible lors des imports
 class Model3DWidget(QWidget):
@@ -80,188 +69,19 @@ class Model3DWidget(QWidget):
     
     def start_tpose_calibration(self):
         """Start T-pose calibration."""
-        if self.model_viewer.calibration_mode:
-            print("[WARNING] T-pose calibration already in progress")
-            return False
-        
-        if not self.model_viewer.imu_mapping:
-            print("[WARNING] No IMU mappings defined. Cannot start calibration.")
-            return False
-        
-        print("[INFO] Starting T-pose calibration")
-        self.model_viewer.calibration_mode = True
-        self.model_viewer.calibration_complete = False
-        self.model_viewer.calibration_duration = 0
-        self.model_viewer.calibration_samples = []
-        self.model_viewer.calibration_status_text = "🟡 Waiting for stable T-pose position"
-        
-        # Start the calibration timer
-        self.model_viewer.calibration_timer.start(100)
-        
-        # Set calibration state for UI feedback
-        self.model_viewer.calibration_progress = 0
-        
-        print("[INFO] T-pose calibration started")
-        return True
-
+        return self.model_viewer.start_tpose_calibration()
+    
     def stop_tpose_calibration(self):
         """Stop T-pose calibration."""
-        if not self.model_viewer.calibration_mode and not self.model_viewer.calibration_complete:
-            print("[WARNING] No T-pose calibration in progress")
-            return False
-        
-        # Force completion with current samples
-        if self.model_viewer.calibration_mode:
-            if self.model_viewer.calibration_samples:
-                self.model_viewer.compute_calibration_offsets()
-                self.model_viewer.calibration_complete = True
-                self.model_viewer.calibration_status_text = "🟢 Calibration complete!"
-            else:
-                self.model_viewer.calibration_status_text = "🔴 Calibration failed - no samples"
-        
-        # Stop the calibration timer
-        self.model_viewer.calibration_timer.stop()
-        self.model_viewer.calibration_mode = False
-        
-        return self.model_viewer.calibration_complete
-
+        return self.model_viewer.stop_tpose_calibration()
+    
     def reset_calibration(self):
-        """Reset calibration state."""
-        if hasattr(self, 'model_viewer'):
-            self.model_viewer.calibration_mode = False
-            self.model_viewer.calibration_complete = False
-            self.model_viewer.calibration_samples = []
-            self.model_viewer.calibration_offsets = {}
-            self.model_viewer.calibration_status_text = "🔴 Calibration required"
-            if hasattr(self.model_viewer, 'calibration_timer'):
-                self.model_viewer.calibration_timer.stop()
-
-    def update_calibration_status(self):
-        """Updates calibration status in real-time."""
-        if not self.calibration_mode:
-            return
-        
-        self.calibration_duration += 100
-        
-        # Collect current data from mapped IMUs
-        current_sample = {}
-        stability_check = True  # Initialize stability check as True
-        
-        # Check if we have any IMU mappings
-        if not self.imu_mapping:
-            print("[ERROR] No IMU mappings defined. Stopping calibration.")
-            self.calibration_timer.stop()
-            self.calibration_mode = False
-            return
-        
-        for imu_id, body_part in self.imu_mapping.items():
-            if body_part in self.body_parts:
-                # Get current rotation for this body part
-                current_rotation = self.body_parts[body_part]['rot']
-                
-                # Add to current sample
-                if current_rotation is not None:
-                    current_sample[body_part] = current_rotation.copy()
-                    
-                    # Check stability if we have previous samples
-                    if len(self.calibration_samples) > 0:
-                        # Get last sample for this body part
-                        last_sample = self.calibration_samples[-1].get(body_part)
-                        if last_sample is not None:
-                            # Calculate difference between current and last rotation
-                            diff = sum(abs(a - b) for a, b in zip(current_rotation, last_sample))
-                            
-                            # If difference is too large, pose is not stable
-                            if diff > self.calibration_stability_threshold:
-                                stability_check = False
-                                break
-
-        # Add sample if stable
-        if stability_check and current_sample:
-            self.calibration_samples.append(current_sample)
-            progress = min(100, int((len(self.calibration_samples) / 30) * 100))
-            self.calibration_status_text = f"🟡 Hold T-pose... {progress}%"
-            print(f"[INFO] Calibration progress: {progress}%")
-        else:
-            # If not stable, give feedback
-            self.calibration_status_text = "🟠 Movement detected. Please hold T-pose still."
-            print("[INFO] Movement detected during calibration")
-        
-        # Check if calibration is complete
-        if len(self.calibration_samples) >= 30:
-            self.compute_calibration_offsets()
-            self.calibration_timer.stop()
-            self.calibration_mode = False
-            self.calibration_complete = True
-            self.calibration_status_text = "🟢 Calibration complete! T-pose reference saved."
-            print("[INFO] T-pose calibration completed successfully")
-        
-        # Timeout after 30 seconds
-        if self.calibration_duration > 30000:
-            self.calibration_timer.stop()
-            self.calibration_mode = False
-            self.calibration_status_text = "🔴 Calibration timed out. Please try again."
-            print("[WARNING] T-pose calibration timed out")
-        
-        # Force update to show calibration progress
-        self.update()
-
-    def compute_calibration_offsets(self):
-        """Computes calibration offsets from collected samples."""
-        if not self.calibration_samples:
-            print("[ERROR] No calibration samples to compute offsets from")
-            return
-        
-        self.calibration_offsets = {}
-        
-        # Compute average quaternion for each body part
-        for body_part in self.body_parts:
-            samples = []
-            for sample in self.calibration_samples:
-                if body_part in sample:
-                    samples.append(sample[body_part])
-            
-            if samples:
-                # Calculate average quaternion (simple average for now)
-                avg_quat = [0, 0, 0, 0]
-                for quat in samples:
-                    for i in range(4):
-                        avg_quat[i] += quat[i]
-                
-                for i in range(4):
-                    avg_quat[i] /= len(samples)
-                
-                # Normalize the average quaternion
-                self.calibration_offsets[body_part] = normalize_quaternion(avg_quat)
-        
-        print(f"[INFO] Calibration offsets computed for {len(self.calibration_offsets)} body parts")
-
-    def get_current_mappings(self):
-        """Returns the current IMU to body part mappings."""
-        return self.model_viewer.imu_mapping
-
-    def set_emg_mapping(self, emg_mapping):
-        """Sets the EMG to body part mappings."""
-        self.model_viewer.emg_mapping = emg_mapping
-        
-    def set_pmmg_mapping(self, pmmg_mapping):
-        """Sets the pMMG to body part mappings."""
-        self.model_viewer.pmmg_mapping = pmmg_mapping
-
+        """Reset T-pose calibration."""
+        self.model_viewer.reset_calibration()
+    
     def get_calibration_status(self):
-        """Returns current calibration status."""
-        progress = 0
-        if self.model_viewer.calibration_mode and len(self.model_viewer.calibration_samples) > 0:
-            progress = min(100, int((len(self.model_viewer.calibration_samples) / 30) * 100))
-        elif self.model_viewer.calibration_complete:
-            progress = 100
-        
-        return {
-            'mode': self.model_viewer.calibration_mode,
-            'complete': self.model_viewer.calibration_complete,
-            'progress': progress,
-            'status_text': self.model_viewer.calibration_status_text
-        }
+        """Get calibration status."""
+        return self.model_viewer.get_calibration_status()
 
 # --- Quaternion Utility Functions ---
 def normalize_quaternion(q):
@@ -310,29 +130,31 @@ class Model3DViewer(QGLWidget):
         fmt.setDoubleBuffer(True)
         fmt.setSampleBuffers(True)
         fmt.setSwapInterval(1)
+        # Très important: activer la transparence du format OpenGL
         fmt.setAlpha(True)
         
+        # Try to set a standard OpenGL version
         try:
-            fmt.setVersion(2, 1)
+            fmt.setVersion(2, 1)  # OpenGL 2.1 est largement supporté
             fmt.setProfile(QGLFormat.CompatibilityProfile)
         except:
-            pass
+            pass  # Ignorer si la version n'est pas supportée
         
         super().__init__(fmt, parent)
         
-        # Initialize all required attributes
+        # Add flag to track widget destruction state
         self.is_being_destroyed = False
-        self._initialized = False
-        self.is_visible_to_user = True
         
+        # Force taille minimale pour assurer la visibilité
         self.setMinimumSize(300, 300)
         self.rotation_x = 0
         self.rotation_y = 0
         self.rotation_z = 0
         self.last_pos = None
-        self.mouse_pressed = False
+        self.mouse_pressed = False  # Initialize mouse pressed state
         
-        self.camera_distance = 3.5
+        # Initialize camera distance for zoom functionality
+        self.camera_distance = 4.0
         
         self.animation_phase = 0
         self.walking = False
@@ -345,7 +167,6 @@ class Model3DViewer(QGLWidget):
 
         identity_quaternion = np.array([1.0, 0.0, 0.0, 0.0])
         
-        # Initialize body parts dictionary
         self.body_parts = {
             'head': {'pos': np.array([0, 1.7, 0]), 'rot': identity_quaternion.copy()},
             'neck': {'pos': np.array([0, 1.5, 0]), 'rot': identity_quaternion.copy()},
@@ -381,144 +202,692 @@ class Model3DViewer(QGLWidget):
         }
 
         self.imu_mapping = {}
-        self.emg_mapping = {}
-        self.pmmg_mapping = {}
+        self.emg_mapping = {}  # Initialize EMG mapping dictionary
+        self.pmmg_mapping = {}  # Initialize pMMG mapping dictionary
         
-        # Initialize motion predictor
+        self.legacy_mappings = {
+            'left_elbow': 'forearm_l',
+            'right_elbow': 'forearm_r',
+            'left_knee': 'calves_l',
+            'right_knee': 'calves_r'
+        }
+        
+        self.num_precalc_frames = 120
+        self.precalculated_animation_frames = self._precalculate_animation(self.num_precalc_frames)
+        self.precalc_frame = 0
+        
+        self.display_list = 0
+        self.quadric = None
+        
+        self.animation_main_timer = QTimer(self)
+        self.animation_main_timer.timeout.connect(self.update_animation_frame)
+        self.animation_main_timer.setInterval(16)
+
+        self.fps_update_timer = QTimer(self)
+        self.fps_update_timer.timeout.connect(self.update_fps)
+        self.fps_update_timer.start(1000)
+        
+        # Initialize the motion predictor - CORRIGER LE CHEMIN DU MODÈLE
         base_dir = os.path.dirname(os.path.dirname(__file__))
-        model_path = os.path.join(base_dir, 'data', 'motion_model.pth')
+        model_paths = [
+            os.path.join(base_dir, 'data', 'motion_model.pth'),
+            os.path.join(base_dir, 'data', 'training_viz', 'motion_model.pth')
+        ]
         
+        # Essayer les deux chemins possibles
+        model_path = None
+        for path in model_paths:
+            if os.path.exists(path):
+                model_path = path
+                print(f"Modèle trouvé: {path}")
+                break
+        
+        if not model_path:
+            print("Attention: Aucun modèle trouvé dans les chemins standards.")
+            model_path = model_paths[0]  # Utiliser le chemin par défaut pour afficher l'erreur
+            
         self.motion_predictor = MotionPredictorFactory.create_predictor("simple", model_path)
-        self.use_motion_prediction = True
+        self.use_motion_prediction = True  # Enabled by default
         
-        # Calibration state
+        # État de calibration T-pose
         self.calibration_mode = False
         self.calibration_complete = False
         self.calibration_reference = {}
         self.calibration_timer = QTimer(self)
         self.calibration_timer.timeout.connect(self.update_calibration_status)
         self.calibration_duration = 0
-        self.calibration_required_time = 3000
-        self.calibration_stability_threshold = 0.1
+        self.calibration_required_time = 3000  # 3 secondes en T-pose
+        self.calibration_stability_threshold = 0.1  # Seuil de stabilité des quaternions
         self.calibration_samples = []
         self.calibration_status_text = "🔴 Calibration requise - Placez-vous en T-pose"
+        
+        # Offset de calibration pour chaque partie du corps
         self.calibration_offsets = {}
-
+                
     def _precalculate_animation(self, num_frames):
-        """Precalculate animation frames"""
-        return []
+        """Precalculate animation frames with quaternion rotations and positions."""
+        print(f"Precalculating {num_frames} animation frames in quaternions...")
+        animation_frames = []
+        identity_quat = np.array([1.0, 0.0, 0.0, 0.0])
+
+        for i in range(num_frames):
+            phase = (i / float(num_frames)) * 2 * math.pi
+            
+            # Calculate key angles for animation
+            arm_swing_angle_rad = math.radians(45.0 * math.sin(phase))
+            leg_swing_angle_left_rad = math.radians(40.0 * math.sin(phase))
+            leg_swing_angle_right_rad = math.radians(40.0 * math.sin(phase + math.pi))
+            
+            torso_sway_offset = 0.05 * math.sin(phase)
+            vertical_bounce_offset = 0.03 * math.sin(phase * 2.0)
+            torso_rotation_angle_y_rad = math.radians(10.0 * math.sin(phase))
+            
+            head_rotation_angle_x_rad = math.radians(5.0 * math.sin(phase + 0.2))
+            head_rotation_angle_y_rad = torso_rotation_angle_y_rad * 0.5
+            head_rotation_angle_z_rad = math.radians(3.0 * math.sin(phase))
+
+            # Initialize frame data for all body parts
+            frame_data = {}
+            for part_name in self.body_parts.keys():
+                frame_data[part_name] = {
+                    'pos_offset': np.array([0.0, 0.0, 0.0]), 
+                    'rot_quat': identity_quat.copy()
+                }
+
+            # --- Positions ---
+            # Torso and head - lateral sway and vertical bounce
+            frame_data['torso']['pos_offset'][0] = torso_sway_offset
+            frame_data['head']['pos_offset'][0] = torso_sway_offset * 1.1
+            frame_data['neck']['pos_offset'][0] = torso_sway_offset * 1.05
+            
+            frame_data['torso']['pos_offset'][1] = vertical_bounce_offset
+            frame_data['head']['pos_offset'][1] = vertical_bounce_offset * 1.2
+            frame_data['neck']['pos_offset'][1] = vertical_bounce_offset * 1.1
+            frame_data['hip']['pos_offset'][0] = torso_sway_offset * 0.5
+            frame_data['hip']['pos_offset'][1] = vertical_bounce_offset
+
+            # --- Arm movement positions ---
+            # Forward/backward arm movement
+            frame_data['left_hand']['pos_offset'][2] = -0.3 * math.sin(phase)
+            frame_data['forearm_l']['pos_offset'][2] = -0.2 * math.sin(phase)
+            frame_data['biceps_l']['pos_offset'][2] = -0.1 * math.sin(phase)
+            
+            frame_data['right_hand']['pos_offset'][2] = 0.3 * math.sin(phase)
+            frame_data['forearm_r']['pos_offset'][2] = 0.2 * math.sin(phase)
+            frame_data['biceps_r']['pos_offset'][2] = 0.1 * math.sin(phase)
+            
+            # --- Leg movement positions ---
+            frame_data['left_foot']['pos_offset'][2] = 0.3 * math.sin(phase)
+            frame_data['calves_l']['pos_offset'][2] = 0.2 * math.sin(phase)
+            frame_data['quadriceps_l']['pos_offset'][2] = 0.1 * math.sin(phase)
+            
+            frame_data['right_foot']['pos_offset'][2] = -0.3 * math.sin(phase)
+            frame_data['calves_r']['pos_offset'][2] = -0.2 * math.sin(phase)
+            frame_data['quadriceps_r']['pos_offset'][2] = -0.1 * math.sin(phase)
+
+            # --- Quaternion rotations ---
+            # Torso rotation around Y-axis (yaw)
+            if abs(torso_rotation_angle_y_rad) > 1e-6:
+                frame_data['torso']['rot_quat'] = quaternion_from_axis_angle([0, 1, 0], torso_rotation_angle_y_rad)
+
+            # Combined head rotation (pitch, yaw, roll)
+            q_head_x = quaternion_from_axis_angle([1, 0, 0], head_rotation_angle_x_rad)
+            q_head_y = quaternion_from_axis_angle([0, 1, 0], head_rotation_angle_y_rad)
+            q_head_z = quaternion_from_axis_angle([0, 0, 1], head_rotation_angle_z_rad)
+            combined_head_rot = quaternion_multiply(q_head_y, q_head_x)
+            combined_head_rot = quaternion_multiply(combined_head_rot, q_head_z)
+            frame_data['head']['rot_quat'] = combined_head_rot
+
+            # Arm rotations (pitch - rotation around X)
+            if abs(arm_swing_angle_rad) > 1e-6:
+                left_arm_swing_q = quaternion_from_axis_angle([1, 0, 0], arm_swing_angle_rad)
+                right_arm_swing_q = quaternion_from_axis_angle([1, 0, 0], -arm_swing_angle_rad)
+
+                # Left arm
+                for part in ['deltoid_l', 'biceps_l', 'forearm_l', 'left_hand']:
+                    if part in frame_data:
+                        frame_data[part]['rot_quat'] = left_arm_swing_q
+                
+                # Right arm
+                for part in ['deltoid_r', 'biceps_r', 'forearm_r', 'right_hand']:
+                    if part in frame_data:
+                        frame_data[part]['rot_quat'] = right_arm_swing_q
+            
+            # Leg rotations (pitch - rotation around X)
+            # Left leg
+            if abs(leg_swing_angle_left_rad) > 1e-6:
+                q_leg_l = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_left_rad)
+                q_knee_l = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_left_rad * 0.5)
+                q_foot_l = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_left_rad * 0.2)
+
+                frame_data['quadriceps_l']['rot_quat'] = q_leg_l
+                frame_data['ishcio_hamstrings_l']['rot_quat'] = q_leg_l
+                frame_data['calves_l']['rot_quat'] = q_knee_l
+                frame_data['left_foot']['rot_quat'] = q_foot_l
+            
+            # Right leg
+            if abs(leg_swing_angle_right_rad) > 1e-6:
+                q_leg_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad)
+                q_knee_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad * 0.5)
+                q_foot_r = quaternion_from_axis_angle([1, 0, 0], leg_swing_angle_right_rad * 0.2)
+
+                frame_data['quadriceps_r']['rot_quat'] = q_leg_r
+                frame_data['ishcio_hamstrings_r']['rot_quat'] = q_leg_r
+                frame_data['calves_r']['rot_quat'] = q_knee_r
+                frame_data['right_foot']['rot_quat'] = q_foot_r
+            
+            animation_frames.append(frame_data)
+        
+        print(f"Animation precalculation completed: {len(animation_frames)} frames.")
+        return animation_frames
 
     def get_default_state(self, part_name):
-        """Get default state for a body part"""
         if part_name in self.initial_body_parts_state:
             return self.initial_body_parts_state[part_name]['pos'], self.initial_body_parts_state[part_name]['rot']
         return np.array([0, 0, 0]), np.array([1.0, 0, 0, 0])
 
     def update_animation_frame(self):
-        """Update animation frame"""
-        pass
+        """Updates the walking animation using pre-calculated frames."""
+        if not self.walking:
+            return
+
+        try:
+            # Check the availability of animation frames
+            if not self.precalculated_animation_frames:
+                print("Error: No precalculated animation frames available.")
+                return
+            
+            # Increment frame index and limit it to available frames
+            self.precalc_frame = (self.precalc_frame + 1) % self.num_precalc_frames
+            
+            # Check the index is valid
+            if self.precalc_frame >= len(self.precalculated_animation_frames):
+                print(f"Error: Frame index {self.precalc_frame} out of bounds (max: {len(self.precalculated_animation_frames)-1})")
+                self.precalc_frame = 0  # Reset to 0 to avoid error
+            
+            # Retrieve current frame data
+            current_frame_data = self.precalculated_animation_frames[self.precalc_frame]
+
+            # Store currently mapped IMU body parts to preserve their rotations and positions
+            imu_controlled_parts = set(self.imu_mapping.values())
+            imu_rotations = {}
+            imu_positions = {}
+            for part_name in imu_controlled_parts:
+                if part_name in self.body_parts:
+                    imu_rotations[part_name] = self.body_parts[part_name]['rot'].copy()
+                    imu_positions[part_name] = self.body_parts[part_name]['pos'].copy()
+
+            # Apply data to each body part
+            for part_name, data in self.body_parts.items():
+                # Skip IMU-controlled parts to preserve their rotations and positions
+                if part_name in imu_controlled_parts:
+                    continue
+
+                # Check that this part exists in the frame data
+                if part_name in current_frame_data:
+                    # Retrieve base position and rotation (without animation)
+                    base_pos, _ = self.get_default_state(part_name)
+                    
+                    # Retrieve animation offsets and rotations
+                    anim_data = current_frame_data[part_name]
+                    pos_offset = anim_data.get('pos_offset', np.array([0.0, 0.0, 0.0]))
+                    rot_quat = anim_data.get('rot_quat', np.array([1.0, 0.0, 0.0, 0.0]))
+                    
+                    # Apply position offsets to base position
+                    data['pos'] = base_pos + pos_offset
+                    
+                    # Apply rotation quaternion directly
+                    data['rot'] = rot_quat.copy()  # Important copy to avoid shared references
+            
+            # Restore IMU-controlled part rotations and positions
+            for part_name in imu_controlled_parts:
+                if part_name in self.body_parts:
+                    self.body_parts[part_name]['rot'] = imu_rotations[part_name]
+                    self.body_parts[part_name]['pos'] = imu_positions[part_name]
+
+            # If walking animation is active and using motion prediction, apply prediction
+            # only to non-IMU parts
+            if self.use_motion_prediction:
+                try:
+                    updated_body_parts = self.motion_predictor.predict_joint_movement(
+                        self.body_parts, imu_controlled_parts, self.walking)
+                    # Apply predictions only to parts not controlled by IMUs
+                    for part_name, data in updated_body_parts.items():
+                        if part_name not in imu_controlled_parts and part_name in self.body_parts:
+                            self.body_parts[part_name]['rot'] = data['rot']
+                except Exception as e:
+                    print(f"Error in motion prediction: {e}")
+
+            # Mise à jour contrôlée pour éviter les conflits avec les données IMU
+            if not hasattr(self, '_animation_update_pending'):
+                self._animation_update_pending = True
+                QTimer.singleShot(16, self._animation_batch_update)  # 60 FPS max
+                
+        except Exception as e:
+            print(f"Error in update_animation_frame: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _animation_batch_update(self):
+        """Mise à jour groupée pour l'animation."""
+        if hasattr(self, '_animation_update_pending'):
+            self._animation_update_pending = False
+            try:
+                if not self.is_being_destroyed and self.isValid():
+                    self.update()
+            except Exception as e:
+                print(f"[3D_DEBUG] Error during animation batch update: {e}")
 
     def toggle_walking(self):
-        """Toggle walking animation"""
         self.walking = not self.walking
+        if self.walking:
+            self.precalc_frame = 0
+            self.animation_main_timer.start()
+        else:
+            self.animation_main_timer.stop()
+            # Do NOT reset body parts when stopping animation
+            # This preserves IMU-controlled positions
+            self.update()
         return self.walking
     
     def reset_body_parts_to_initial_state(self):
-        """Reset body parts to initial state"""
         for part_name, initial_state in self.initial_body_parts_state.items():
             if part_name in self.body_parts:
                 self.body_parts[part_name]['pos'] = initial_state['pos'].copy()
                 self.body_parts[part_name]['rot'] = initial_state['rot'].copy()
+        if not self.walking:
+            self.safely_update_display_list()
 
     def reset_view(self):
-        """Reset view"""
         self.rotation_x = 0
         self.rotation_y = 0
         self.rotation_z = 0
-        self.camera_distance = 4.0
+        self.camera_distance = 4.0  # Reset camera distance
+        
+        if self.walking:
+            self.toggle_walking()
+        
+        self.reset_body_parts_to_initial_state()
+            
+        # Force a redraw
+        self.update()
+        print("3D view reset complete")
 
     def initializeGL(self):
-        """Initialize OpenGL"""
-        if self._initialized:
-            return
         try:
-            glClearColor(0.0, 0.0, 0.0, 0.0)
-            glEnable(GL_DEPTH_TEST)
-            self._initialized = True
+            # First check if we can safely initialize
+            if not self.isValid():
+                print("Warning: Widget not valid during initializeGL")
+                return
+                
+            # Set the initial background color to clearly indicate initialization progress
+            try:
+                self.makeCurrent()
+                glClearColor(0.1, 0.1, 0.2, 1.0)  # Dark blue background
+                self.doneCurrent()
+            except Exception as e:
+                print(f"Warning: Pre-initialization color setting failed: {e}")
+            
+            print("Initialize GL started - setting up OpenGL context")
+            
+            # Capture the context before proceeding with initialization
+            if not self.context() or not self.context().isValid():
+                print("ERROR: OpenGL context is not valid during initialization")
+                return
+                
+            self.makeCurrent()
+            
+            # Initialize OpenGL components with careful error checking
+            try:
+                glClearColor(0.2, 0.2, 0.2, 1.0)  # Standard dark gray background
+                glEnable(GL_DEPTH_TEST)
+                glEnable(GL_CULL_FACE)
+                
+                glShadeModel(GL_SMOOTH)
+                glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST)
+                glHint(GL_POLYGON_SMOOTH_HINT, GL_FASTEST)
+                glDisable(GL_LIGHTING)
+                glDisable(GL_DITHER)
+                
+                self.quadric = gluNewQuadric()
+                if not self.quadric:
+                    print("ERROR: Failed to create quadric object")
+                else:
+                    print("Quadric object created successfully")
+                    gluQuadricDrawStyle(self.quadric, GLU_FILL)
+                    gluQuadricNormals(self.quadric, GLU_SMOOTH)
+            except OpenGL.error.GLError as e:
+                print(f"ERROR during OpenGL state setup: {e}")
+                
+            # Make sure display list is initialized to 0
+            self.display_list = 0
+            
+            # Defer resize and display list creation to the event queue
+            # to ensure it happens after the context is fully established
+            QTimer.singleShot(50, self.initialize_viewport_and_display_list)
+            
+            self.doneCurrent()
+            print("Initialize GL completed - deferred viewport setup scheduled")
+        
+        except OpenGL.error.GLError as e:
+            print(f"OpenGL initialization error: {e}")
+            import traceback
+            traceback.print_exc()
         except Exception as e:
-            print(f"Error initializing OpenGL: {e}")
+            print(f"General error in initializeGL: {e}")
+            import traceback
+            traceback.print_exc()
 
     def initialize_viewport_and_display_list(self):
-        """Initialize viewport and display list"""
-        pass
+        """Deferred initialization for viewport and display list to ensure context is ready."""
+        try:
+            if not self.isValid() or not self.context() or not self.context().isValid():
+                print("ERROR: Context not valid during deferred initialization")
+                # Schedule another attempt if we're still in startup phase
+                QTimer.singleShot(100, self.initialize_viewport_and_display_list)
+                return
+                
+            self.makeCurrent()
+            
+            # Now setup the viewport with dimensions
+            width, height = self.width(), self.height()
+            print(f"Setting up viewport with dimensions: {width}x{height}")
+            
+            try:
+                glViewport(0, 0, width, height)
+                glMatrixMode(GL_PROJECTION)
+                glLoadIdentity()
+                
+                aspect = width / float(max(1, height))  # Prevent division by zero
+                gluPerspective(45.0, aspect, 0.1, 100.0)
+                
+                glMatrixMode(GL_MODELVIEW)
+                glLoadIdentity()
+                
+                print("Viewport setup complete")
+            except OpenGL.error.GLError as e:
+                print(f"ERROR during viewport setup: {e}")
+            
+            # Now create the display list
+            try:
+                print("Creating initial display list")
+                if self.safely_update_display_list(force=True):
+                    print(f"Display list created successfully, ID: {self.display_list}")
+                else:
+                    print("WARNING: Failed to create initial display list")
+            except Exception as e:
+                print(f"ERROR creating display list: {e}")
+            
+            self.doneCurrent()
+            
+            # Force a redraw
+            self.update()
+        except Exception as e:
+            print(f"Error in initialize_viewport_and_display_list: {e}")
+            import traceback
+            traceback.print_exc()
 
     def paintGL(self):
-        """Paint OpenGL scene"""
-        if self.is_being_destroyed or not self.isVisible():
+        """Render the OpenGL scene."""
+        # Skip rendering if conditions aren't right
+        if self.is_being_destroyed:
             return
+            
+        if not self.isValid():
+            return
+        
         try:
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-            # Basic rendering would go here
+            # Make sure we have a valid context before proceeding
+            if not self.context() or not self.context().isValid():
+                if self.frame_count % 100 == 0:  # Limit log spam
+                    print("Warning: Invalid OpenGL context during paint")
+                return
+                
+            self.makeCurrent()
+            self.frame_count += 1
+            
+            # Log IMU data application occasionally
+            if self.frame_count % 300 == 0:
+                imu_parts = [part for part in self.imu_mapping.values() if part in self.body_parts]
+                if imu_parts:
+                    print(f"[3D_DEBUG] Rendering frame {self.frame_count} with IMU parts: {imu_parts}")
+                    for part in imu_parts[:2]:  # Log first 2 parts to avoid spam
+                        rot = self.body_parts[part]['rot']
+                        print(f"[3D_DEBUG] {part} rotation: {rot}")
+            
+            try:
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+                glLoadIdentity()
+                
+                # Position the camera using the camera_distance parameter
+                gluLookAt(0, 1.0, self.camera_distance, 0, 1.0, 0.0, 0, 1.0, 0.0)
+                
+                # Apply global rotations
+                glRotatef(self.rotation_x, 1, 0, 0)
+                glRotatef(self.rotation_y, 0, 1, 0)
+                glRotatef(self.rotation_z, 0, 0, 1)
+                
+                # Draw the floor with transparency handling
+                try:
+                    glDepthMask(GL_FALSE)  # Disable depth writing for transparent floor
+                    self.create_floor()
+                    glDepthMask(GL_TRUE)   # Re-enable depth writing
+                except Exception as e:
+                    if self.frame_count % 100 == 0:  # Limit log spam
+                        print(f"Error drawing floor: {e}")
+                
+                # Force direct drawing to ensure the model is visible
+                self.draw_limbs_internal()
+                self.draw_joints_internal()
+                
+                # Draw the legend UI elements
+                try:
+                    self._draw_legend()
+                except Exception as e:
+                    if self.frame_count % 100 == 0:  # Limit log spam
+                        print(f"Error drawing legend: {e}")
+                        
+            except OpenGL.error.GLError as e:
+                if self.frame_count % 30 == 0:  # Limit log spam
+                    print(f"OpenGL error during rendering: {e}")
         except Exception as e:
-            print(f"Error in paintGL: {e}")
+            if self.frame_count % 30 == 0:  # Limit log spam
+                print(f"General error in paintGL: {e}")
+        finally:
+            try:
+                if not self.is_being_destroyed and self.isValid():
+                    self.doneCurrent()
+            except Exception:
+                pass  # Suppress errors in cleanup
 
     def create_floor(self):
-        """Create floor"""
-        pass
-
-    def draw_direction_marker(self, x, y, z, size=1.0):
-        """Draw direction marker"""
-        pass
-    
-    def get_current_mappings(self):
-        """Get current mappings"""
-        return self.imu_mapping
-
-    def set_emg_mapping(self, emg_mapping):
-        """Set EMG mapping"""
-        self.emg_mapping = emg_mapping
+        """Draw a floor grid for reference."""
+        # Use a lighter color with transparency for the floor
+        glColor4f(0.3, 0.3, 0.1, 0.8)  # Alpha at 0.8 for slight transparency
         
-    def set_pmmg_mapping(self, pmmg_mapping):
-        """Set pMMG mapping"""
-        self.pmmg_mapping = pmmg_mapping
+        floor_size = 10.0
+        grid_size = 0.5
+        
+        # Enable blending for transparency
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
+        # Draw floor surface
+        glBegin(GL_QUADS)
+        glVertex3f(-floor_size, 0, -floor_size)
+        glVertex3f(-floor_size, 0, floor_size)
+        glVertex3f(floor_size, 0, floor_size)
+        glVertex3f(floor_size, 0, -floor_size)
+        glEnd()
+        
+        # Draw grid lines
+        glLineWidth(1.0)
+        glBegin(GL_LINES)
+        
+        glColor3f(0.5, 0.5, 0.5)
+        for x in np.arange(-floor_size, floor_size + grid_size, grid_size):
+            glVertex3f(x, 0.01, -floor_size)
+            glVertex3f(x, 0.01, floor_size)
+        
+        for z in np.arange(-floor_size, floor_size + grid_size, grid_size):
+            glVertex3f(-floor_size, 0.01, z)
+            glVertex3f(floor_size, 0.01, z)
+        
+        glEnd()
+        
+        # Draw coordinate markers for reference
+        self.draw_direction_marker(0, 0.02, 0, 1.5)
+        self.draw_direction_marker(-floor_size + 0.5, 0.02, -floor_size + 0.5, 0.5)
+        self.draw_direction_marker(floor_size - 0.5, 0.02, -floor_size + 0.5, 0.5)
+        self.draw_direction_marker(-floor_size + 0.5, 0.02, floor_size - 0.5, 0.5)
+        self.draw_direction_marker(floor_size - 0.5, 0.02, floor_size - 0.5, 0.5)
 
     def _draw_legend(self):
-        """Draw legend"""
-        pass
+        """Draws a legend showing the different sensor types."""
+        try:
+            # Use QPainter for drawing text overlays
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setRenderHint(QPainter.TextAntialiasing)
+            
+            # Set up the font
+            font = QFont("Arial", 10, QFont.Bold)
+            painter.setFont(font)
+            
+            # Draw legend title
+            painter.setPen(Qt.white)
+            painter.drawText(10, 20, "Legend:")
+            
+            # Draw sensor types with colors
+            font.setBold(False)
+            painter.setFont(font)
+            
+            # IMU sensors - green
+            painter.setPen(Qt.white)
+            painter.drawText(60, 45, "IMU Sensors")
+            painter.fillRect(30, self.height() - 45, 20, 10, QColor(0, 204, 51))  # Green
+            
+            # EMG sensors - red
+            painter.drawText(60, 65, "EMG Sensors")
+            painter.fillRect(30, self.height() - 65, 20, 10, QColor(204, 51, 0))  # Red
+            
+            # pMMG sensors - blue
+            painter.drawText(60, 85, "pMMG Sensors")
+            painter.fillRect(30, self.height() - 85, 20, 10, QColor(0, 51, 204))  # Blue
+            
+            # Show FPS counter if enabled
+            if self.show_fps:
+                fps_text = f"FPS: {self.fps}"
+                text_width = 80
+                painter.drawText(self.width() - text_width - 10, 20, fps_text)
+            
+            # Draw a border around the legend
+            painter.setPen(QColor(180, 180, 180))
+            painter.drawRect(5, self.height() - 95, 175, 90)
+            
+            painter.end()
+        except Exception as e:
+            print(f"Error drawing legend: {e}")
 
     def set_color(self, r, g, b):
-        """Set color"""
+        """Set the color for the following vertices."""
         glColor3f(r, g, b)
 
     def set_normal(self, x, y, z):
-        """Set normal"""
+        """Set the normal vector for the following vertices."""
         glNormal3f(x, y, z)
 
     def vertex(self, x, y, z):
-        """Set vertex"""
+        """Define a vertex for the following primitive."""
         glVertex3f(x, y, z)
 
     def draw_fps_counter(self):
-        """Draw FPS counter"""
-        pass
+        """Draw the FPS counter on the screen."""
+        try:
+            self.makeCurrent()
+            painter = QPainter(self)
+            painter.setPen(Qt.white)
+            painter.setFont(QFont("Arial", 10))
+            
+            # Afficher le texte avec un fond semi-transparent
+            painter.setOpacity(0.7)
+            painter.fillRect(10, 10, 100, 40, Qt.black)
+            painter.setOpacity(1.0)
+            
+            # Calculer et afficher le FPS
+            self.frame_count += 1
+            if self.fps_timer.elapsed() > 1000:
+                self.fps = self.frame_count
+                self.frame_count = 0
+                self.fps_timer.restart()
+            
+            painter.drawText(15, 25, f"FPS: {self.fps}")
+            
+            painter.end()
+        except Exception as e:
+            print(f"Error in draw_fps_counter: {e}")
 
     def update_fps(self):
-        """Update FPS"""
-        pass
+        """Update the FPS counter."""
+        self.frame_count += 1
+        if self.fps_timer.elapsed() > 1000:
+            self.fps = self.frame_count
+            self.frame_count = 0
+            self.fps_timer.restart()
 
     def closeEvent(self, event):
-        """Close event"""
+        """Handle the widget close event."""
+        self.is_being_destroyed = True
+        try:
+            # Stop any ongoing timers
+            self.animation_main_timer.stop()
+            self.fps_update_timer.stop()
+            
+            # Perform any necessary cleanup here
+            # For example, freeing OpenGL resources or stopping threads
+            
+            print("Cleanup before close")
+        except Exception as e:
+            print(f"Error during closeEvent cleanup: {e}")
+            import traceback
+            traceback.print_exc()
+        
         event.accept()
 
     def check_opengl_state(self):
-        """Check OpenGL state"""
-        pass
+        """Check and print the current OpenGL state for debugging."""
+        try:
+            if not self.isValid() or not self.context() or not self.context().isValid():
+                print("ERROR: OpenGL context is not valid")
+                return
+            
+            self.makeCurrent()
+            
+            # Check some basic OpenGL states
+            clear_color = glGetFloatv(GL_COLOR_CLEAR_VALUE)
+            depth_func = glGetIntegerv(GL_DEPTH_FUNC)
+            cull_face = glIsEnabled(GL_CULL_FACE)
+            depth_test = glIsEnabled(GL_DEPTH_TEST)
+            
+            print(f"OpenGL State:")
+            print(f"  Clear Color: {clear_color}")
+            print(f"  Depth Func: {depth_func}")
+            print(f"  Cull Face: {'Enabled' if cull_face else 'Disabled'}")
+            print(f"  Depth Test: {'Enabled' if depth_test else 'Disabled'}")
+            
+            # You can add more state checks here as needed
+            
+            self.doneCurrent()
+        except Exception as e:
+            print(f"Error checking OpenGL state: {e}")
+            import traceback
+            traceback.print_exc()
 
     def get_calibration_status(self):
-        """Get calibration status"""
+        """Returns current calibration status."""
         progress = 0
         if self.calibration_mode and len(self.calibration_samples) > 0:
-            progress = min(100, int((len(self.calibration_samples) / 30) * 100))
+            progress = min(100, (len(self.calibration_samples) * 100) // 30)
         elif self.calibration_complete:
             progress = 100
         
@@ -529,128 +898,498 @@ class Model3DViewer(QGLWidget):
             'status_text': self.calibration_status_text
         }
 
-    def safely_update_display_list(self, force=False):
-        """Safely update display list"""
-        pass
-
-    def check_context(self):
-        """Check context"""
-        pass
-
-    def draw_limbs_internal(self):
-        """Draw limbs internal"""
-        pass
-    
-    def draw_line_from_parts(self, part1, part2):
-        """Draw line from parts"""
-        pass
-
-    def draw_joints_internal(self):
-        """Draw joints internal"""
-        pass
-
-    def _get_mapped_sensor_type(self, part_name):
-        """Get mapped sensor type"""
-        return None
-
-    def mousePressEvent(self, event):
-        """Mouse press event"""
-        pass
-    
-    def mouseReleaseEvent(self, event):
-        """Mouse release event"""
-        pass
-    
-    def mouseMoveEvent(self, event):
-        """Mouse move event"""
-        pass
-
-    def wheelEvent(self, event):
-        """Wheel event"""
-        pass
-
-    def map_imu_to_body_part(self, imu_id, body_part):
-        """Map IMU to body part"""
-        self.imu_mapping[imu_id] = body_part
-        return True
-    
-    def apply_imu_data(self, imu_id, quaternion_data):
-        """Apply IMU data"""
-        try:
-            if imu_id in self.imu_mapping:
-                body_part = self.imu_mapping[imu_id]
-                if body_part in self.body_parts:
-                    self.body_parts[body_part]['rot'] = np.array(quaternion_data)
-                    return True
-        except Exception as e:
-            print(f"Error applying IMU data: {e}")
-        return False
-
     def update_calibration_status(self):
-        """Update calibration status"""
+        """Updates calibration status in real-time."""
         if not self.calibration_mode:
             return
         
         self.calibration_duration += 100
         
-        # Simplified calibration logic
+        # Collect current data from mapped IMUs
         current_sample = {}
         stability_check = True
         
-        if not self.imu_mapping:
-            print("[ERROR] No IMU mappings defined. Stopping calibration.")
-            self.calibration_timer.stop()
-            self.calibration_mode = False
-            return
-        
         for imu_id, body_part in self.imu_mapping.items():
             if body_part in self.body_parts:
-                current_rotation = self.body_parts[body_part]['rot']
-                if current_rotation is not None:
-                    current_sample[body_part] = current_rotation.copy()
+                current_quat = self.body_parts[body_part]['rot'].copy()
+                current_sample[body_part] = current_quat
+                
+                # Check stability
+                if len(self.calibration_samples) > 5:
+                    last_sample = self.calibration_samples[-1].get(body_part)
+                    if last_sample is not None:
+                        # Calculate angular difference
+                        diff = np.linalg.norm(current_quat - last_sample)
+                        if diff > self.calibration_stability_threshold:
+                            stability_check = False
         
+        # Add sample if stable
         if stability_check and current_sample:
             self.calibration_samples.append(current_sample)
-            progress = min(100, int((len(self.calibration_samples) / 30) * 100))
-            self.calibration_status_text = f"🟡 Hold T-pose... {progress}%"
+            
+            # Update status text
+            progress = min(100, (len(self.calibration_samples) * 100) // 30)  # 30 samples = 3 seconds
+            self.calibration_status_text = f"🟡 Calibration: {progress}% - Maintain T-pose"
         else:
-            self.calibration_status_text = "🟠 Movement detected. Please hold T-pose still."
+            # If not stable, slightly reduce samples
+            if len(self.calibration_samples) > 2:
+                self.calibration_samples = self.calibration_samples[:-1]
+            self.calibration_status_text = "🟠 Move less - Keep T-pose stable"
         
-        if len(self.calibration_samples) >= 30:
-            self.compute_calibration_offsets()
-            self.calibration_timer.stop()
-            self.calibration_mode = False
-            self.calibration_complete = True
-            self.calibration_status_text = "🟢 Calibration complete!"
+        # Check if calibration is complete
+        if len(self.calibration_samples) >= 30:  # 3 seconds of stable data
+            self.stop_tpose_calibration()
         
+        # Timeout after 30 seconds
         if self.calibration_duration > 30000:
-            self.calibration_timer.stop()
+            self.calibration_status_text = "⏰ Timeout - Restart calibration"
             self.calibration_mode = False
-            self.calibration_status_text = "🔴 Calibration timed out."
+            self.calibration_timer.stop()
+        
+        self.update()
 
-    def compute_calibration_offsets(self):
-        """Compute calibration offsets"""
-        if not self.calibration_samples:
-            print("[ERROR] No calibration samples to compute offsets from")
-            return
+    def safely_update_display_list(self, force=False):
+        """Updates the OpenGL display list with proper error checking."""
+        # Don't update if widget is being destroyed
+        if self.is_being_destroyed:
+            return False
         
-        self.calibration_offsets = {}
+        if not hasattr(self, 'last_update_time'):
+            self.last_update_time = 0
         
-        for body_part in self.body_parts:
+        try:
+            current_time = self.fps_timer.elapsed()
+            if not force and current_time - self.last_update_time < 100:
+                return False
+            
+            self.last_update_time = current_time
+            
+            if not self.check_context():
+                print("Warning: OpenGL context check failed in safely_update_display_list")
+                return False
+            
+            try:
+                self.makeCurrent()
+                
+                # We'll just skip display lists completely for now to ensure the model is visible
+                print("Skipping display list creation - using direct rendering for stability")
+                return True
+                
+            except OpenGL.error.GLError as e:
+                print(f"[ERROR] OpenGL error in display list creation: {e}")
+                self.display_list = 0
+                return False
+            finally:
+                try:
+                    if not self.is_being_destroyed and self.isValid() and self.context() and self.context().isValid():
+                        self.doneCurrent()
+                except Exception as e:
+                    print(f"Error in doneCurrent: {e}")
+        except Exception as e:
+            print(f"General error in safely_update_display_list: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def check_context(self):
+        """Checks if the OpenGL context is valid with detailed error reporting."""
+        # Skip if widget is being destroyed
+        if self.is_being_destroyed:
+            return False
+            
+        try:
+            if not hasattr(self, 'context'):
+                print("Error: Widget has no OpenGL context attribute")
+                return False
+                
+            if not self.isValid():
+                print("Warning: OpenGL widget not valid")
+                return False
+            
+            context = self.context()
+            if not context:
+                print("Error: Unable to get OpenGL context")
+                return False
+                
+            if not context.isValid():
+                print("Warning: OpenGL context not valid")
+                reason = "Unknown reason"
+                if hasattr(context, 'errorString'):
+                    reason = context.errorString()
+                print(f"Context invalid reason: {reason}")
+                return False
+        
+            try:
+                self.makeCurrent()
+                return True
+            except Exception as e:
+                print(f"Error activating OpenGL context: {e}")
+                return False
+        except Exception as e:
+            print(f"Exception in check_context: {e}")
+            return False
+
+    # Also need to add the missing draw_limbs_internal and draw_joints_internal methods
+    def draw_limbs_internal(self):
+        glLineWidth(3.0)
+        glBegin(GL_LINES)
+        
+        glColor3f(1.0, 0.8, 0.6)
+        self.draw_line_from_parts('head', 'neck')
+        
+        glColor3f(0.2, 0.4, 0.8)
+        self.draw_line_from_parts('neck', 'torso')
+        self.draw_line_from_parts('torso', 'hip')
+        
+        glColor3f(0.0, 0.5, 1.0)
+        self.draw_line_from_parts('neck', 'deltoid_l')
+        self.draw_line_from_parts('deltoid_l', 'biceps_l')
+        self.draw_line_from_parts('biceps_l', 'forearm_l')
+        self.draw_line_from_parts('forearm_l', 'left_hand')
+        self.draw_line_from_parts('torso', 'dorsalis_major_l')
+        self.draw_line_from_parts('torso', 'pectorals_l')
+        self.draw_line_from_parts('pectorals_l', 'deltoid_l')
+        
+        glColor3f(1.0, 0.5, 0.0)
+        self.draw_line_from_parts('neck', 'deltoid_r')
+        self.draw_line_from_parts('deltoid_r', 'biceps_r')
+        self.draw_line_from_parts('biceps_r', 'forearm_r')
+        self.draw_line_from_parts('forearm_r', 'right_hand')
+        self.draw_line_from_parts('torso', 'dorsalis_major_r')
+        self.draw_line_from_parts('torso', 'pectorals_r')
+        self.draw_line_from_parts('pectorals_r', 'deltoid_r')
+        
+        glColor3f(0.0, 0.7, 0.3)
+        self.draw_line_from_parts('hip', 'quadriceps_l')
+        self.draw_line_from_parts('hip', 'glutes_l')
+        self.draw_line_from_parts('hip', 'ishcio_hamstrings_l')
+        self.draw_line_from_parts('quadriceps_l', 'calves_l')
+        self.draw_line_from_parts('ishcio_hamstrings_l', 'calves_l')
+        self.draw_line_from_parts('calves_l', 'left_foot')
+        
+        glColor3f(0.7, 0.0, 0.3)
+        self.draw_line_from_parts('hip', 'quadriceps_r')
+        self.draw_line_from_parts('hip', 'glutes_r')
+        self.draw_line_from_parts('hip', 'ishcio_hamstrings_r')
+        self.draw_line_from_parts('quadriceps_r', 'calves_r')
+        self.draw_line_from_parts('ishcio_hamstrings_r', 'calves_r')
+        self.draw_line_from_parts('calves_r', 'right_foot')
+        
+        glEnd()
+    
+    def draw_line_from_parts(self, part1, part2):
+        p1 = self.body_parts[part1]['pos']
+        p2 = self.body_parts[part2]['pos']
+        glVertex3f(p1[0], p1[1], p1[2])
+        glVertex3f(p2[0], p2[1], p2[2])
+
+    def draw_joints_internal(self):
+        """Draws joints with rotations via quaternions."""
+        for part_name, data in self.body_parts.items():
+            pos = data['pos']
+            quat_rotation = data['rot']
+            
+            glPushMatrix()
+            # Move to the position of the body part
+            glTranslatef(pos[0], pos[1], pos[2])
+            
+            # Apply quaternion rotation via a matrix
+            try:
+                rotation_matrix = quaternion_to_matrix(quat_rotation)
+                glMultMatrixf(rotation_matrix)
+            except Exception as e:
+                print(f"Error applying rotation for {part_name}: {e}")
+                # In case of error, do not apply rotation
+            
+            # Determine the joint color based on sensor type
+            sensor_type = self._get_mapped_sensor_type(part_name)
+            
+            if sensor_type == "IMU":
+                glColor3f(0.0, 0.8, 0.2)  # Green
+            elif sensor_type == "EMG":
+                glColor3f(0.8, 0.2, 0.0)  # Red
+            elif sensor_type == "pMMG":
+                glColor3f(0.0, 0.2, 0.8)  # Blue
+            else:
+                glColor3f(0.9, 0.9, 0.9)  # Gray
+
+            # Draw the joint sphere
+            if self.quadric:
+                if part_name == 'head':
+                    gluSphere(self.quadric, 0.15, 12, 12)  # Larger head
+                else:
+                    gluSphere(self.quadric, 0.05, 6, 6)  # Other joints
+            
+            # Try to add a label if it's a sensor - with error handling for projection failures
+            if sensor_type:
+                try:
+                    model = glGetDoublev(GL_MODELVIEW_MATRIX)
+                    proj = glGetDoublev(GL_PROJECTION_MATRIX)
+                    view = glGetIntegerv(GL_VIEWPORT)
+                    
+                    # Catch projection failures and handle them gracefully
+                    try:
+                        win_x, win_y, win_z = gluProject(0, 0, 0, model, proj, view)
+                        if not hasattr(self, 'labels'):
+                            self.labels = []
+                        self.labels.append((win_x, self.height() - win_y, f"{sensor_type}", sensor_type))
+                    except ValueError:
+                        # Skip label creation if projection fails
+                        pass
+                except Exception as e:
+                    # Ignore label errors
+                    pass
+            
+            glPopMatrix()
+
+    def _get_mapped_sensor_type(self, part_name):
+        for imu_id, mapped_part in self.imu_mapping.items():
+            if mapped_part == part_name:
+                return "IMU"
+        
+        if hasattr(self, 'emg_mapping'):
+            for emg_id, mapped_part in self.emg_mapping.items():
+                if mapped_part == part_name:
+                    return "EMG"
+                    
+        if hasattr(self, 'pmmg_mapping'):
+            for pmmg_id, mapped_part in self.pmmg_mapping.items():
+                if mapped_part == part_name:
+                    return "pMMG"
+        
+        return None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.last_pos = event.pos()
+            self.mouse_pressed = True
+    
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.mouse_pressed = False
+    
+    def mouseMoveEvent(self, event):
+        if self.mouse_pressed and self.last_pos:
+            dx = event.x() - self.last_pos.x()
+            dy = event.y() - self.last_pos.y()
+            
+            # Update rotation based on mouse movement
+            self.rotation_y += dx * 0.5  # horizontal movement controls y-rotation
+            self.rotation_x += dy * 0.5  # vertical movement controls x-rotation
+            
+            # Keep rotations within reasonable bounds
+            self.rotation_x = max(-90, min(90, self.rotation_x))
+            
+            self.last_pos = event.pos()
+            self.update()  # Trigger a redraw
+
+    def wheelEvent(self, event):
+        # Implement zoom with mouse wheel
+        zoom_factor = event.angleDelta().y() / 120.0  # 120 units per wheel notch
+        # Zoom by changing the camera position in gluLookAt
+        # We'll adjust this in paintGL by modifying the camera distance
+        self.camera_distance = max(2.0, min(10.0, self.camera_distance - zoom_factor * 0.5))
+        self.update()
+
+    def map_imu_to_body_part(self, imu_id, body_part):
+        """Maps an IMU sensor to a body part."""
+        print(f"Mapping IMU {imu_id} to {body_part}")
+        
+        # Handle legacy mappings (convert old names to new ones)
+        if body_part in self.legacy_mappings:
+            body_part = self.legacy_mappings[body_part]
+            print(f"Using legacy mapping: {body_part}")
+        
+        # Verify body part exists in our model
+        if body_part not in self.body_parts:
+            print(f"WARNING: Body part '{body_part}' not found in model")
+            return False
+        
+        # Update the mapping
+        self.imu_mapping[imu_id] = body_part
+        
+        # Force update of the display list to show the new mapping
+        self.safely_update_display_list(force=True)
+        self.update()
+        return True
+    
+    def apply_imu_data(self, imu_id, quaternion_data):
+        """Applies IMU quaternion data to the mapped body part - VERSION OPTIMISÉE."""
+        if imu_id not in self.imu_mapping:
+            return False
+            
+        body_part = self.imu_mapping[imu_id]
+        if body_part not in self.body_parts:
+            return False
+            
+        # Normalize the quaternion to ensure valid rotation
+        normalized_quat = normalize_quaternion(quaternion_data)
+        
+        # Apply calibration if available
+        if self.calibration_complete and body_part in self.calibration_offsets:
+            offset_quat = self.calibration_offsets[body_part]
+            corrected_quat = quaternion_multiply(normalized_quat, offset_quat)
+            self.body_parts[body_part]['rot'] = corrected_quat
+        else:
+            self.body_parts[body_part]['rot'] = normalized_quat
+        
+        # Système de mise à jour beaucoup plus agressif pour éviter le lag
+        if not hasattr(self, '_last_imu_update_time'):
+            self._last_imu_update_time = 0
+            
+        current_time = time.time()
+        if current_time - self._last_imu_update_time >= 0.033:  # Max 30 FPS
+            self._last_imu_update_time = current_time
+            if not self.is_being_destroyed and self.isValid():
+                try:
+                    self.update()
+                except:
+                    pass  # Ignorer les erreurs de mise à jour temporaires
+            
+        return True
+
+    def _batch_update_display(self):
+        """Mise à jour groupée optimisée."""
+        if hasattr(self, '_imu_data_updated') and self._imu_data_updated:
+            self._imu_data_updated = False
+            if not hasattr(self, '_last_batch_update_time'):
+                self._last_batch_update_time = 0
+                
+            current_time = time.time()
+            if current_time - self._last_batch_update_time >= 0.033:  # Max 30 FPS
+                self._last_batch_update_time = current_time
+                try:
+                    if not self.is_being_destroyed and self.isValid():
+                        self.update()
+                except Exception as e:
+                    pass  # Ignorer les erreurs temporaires
+
+    def start_tpose_calibration(self):
+        """Start T-pose calibration."""
+        print("[3D_DEBUG] start_tpose_calibration called")
+        if not self.imu_mapping:
+            print("Cannot start calibration - no IMUs are mapped")
+            return False
+            
+        print(f"[3D_DEBUG] IMU mapping at calibration start: {self.imu_mapping}")
+        self.force_tpose()  # Ajout ici pour forcer la T-pose visuelle
+        
+        self.calibration_mode = True
+        self.calibration_complete = False
+        self.calibration_samples = []
+        self.calibration_duration = 0
+        self.calibration_status_text = "Starting calibration - Assume T-pose and hold still"
+        
+        # Start the timer for regular status updates
+        self.calibration_timer.start(100)  # 100ms interval
+        return True
+        
+    def stop_tpose_calibration(self):
+        """Stop T-pose calibration and calculate offsets."""
+        print("[3D_DEBUG] stop_tpose_calibration called")
+        self.calibration_timer.stop()
+        self.calibration_mode = False
+        
+        # Check if we have enough data
+        if len(self.calibration_samples) < 10:
+            print("Insufficient calibration data collected")
+            self.calibration_status_text = "Calibration failed - insufficient data"
+            return False
+            
+        # Calculate the average quaternion for each body part
+        average_quats = {}
+        for body_part in self.imu_mapping.values():
             samples = []
             for sample in self.calibration_samples:
                 if body_part in sample:
                     samples.append(sample[body_part])
             
             if samples:
-                avg_quat = [0, 0, 0, 0]
-                for quat in samples:
-                    for i in range(4):
-                        avg_quat[i] += quat[i]
-                
-                for i in range(4):
-                    avg_quat[i] /= len(samples)
-                
-                self.calibration_offsets[body_part] = normalize_quaternion(avg_quat)
+                # Simple averaging for quaternions (not ideal but works for small variations)
+                avg_quat = np.mean(samples, axis=0)
+                avg_quat = normalize_quaternion(avg_quat)
+                average_quats[body_part] = avg_quat
         
-        print(f"[INFO] Calibration offsets computed for {len(self.calibration_offsets)} body parts")
+        # Now calculate the offset quaternions 
+        # The offset is what needs to be applied to go from the calibrated T-pose to the ideal T-pose
+        self.calibration_offsets = {}
+        for body_part, avg_quat in average_quats.items():
+            # For a T-pose, we'd expect identity quaternion in the ideal case
+            # So the offset is the inverse of the average quaternion
+            # For quaternions, the inverse is the conjugate when normalized
+            w, x, y, z = avg_quat
+            # Conjugate: w, -x, -y, -z
+            offset_quat = normalize_quaternion(np.array([w, -x, -y, -z]))
+            self.calibration_offsets[body_part] = offset_quat
+        
+        self.calibration_complete = True
+        self.calibration_status_text = "✅ Calibration complete - T-pose correction active"
+        print(f"Calibration complete for {len(self.calibration_offsets)} body parts")
+        
+        # Apply calibration to current pose
+        for imu_id, body_part in self.imu_mapping.items():
+            if body_part in self.body_parts and body_part in self.calibration_offsets:
+                current_quat = self.body_parts[body_part]['rot']
+                offset_quat = self.calibration_offsets[body_part]
+                corrected_quat = quaternion_multiply(current_quat, offset_quat)
+                self.body_parts[body_part]['rot'] = corrected_quat
+        
+        # Update the display
+        self.safely_update_display_list(force=True)
+        self.update()
+        return True
+    
+    def reset_calibration(self):
+        print("[3D_DEBUG] reset_calibration called")
+        """Reset calibration data."""
+        self.calibration_mode = False
+        self.calibration_complete = False
+        self.calibration_timer.stop()
+        self.calibration_samples = []
+        self.calibration_offsets = {}
+        self.calibration_status_text = "🔄 Calibration reset - No correction active"
+        
+        # Update the display
+        self.safely_update_display_list(force=True)
+        self.update()
+        return True
+
+    def draw_direction_marker(self, x, y, z, size=1.0):
+        """Draws a direction marker at the specified position."""
+        glPushMatrix()
+        glTranslatef(x, y, z)
+        
+        # X axis - Red
+        glColor3f(1.0, 0.0, 0.0)
+        glBegin(GL_LINES)
+        glVertex3f(0, 0, 0)
+        glVertex3f(size, 0, 0)
+        glEnd()
+        
+        # Y axis - Green
+        glColor3f(0.0, 1.0, 0.0)
+        glBegin(GL_LINES)
+        glVertex3f(0, 0, 0)
+        glVertex3f(0, size, 0)
+        glEnd()
+        
+        # Z axis - Blue
+        glColor3f(0.0, 0.0, 1.0)
+        glBegin(GL_LINES)
+        glVertex3f(0, 0, 0)
+        glVertex3f(0, 0, size)
+        glEnd()
+        
+        glPopMatrix()
+
+    def force_tpose(self):
+        """Force tous les IMUs mappés à la T-pose (quaternion identité)."""
+        print("[3D_DEBUG] Forcing T-pose for all mapped IMUs")
+        for imu_id, body_part in self.imu_mapping.items():
+            if body_part in self.body_parts:
+                self.body_parts[body_part]['rot'] = np.array([1.0, 0.0, 0.0, 0.0])
+        self.update()
+
+    def get_current_mappings(self):
+        """Return the current IMU to body part mapping."""
+        return dict(self.imu_mapping)

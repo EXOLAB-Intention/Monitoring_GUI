@@ -331,48 +331,12 @@ class DashboardAppBack:
 
     def update_data(self):
         if self.recording:
-            if self.client_socket and self.sensor_config and self.packet_size > 0:
-                try:
-                    # Lire le premier byte pour vérifier s'il s'agit du trial end marker
-                    first = self.client_socket.recv(1)
-                    if not first:
-                        raise ConnectionError("Client disconnected")
-                    
-                    # Vérifier le trial end marker
-                    if first == TRIAL_END_MARKER:
-                        print("[INFO] Trial end marker received - stopping recording")
-                        # Vider le buffer après le trial end marker pour éviter la corruption
-                        print("[INFO] Flushing socket buffer after trial end marker")
-                        self.flush_socket_buffer()
-                        self.stop_recording()
-                        return
-                    
-                    if self.packet_size <= 0:
-                        print(f"[ERROR] Invalid packet_size {self.packet_size} in DashboardAppBack, cannot read packet.")
-                        self.handle_connection_error("Invalid packet size detected")
-                        return
-                    
-                    # Lire le reste du paquet
-                    rest = recv_all(self.client_socket, self.packet_size - 1)
-                    data_packet = first + rest
-                    
-                    packet = decode_packet(data_packet, self.sensor_config)
-                    
-                    if not packet['crc_valid']:
-                        print("[WARNING] Invalid CRC for data packet. Checking data validity...")
-                        if not hasattr(self, 'corrupted_packets_count'):
-                            self.corrupted_packets_count = 0
-                        self.corrupted_packets_count += 1
-                        if self.corrupted_packets_count > 5:
-                            print("[ERROR] Too many corrupted packets in a row. Data may be unreliable.")
-                            print("[INFO] Flushing socket buffer to recover synchronization")
-                            self.flush_socket_buffer()
-                            self.corrupted_packets_count = 0
-                            # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
-                            return
-                        if self._contains_invalid_data(packet):
-                            print("[WARNING] Packet contains invalid data. Skipping.")
-                            return
+            try:
+                # Réduire drastiquement le flush du buffer qui cause du lag
+                if hasattr(self, '_last_flush_time'):
+                    current_time = time.time()
+                    if current_time - self._last_flush_time < 1.0:  # Flush max 1x par seconde
+                        pass  # Skip flush
                     else:
                         self.corrupted_packets_count = 0
 
@@ -438,16 +402,127 @@ class DashboardAppBack:
                     print(f"[ERROR] Struct unpacking error: {e}. Packet size may be incorrect.")
                     print("[INFO] Flushing socket buffer to recover from struct error")
                     self.flush_socket_buffer()
-                    # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
+                
+                if not self.client_socket:
+                    print("[ERROR] Client socket is None during recording")
+                    return
+                
+                # Receive data with timeout handling
+                try:
+                    self.client_socket.settimeout(0.01)  # Réduire le timeout à 10ms
+                    data = recv_all(self.client_socket, self.packet_size)
+                    if not data:
+                        return
+                except socket.timeout:
+                    # Ne plus imprimer les timeouts socket pour éviter le spam
                     return
                 except Exception as e:
-                    print(f"[ERROR] Failed to receive/process data: {e}")
-                    # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
+                    if hasattr(self, '_last_socket_error_time'):
+                        current_time = time.time()
+                        if current_time - self._last_socket_error_time > 5.0:  # Log une fois toutes les 5 secondes
+                            print(f"[ERROR] Error receiving data: {e}")
+                            self._last_socket_error_time = current_time
+                    else:
+                        print(f"[ERROR] Error receiving data: {e}")
+                        self._last_socket_error_time = time.time()
                     return
-            else:
-                if self.recording and not self.client_socket:
-                    print("[WARNING] Recording active but no Ethernet connection.")
-    
+                finally:
+                    try:
+                        self.client_socket.settimeout(None)  # Reset to blocking
+                    except:
+                        pass
+                
+                # Decode packet with error handling
+                try:
+                    packet = decode_packet(data, self.sensor_config)
+                    if not packet:
+                        return
+                except Exception as e:
+                    if hasattr(self, '_last_decode_error_time'):
+                        current_time = time.time()
+                        if current_time - self._last_decode_error_time > 5.0:
+                            print(f"[ERROR] Error decoding packet: {e}")
+                            self._last_decode_error_time = current_time
+                    else:
+                        print(f"[ERROR] Error decoding packet: {e}")
+                        self._last_decode_error_time = time.time()
+                    return
+                
+                # Validate packet data
+                if self._contains_invalid_data(packet):
+                    self.corrupted_packets_count += 1
+                    if self.corrupted_packets_count % 100 == 0:  # Réduire la fréquence de log
+                        print(f"[WARNING] {self.corrupted_packets_count} corrupted packets detected")
+                    return
+                
+                # Store data for recording (optimisé)
+                if 'emg' in packet:
+                    for i, value in enumerate(packet['emg']):
+                        if i < len(self.recorded_data["EMG"]):
+                            self.recorded_data["EMG"][i].append(value)
+                
+                if 'pmmg' in packet:
+                    for i, value in enumerate(packet['pmmg']):
+                        if i < len(self.recorded_data["pMMG"]):
+                            self.recorded_data["pMMG"][i].append(value)
+                
+                if 'imu' in packet:
+                    for i, quaternion in enumerate(packet['imu']):
+                        if self._is_valid_quaternion(quaternion):
+                            if i < len(self.recorded_data["IMU"]):
+                                self.recorded_data["IMU"][i].append(quaternion)
+                
+                # Apply to 3D model BEAUCOUP moins fréquemment pour éviter le lag
+                if 'imu' in packet and packet['imu']:
+                    if not hasattr(self, '_last_3d_update_time'):
+                        self._last_3d_update_time = time.time()
+                        
+                    current_time = time.time()
+                    if current_time - self._last_3d_update_time >= 0.033:  # Max 30 FPS pour le 3D
+                        try:
+                            self.ui.apply_imu_data_to_3d_model(packet['imu'])
+                            self._last_3d_update_time = current_time
+                        except Exception as e:
+                            if hasattr(self, '_last_3d_error_time'):
+                                if current_time - self._last_3d_error_time > 5.0:
+                                    print(f"[ERROR] Error applying IMU data to 3D model: {e}")
+                                    self._last_3d_error_time = current_time
+                            else:
+                                print(f"[ERROR] Error applying IMU data to 3D model: {e}")
+                                self._last_3d_error_time = current_time
+                
+                # Update live plots (également moins fréquent)
+                if not hasattr(self, '_last_plot_update_time'):
+                    self._last_plot_update_time = time.time()
+                    
+                current_time = time.time()
+                if current_time - self._last_plot_update_time >= 0.05:  # Max 20 FPS pour les plots
+                    try:
+                        self.ui.update_live_plots(packet)
+                        self._last_plot_update_time = current_time
+                    except Exception as e:
+                        if hasattr(self, '_last_plot_error_time'):
+                            if current_time - self._last_plot_error_time > 5.0:
+                                print(f"[ERROR] Error updating live plots: {e}")
+                                self._last_plot_error_time = current_time
+                        else:
+                            print(f"[ERROR] Error updating live plots: {e}")
+                            self._last_plot_error_time = current_time
+                    
+            except Exception as e:
+                if hasattr(self, '_last_general_error_time'):
+                    current_time = time.time()
+                    if current_time - self._last_general_error_time > 10.0:  # Log une fois toutes les 10 secondes
+                        print(f"[ERROR] General error in update_data: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        self._last_general_error_time = current_time
+                else:
+                    print(f"[ERROR] General error in update_data: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    self._last_general_error_time = time.time()
+
     def _contains_invalid_data(self, packet):
         for value in packet.get('emg', []):
             if not isinstance(value, (int, float)) or abs(value) > 10.0: return True
@@ -483,39 +558,35 @@ class DashboardAppBack:
         return True
 
     def flush_socket_buffer(self):
-        """Vide le buffer du socket pour éviter les données résiduelles."""
+        """Vide le buffer du socket pour éviter les données résiduelles - VERSION OPTIMISÉE."""
         if not self.client_socket:
             return
             
         try:
-            # Sauvegarder le timeout actuel
-            original_timeout = self.client_socket.gettimeout()
+            self.client_socket.settimeout(0.001)  # Timeout très court - 1ms
+            total_flushed = 0
+            max_flush = 5  # Limiter le nombre d'itérations pour éviter les blocages
             
-            # Mettre le socket en mode non-bloquant temporairement avec un timeout très court
-            self.client_socket.settimeout(0.05)  # 50ms timeout seulement
-            flushed_bytes = 0
-            max_iterations = 10  # Limiter le nombre d'itérations
-            
-            for _ in range(max_iterations):
+            for _ in range(max_flush):
                 try:
-                    data = self.client_socket.recv(512)  # Chunks plus petits
-                    if not data:
+                    chunk = self.client_socket.recv(1024)
+                    if not chunk:
                         break
-                    flushed_bytes += len(data)
+                    total_flushed += len(chunk)
                 except socket.timeout:
-                    break  # Plus rien à lire
-                except Exception:
                     break
-                    
-            if flushed_bytes > 0:
-                print(f"[INFO] Flushed {flushed_bytes} bytes from socket buffer")
+                except:
+                    break
+            
+            # Log seulement si on a flush une quantité significative
+            if total_flushed > 2000:  # Seulement si plus de 2KB
+                print(f"[INFO] Flushed {total_flushed} bytes from socket buffer")
                 
         except Exception as e:
-            print(f"[WARNING] Error flushing socket buffer: {e}")
+            pass  # Ignorer les erreurs de flush pour éviter le spam
         finally:
-            # Remettre le timeout original
             try:
-                self.client_socket.settimeout(original_timeout)
+                self.client_socket.settimeout(None)
             except:
                 pass
 
@@ -688,19 +759,37 @@ class DashboardAppBack:
         return False
 
     def update_sensor_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
-        """Mettre à jour les mappages de capteurs après fermeture du dialogue"""
-        # Mettre à jour les mappages IMU via l'UI
-        self.ui.apply_imu_mappings(imu_mappings)
-        
-        self.emg_mappings = emg_mappings
-        self.pmmg_mappings = pmmg_mappings
-        
-        # Mettre à jour les mappages dans le modèle 3D via l'UI
-        self.ui.model_3d_widget.model_viewer.set_emg_mapping(emg_mappings)
-        self.ui.model_3d_widget.model_viewer.set_pmmg_mapping(pmmg_mappings)
-        
-        self.ui.refresh_sensor_tree_with_mappings(self.emg_mappings, self.pmmg_mappings)
-        self.save_mappings()
+        """Met à jour les mappings des capteurs dans le backend et l'interface 3D."""
+        try:
+            # Stocker les mappings dans le backend
+            self.emg_mappings = emg_mappings
+            self.pmmg_mappings = pmmg_mappings
+            
+            # Appliquer les mappings IMU au modèle 3D
+            if hasattr(self.ui, 'model_3d_widget') and self.ui.model_3d_widget:
+                # Nettoyer les anciens mappings
+                self.ui.model_3d_widget.model_viewer.imu_mapping.clear()
+                
+                # Appliquer les nouveaux mappings IMU
+                for imu_id, body_part in imu_mappings.items():
+                    success = self.ui.model_3d_widget.model_viewer.map_imu_to_body_part(int(imu_id), body_part)
+                    if success:
+                        print(f"[BACKEND] Successfully mapped IMU {imu_id} to {body_part}")
+                    else:
+                        print(f"[BACKEND] Failed to map IMU {imu_id} to {body_part}")
+                
+                # Stocker les mappings EMG et pMMG directement (pas de méthode set_emg_mapping)
+                self.ui.model_3d_widget.model_viewer.emg_mapping = emg_mappings.copy()
+                self.ui.model_3d_widget.model_viewer.pmmg_mapping = pmmg_mappings.copy()
+            
+            # Rafraîchir l'affichage de l'arbre des capteurs
+            if hasattr(self.ui, 'refresh_sensor_tree_with_mappings'):
+                self.ui.refresh_sensor_tree_with_mappings(emg_mappings, pmmg_mappings)
+                
+        except Exception as e:
+            print(f"[ERROR] Error updating sensor mappings: {e}")
+            import traceback
+            traceback.print_exc()
 
     def get_current_mappings_for_dialog(self):
         return {
