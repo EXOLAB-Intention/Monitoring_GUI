@@ -9,16 +9,15 @@ import pyqtgraph as pg
 import socket
 import struct
 import threading
-import pandas as pd
 
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from utils.ethernet_receiver import recv_all, decode_packet
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))) # Removed
+from exo_monitoring_gui.utils.ethernet_receiver import recv_all, decode_packet # Changed import
 
 # Constante pour le trial end marker
 TRIAL_END_MARKER = b'\x4E'
 
-from plots.model_3d_viewer import Model3DWidget # Garder pour la logique 3D
+from exo_monitoring_gui.plots.model_3d_viewer import Model3DWidget # Changed import
 
 class EthernetServerThread(QThread):
     connection_ready = pyqtSignal(tuple)
@@ -290,19 +289,6 @@ class DashboardAppBack:
         self.ui.connect_button.setText("Disconnect")
         self.ui.connect_button.setEnabled(True)
         self.ui.record_button.setEnabled(True)
-        record_button_style = """
-        QPushButton {
-            background-color: #4caf50;
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            color: white;
-            font-size: 14px;
-            font-weight: 500;
-            text-align: center;
-            min-width: 120px;
-        }"""
-        self.ui.record_button.setStyleSheet(record_button_style)
 
     def on_client_init_error(self, error_msg):
         print(f"[ERROR] {error_msg}")
@@ -352,10 +338,69 @@ class DashboardAppBack:
                     if current_time - self._last_flush_time < 1.0:  # Flush max 1x par seconde
                         pass  # Skip flush
                     else:
-                        self.flush_socket_buffer()
-                        self._last_flush_time = current_time
-                else:
-                    self._last_flush_time = time.time()
+                        self.corrupted_packets_count = 0
+
+                    # Enregistrement des données
+                    if 'emg' in packet and packet['emg']:
+                        print(f"Received EMG data: {packet['emg']}")  # Debug log
+                        for i, emg_id in enumerate(self.sensor_config.get('emg_ids', [])):
+                            if i < len(packet['emg']) and i < len(self.recorded_data["EMG"]):
+                                value = packet['emg'][i]
+                                if -10.0 <= value <= 10.0:
+                                    self.recorded_data["EMG"][i].append(value)
+                    
+                    if 'pmmg' in packet and packet['pmmg']:
+                        for i, pmmg_id in enumerate(self.sensor_config.get('pmmg_ids', [])):
+                            if i < len(packet['pmmg']) and i < len(self.recorded_data["pMMG"]):
+                                value = packet['pmmg'][i]
+                                if -10.0 <= value <= 10.0:
+                                    self.recorded_data["pMMG"][i].append(value)
+                    
+                    if 'imu' in packet and packet['imu']:
+                        # Add debug log to verify IMU data is coming through
+                        print(f"Received IMU data: {len(packet['imu'])} quaternions")
+                        
+                        for i, imu_id in enumerate(self.sensor_config.get('imu_ids', [])):
+                            if i < len(packet['imu']) and i < len(self.recorded_data["IMU"]):
+                                quaternion = packet['imu'][i]
+                                if self._is_valid_quaternion(quaternion):
+                                    self.recorded_data["IMU"][i].append(quaternion)
+                                    try:
+                                        # Add more detailed debug log
+                                        print(f"Applying IMU{imu_id} data to 3D model: {quaternion}")
+                                        
+                                        # La mise à jour du modèle 3D doit se faire via l'UI
+                                        result = self.ui.model_3d_widget.apply_imu_data(imu_id, quaternion)
+                                        if not result:
+                                            print(f"[WARNING] Failed to apply IMU{imu_id} data to 3D model")
+                                    except AttributeError: # model_3d_widget might not be ready
+                                        print(f"[WARNING] model_3d_widget not available for IMU update.")
+                                    except Exception as e:
+                                        print(f"Error updating 3D model: {e}")
+                                else:
+                                    print(f"[WARNING] Invalid quaternion received for IMU{imu_id}: {quaternion}")
+                    
+                    # Mise à jour des graphiques (gérée par l'UI)
+                    try:
+                        self.ui.update_live_plots(packet)
+                    except AttributeError:
+                        print("[ERROR] Failed to update_live_plots - method not found")
+                    except Exception as e:
+                        print(f"[ERROR] Failed to update plots: {e}")
+
+                except ConnectionResetError:
+                    print("[ERROR] Connection reset by peer.")
+                    self.handle_connection_error("Connection reset by peer")
+                except ConnectionAbortedError:
+                    print("[ERROR] Connection aborted.")
+                    self.handle_connection_error("Connection aborted by software in your host machine")
+                except socket.timeout:
+                    print("[WARNING] Socket timeout while receiving data.")
+                    # Ne pas arrêter l'enregistrement, juste ignorer ce cycle
+                    return
+                except struct.error as e:
+                    print(f"[ERROR] Struct unpacking error: {e}. Packet size may be incorrect.")
+                    print("[INFO] Flushing socket buffer to recover from struct error")
                     self.flush_socket_buffer()
                 
                 if not self.client_socket:
@@ -808,22 +853,3 @@ class DashboardAppBack:
 
         self.ui.reset_sensor_display()
         QMessageBox.warning(self.ui, "Connection Problem", f"Disconnected from device: {reason}")
-
-
-    def export_recorded_data_to_csv(self, filename="recorded_data.csv"):
-        """Export all recorded sensor data to a CSV file."""
-        data = self.recorded_data
-        # Exemple simple pour EMG, IMU, pMMG (à adapter selon la structure réelle)
-        rows = []
-        max_len = max(len(lst) for sensor_type in data for lst in data[sensor_type])
-        for i in range(max_len):
-            row = {}
-            for sensor_type in data:
-                for idx, sensor_data in enumerate(data[sensor_type]):
-                    key = f"{sensor_type}{idx+1}"
-                    value = sensor_data[i] if i < len(sensor_data) else None
-                    row[key] = value
-            rows.append(row)
-        df = pd.DataFrame(rows)
-        df.to_csv(filename, index=False)
-        print(f"Data exported to {filename}")
