@@ -8,6 +8,7 @@ from PyQt5.QtGui import QFont, QPainter, QColor  # Added QColor import
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
+import time  # Import time module for optimized updates
 
 # Add parent directory to path for proper module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -389,7 +390,7 @@ class Model3DViewer(QGLWidget):
         """Updates the walking animation using pre-calculated frames."""
         if not self.walking:
             return
-        
+
         try:
             # Check the availability of animation frames
             if not self.precalculated_animation_frames:
@@ -406,20 +407,22 @@ class Model3DViewer(QGLWidget):
             
             # Retrieve current frame data
             current_frame_data = self.precalculated_animation_frames[self.precalc_frame]
-            
-            # Store currently mapped IMU body parts to preserve their rotations
+
+            # Store currently mapped IMU body parts to preserve their rotations and positions
             imu_controlled_parts = set(self.imu_mapping.values())
             imu_rotations = {}
+            imu_positions = {}
             for part_name in imu_controlled_parts:
                 if part_name in self.body_parts:
                     imu_rotations[part_name] = self.body_parts[part_name]['rot'].copy()
-            
+                    imu_positions[part_name] = self.body_parts[part_name]['pos'].copy()
+
             # Apply data to each body part
             for part_name, data in self.body_parts.items():
-                # Skip IMU-controlled parts to preserve their rotations
+                # Skip IMU-controlled parts to preserve their rotations and positions
                 if part_name in imu_controlled_parts:
                     continue
-                    
+
                 # Check that this part exists in the frame data
                 if part_name in current_frame_data:
                     # Retrieve base position and rotation (without animation)
@@ -436,31 +439,44 @@ class Model3DViewer(QGLWidget):
                     # Apply rotation quaternion directly
                     data['rot'] = rot_quat.copy()  # Important copy to avoid shared references
             
-            # Restore IMU-controlled part rotations
-            for part_name, rotation in imu_rotations.items():
+            # Restore IMU-controlled part rotations and positions
+            for part_name in imu_controlled_parts:
                 if part_name in self.body_parts:
-                    self.body_parts[part_name]['rot'] = rotation
-            
+                    self.body_parts[part_name]['rot'] = imu_rotations[part_name]
+                    self.body_parts[part_name]['pos'] = imu_positions[part_name]
+
             # If walking animation is active and using motion prediction, apply prediction
             # only to non-IMU parts
             if self.use_motion_prediction:
                 try:
-                    # Predict and apply movements of unmonitored parts
                     updated_body_parts = self.motion_predictor.predict_joint_movement(
                         self.body_parts, imu_controlled_parts, self.walking)
-                    
                     # Apply predictions only to parts not controlled by IMUs
                     for part_name, data in updated_body_parts.items():
                         if part_name not in imu_controlled_parts and part_name in self.body_parts:
                             self.body_parts[part_name]['rot'] = data['rot']
                 except Exception as e:
                     print(f"Error in motion prediction: {e}")
-        
-            self.update()
+
+            # Mise à jour contrôlée pour éviter les conflits avec les données IMU
+            if not hasattr(self, '_animation_update_pending'):
+                self._animation_update_pending = True
+                QTimer.singleShot(16, self._animation_batch_update)  # 60 FPS max
+                
         except Exception as e:
             print(f"Error in update_animation_frame: {e}")
             import traceback
             traceback.print_exc()
+
+    def _animation_batch_update(self):
+        """Mise à jour groupée pour l'animation."""
+        if hasattr(self, '_animation_update_pending'):
+            self._animation_update_pending = False
+            try:
+                if not self.is_being_destroyed and self.isValid():
+                    self.update()
+            except Exception as e:
+                print(f"[3D_DEBUG] Error during animation batch update: {e}")
 
     def toggle_walking(self):
         self.walking = not self.walking
@@ -630,9 +646,14 @@ class Model3DViewer(QGLWidget):
             self.makeCurrent()
             self.frame_count += 1
             
-            # Only log occasionally to reduce console spam
+            # Log IMU data application occasionally
             if self.frame_count % 300 == 0:
-                print(f"Rendering frame {self.frame_count}")
+                imu_parts = [part for part in self.imu_mapping.values() if part in self.body_parts]
+                if imu_parts:
+                    print(f"[3D_DEBUG] Rendering frame {self.frame_count} with IMU parts: {imu_parts}")
+                    for part in imu_parts[:2]:  # Log first 2 parts to avoid spam
+                        rot = self.body_parts[part]['rot']
+                        print(f"[3D_DEBUG] {part} rotation: {rot}")
             
             try:
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -1193,7 +1214,7 @@ class Model3DViewer(QGLWidget):
         return True
     
     def apply_imu_data(self, imu_id, quaternion_data):
-        """Applies IMU quaternion data to the mapped body part."""
+        """Applies IMU quaternion data to the mapped body part - VERSION OPTIMISÉE."""
         if imu_id not in self.imu_mapping:
             return False
             
@@ -1207,34 +1228,52 @@ class Model3DViewer(QGLWidget):
         # Apply calibration if available
         if self.calibration_complete and body_part in self.calibration_offsets:
             offset_quat = self.calibration_offsets[body_part]
-            # Apply the offset by quaternion multiplication
             corrected_quat = quaternion_multiply(normalized_quat, offset_quat)
             self.body_parts[body_part]['rot'] = corrected_quat
         else:
-            # Apply the quaternion directly if no calibration
             self.body_parts[body_part]['rot'] = normalized_quat
+        
+        # Système de mise à jour beaucoup plus agressif pour éviter le lag
+        if not hasattr(self, '_last_imu_update_time'):
+            self._last_imu_update_time = 0
+            
+        current_time = time.time()
+        if current_time - self._last_imu_update_time >= 0.033:  # Max 30 FPS
+            self._last_imu_update_time = current_time
+            if not self.is_being_destroyed and self.isValid():
+                try:
+                    self.update()
+                except:
+                    pass  # Ignorer les erreurs de mise à jour temporaires
             
         return True
-    
-    def get_current_mappings(self):
-        """Returns the current IMU to body part mappings."""
-        return self.imu_mapping
 
-    def set_emg_mapping(self, emg_mapping):
-        """Set EMG sensor mappings."""
-        self.emg_mapping = emg_mapping
-        
-    def set_pmmg_mapping(self, pmmg_mapping):
-        """Set pMMG sensor mappings."""
-        self.pmmg_mapping = pmmg_mapping
-    
+    def _batch_update_display(self):
+        """Mise à jour groupée optimisée."""
+        if hasattr(self, '_imu_data_updated') and self._imu_data_updated:
+            self._imu_data_updated = False
+            if not hasattr(self, '_last_batch_update_time'):
+                self._last_batch_update_time = 0
+                
+            current_time = time.time()
+            if current_time - self._last_batch_update_time >= 0.033:  # Max 30 FPS
+                self._last_batch_update_time = current_time
+                try:
+                    if not self.is_being_destroyed and self.isValid():
+                        self.update()
+                except Exception as e:
+                    pass  # Ignorer les erreurs temporaires
+
     def start_tpose_calibration(self):
         """Start T-pose calibration."""
+        print("[3D_DEBUG] start_tpose_calibration called")
         if not self.imu_mapping:
             print("Cannot start calibration - no IMUs are mapped")
             return False
             
-        print("Starting T-pose calibration...")
+        print(f"[3D_DEBUG] IMU mapping at calibration start: {self.imu_mapping}")
+        self.force_tpose()  # Ajout ici pour forcer la T-pose visuelle
+        
         self.calibration_mode = True
         self.calibration_complete = False
         self.calibration_samples = []
@@ -1247,9 +1286,7 @@ class Model3DViewer(QGLWidget):
         
     def stop_tpose_calibration(self):
         """Stop T-pose calibration and calculate offsets."""
-        if not self.calibration_mode:
-            return False
-            
+        print("[3D_DEBUG] stop_tpose_calibration called")
         self.calibration_timer.stop()
         self.calibration_mode = False
         
@@ -1303,6 +1340,7 @@ class Model3DViewer(QGLWidget):
         return True
     
     def reset_calibration(self):
+        print("[3D_DEBUG] reset_calibration called")
         """Reset calibration data."""
         self.calibration_mode = False
         self.calibration_complete = False
@@ -1343,3 +1381,15 @@ class Model3DViewer(QGLWidget):
         glEnd()
         
         glPopMatrix()
+
+    def force_tpose(self):
+        """Force tous les IMUs mappés à la T-pose (quaternion identité)."""
+        print("[3D_DEBUG] Forcing T-pose for all mapped IMUs")
+        for imu_id, body_part in self.imu_mapping.items():
+            if body_part in self.body_parts:
+                self.body_parts[body_part]['rot'] = np.array([1.0, 0.0, 0.0, 0.0])
+        self.update()
+
+    def get_current_mappings(self):
+        """Return the current IMU to body part mapping."""
+        return dict(self.imu_mapping)
