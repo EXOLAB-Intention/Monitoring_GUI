@@ -2,15 +2,12 @@ from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QAction, QFileDia
                          QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout, QStackedWidget)
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
-import h5py
-import os
 from datetime import datetime
-import traceback
-from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, save_metadata
-from utils.Menu_bar import MainBar
-from utils.style import _apply_styles
-from UI.back.main_window_back import MainAppBack
+from .informations import InformationWindow # Changed to relative import
+from exo_monitoring_gui.utils.hdf5_utils import load_metadata, save_metadata # Changed to absolute import
+from exo_monitoring_gui.utils.Menu_bar import MainBar # Changed to absolute import
+from exo_monitoring_gui.utils.style import _apply_styles # Changed to absolute import
+from .back.main_window_back import MainAppBack # Changed to relative import
 
 class MainApp(QMainWindow):
     def __init__(self):

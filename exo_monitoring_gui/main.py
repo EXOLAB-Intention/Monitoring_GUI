@@ -4,34 +4,42 @@ import os
 
 # Assurez-vous que le répertoire principal est dans le chemin Python
 script_dir = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(script_dir)
+
+# The parent directory of script_dir is the project root that contains the 'exo_monitoring_gui' package.
+# This directory needs to be in sys.path for 'from exo_monitoring_gui...' imports to work.
+project_root_dir = os.path.dirname(script_dir)
+if project_root_dir not in sys.path:
+    sys.path.insert(0, project_root_dir) # Insert at the beginning to ensure it's checked first
 
 def main():
     try:
         print("Starting application...")
         
-        # Handle OpenGL errors more gracefully - prevent console spam
-        # Add a filter for the "QWindowsGLContext::swapBuffers: Cannot find window" error
+        # Améliorer la gestion des erreurs OpenGL
         from PyQt5.QtCore import qInstallMessageHandler, QtDebugMsg, QtWarningMsg, QtCriticalMsg, QtFatalMsg
         
         def message_handler(mode, context, message):
-            # Log OpenGL-related messages for debugging
+            # Ne pas afficher les messages OpenGL de routine pour réduire le spam de console
             if "OpenGL" in message:
-                print(f"OpenGL Message: {message}")
+                # Enregistrer uniquement les messages critiques d'OpenGL
+                if "error" in message.lower() or "failed" in message.lower():
+                    print(f"OpenGL Error: {message}")
+                return  # Supprimer la plupart des messages OpenGL
                 
-            # Only suppress the specific swapBuffers message, let all other messages through
-            if "QWindowsGLContext::swapBuffers: Cannot find window" in message:
-                return  # Suppress this specific message
+            # Supprimer plusieurs types de messages Windows qui peuvent causer du spam
+            if "QWindowsGLContext::swapBuffers" in message:
+                return
+            if "QOpenGLContext" in message and "destroyed" in message:
+                return
+            if "QObject" in message and "destroyed" in message:
+                return
             
-            if mode == QtDebugMsg:
-                print(f"Debug: {message}")
-            elif mode == QtWarningMsg:
-                print(f"Warning: {message}")
-            elif mode == QtCriticalMsg:
+            # Afficher les autres messages importants   3
+            if mode == QtCriticalMsg or mode == QtFatalMsg:
                 print(f"Critical: {message}")
-            elif mode == QtFatalMsg:
-                print(f"Fatal: {message}")
-        
+            elif mode == QtWarningMsg and "QFont" not in message:  # Ignorer les avertissements de police
+                print(f"Warning: {message}")
+                
         qInstallMessageHandler(message_handler)
         
         # Check if ML model exists and use it if available
@@ -43,6 +51,18 @@ def main():
             print("No ML model found. Using simple predictor.")
             # You could add a message suggesting to train a model
         
+        # Ajouter une configuration OpenGL pour améliorer la performance
+        from PyQt5.QtGui import QSurfaceFormat
+        
+        # Configuration globale OpenGL
+        surface_format = QSurfaceFormat()
+        surface_format.setRenderableType(QSurfaceFormat.OpenGL)
+        surface_format.setDepthBufferSize(24)
+        surface_format.setStencilBufferSize(8)
+        surface_format.setSamples(4)  # Antialiasing (peut être réduit pour plus de performance)
+        surface_format.setSwapBehavior(QSurfaceFormat.DoubleBuffer)
+        QSurfaceFormat.setDefaultFormat(surface_format)
+        
         # Ajouter une vérification des dépendances essentielles
         required_packages = ['PyQt5', 'numpy', 'OpenGL', 'pyqtgraph']
         for package in required_packages:
@@ -52,7 +72,7 @@ def main():
                 print(f"ERROR: Required package '{package}' is not installed.")
                 return
         
-        from app import launch
+        from exo_monitoring_gui.app import launch # Changed from 'from app import launch'
         print("Imported launch function")
         launch()
         print("Application launched")
