@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QBrush, QFont
-import re
 import json
 import os
 
@@ -18,6 +17,23 @@ if __name__ == '__main__':
         sys.path.insert(0, parent_dir)
 
 from plots.model_3d_viewer import Model3DWidget
+
+# Centraliser les mappings de noms de parties du corps et les couleurs de capteurs
+BODY_PART_UI_TO_MODEL = {
+    'Head': 'head', 'Neck': 'neck', 'Torso': 'torso',
+    'Left Deltoid': 'deltoid_l', 'Left Biceps': 'biceps_l', 'Left Forearm': 'forearm_l',
+    'Left Latissimus Dorsi': 'dorsalis_major_l', 'Left Pectorals': 'pectorals_l',
+    'Left Hand': 'left_hand', 'Right Deltoid': 'deltoid_r', 'Right Biceps': 'biceps_r',
+    'Right Forearm': 'forearm_r', 'Right Latissimus Dorsi': 'dorsalis_major_r',
+    'Right Pectorals': 'pectorals_r', 'Right Hand': 'right_hand', 'Hip': 'hip',
+    'Left Quadriceps': 'quadriceps_l', 'Right Quadriceps': 'quadriceps_r',
+    'Left Hamstrings': 'ishcio_hamstrings_l', 'Right Hamstrings': 'ishcio_hamstrings_r',
+    'Left Calves': 'calves_l', 'Right Calves': 'calves_r',
+    'Left Gluteus': 'glutes_l', 'Right Gluteus': 'glutes_r',
+    'Left Foot': 'left_foot', 'Right Foot': 'right_foot'
+}
+BODY_PART_MODEL_TO_UI = {v: k for k, v in BODY_PART_UI_TO_MODEL.items()}
+SENSOR_TYPE_COLORS = {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}
 
 class MappingBadgesWidget(QWidget):
     def __init__(self, mappings, parent=None):
@@ -121,7 +137,7 @@ class MappingBadgesWidget(QWidget):
         layout.addStretch(1)
 
     def _color(self, typ):
-        return {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}.get(typ, "#888")
+        return SENSOR_TYPE_COLORS.get(typ, "#888")
 
 class SimplifiedMappingDialog(QDialog):
     mappings_updated = pyqtSignal(dict, dict, dict)
@@ -724,7 +740,7 @@ class SimplifiedMappingDialog(QDialog):
             )
 
     def _get_color_for_type(self, typ):
-        return {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}.get(typ, "#888")
+        return SENSOR_TYPE_COLORS.get(typ, "#888")
 
     def load_current_mappings(self):
         for sensor_type, mappings in self.current_mappings.items():
@@ -887,34 +903,9 @@ class SimplifiedMappingDialog(QDialog):
         QMessageBox.information(self, "Reset", "All mappings have been reset to system default values.")
 
     def _convert_model_part_to_ui(self, model_part):
-        mapping = {
-            'head': 'Head', 'neck': 'Neck', 'torso': 'Torso',
-            'deltoid_l': 'Left Deltoid', 'biceps_l': 'Left Biceps', 'forearm_l': 'Left Forearm',
-            'dorsalis_major_l': 'Left Latissimus Dorsi', 'pectorals_l': 'Left Pectorals',
-            'left_hand': 'Left Hand', 'deltoid_r': 'Right Deltoid', 'biceps_r': 'Right Biceps',
-            'forearm_r': 'Right Forearm', 'dorsalis_major_r': 'Right Latissimus Dorsi',
-            'pectorals_r': 'Right Pectorals', 'right_hand': 'Right Hand', 'hip': 'Hip',
-            'glutes_l': 'Left Gluteus', 'quadriceps_l': 'Left Quadriceps',
-            'ishcio_hamstrings_l': 'Left Hamstrings', 'calves_l': 'Left Calf', 'left_foot': 'Left Foot',
-            'glutes_r': 'Right Gluteus', 'quadriceps_r': 'Right Quadriceps',
-            'ishcio_hamstrings_r': 'Right Hamstrings', 'calves_r': 'Right Calf', 'right_foot': 'Right Foot'
-        }
-        return mapping.get(model_part, model_part.capitalize())
+        return BODY_PART_MODEL_TO_UI.get(model_part, model_part.capitalize())
 
     def _convert_ui_to_model_part(self, ui_name):
-        mapping = {
-            'Head': 'head', 'Neck': 'neck', 'Torso': 'torso',
-            'Left Deltoid': 'deltoid_l', 'Left Biceps': 'biceps_l', 'Left Forearm': 'forearm_l',
-            'Left Latissimus Dorsi': 'dorsalis_major_l', 'Left Pectorals': 'pectorals_l',
-            'Left Hand': 'left_hand', 'Right Deltoid': 'deltoid_r', 'Right Biceps': 'biceps_r',
-            'Right Forearm': 'forearm_r', 'Right Latissimus Dorsi': 'dorsalis_major_r',
-            'Right Pectorals': 'pectorals_r', 'Right Hand': 'right_hand', 'Hip': 'hip',
-            'Left Quadriceps': 'quadriceps_l', 'Right Quadriceps': 'quadriceps_r',
-            'Left Hamstrings': 'ishcio_hamstrings_l', 'Right Hamstrings': 'ishcio_hamstrings_r',
-            'Left Calves': 'calves_l', 'Right Calves': 'calves_r',
-            'Left Gluteus': 'glutes_l', 'Right Gluteus': 'glutes_r',
-            'Left Foot': 'left_foot', 'Right Foot': 'right_foot'
-        }
-        return mapping.get(ui_name, ui_name.lower().replace(' ', '_'))
+        return BODY_PART_UI_TO_MODEL.get(ui_name, ui_name.lower().replace(' ', '_'))
 
 SensorMappingDialog = SimplifiedMappingDialog
