@@ -10,7 +10,7 @@ import socket
 import struct
 import threading
 import pandas as pd
-
+from utils.json_request import reset_json_file
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from utils.ethernet_receiver import recv_all, decode_packet
@@ -210,7 +210,7 @@ class DashboardAppBack:
 
         self.timer = QTimer() # Pas de self.ui ici, QTimer n'a pas besoin d'un parent direct pour fonctionner
         self.timer.timeout.connect(self.update_data)
-        
+        reset_json_file()
         # Ne pas créer un deuxième MainBar, utiliser celui de l'UI
         # try:
         #     from utils.Menu_bar import MainBar

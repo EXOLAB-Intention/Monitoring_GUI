@@ -1,12 +1,14 @@
+import shutil
 from PyQt5.QtWidgets import (QMainWindow, QPushButton, QLabel, QAction, QFileDialog,
                              QMessageBox, QVBoxLayout, QWidget, QProgressBar, QDialog, QTextEdit, QHBoxLayout, QApplication)
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
 import h5py
 import os
+import re
 from datetime import datetime
 from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, save_metadata, copy_all_data_preserve_root_metadata
+from utils.hdf5_utils import load_metadata, copy_only_root_metadata, copy_all_data_preserve_root_metadata, inject_metadata_to_hdf
 from UI.back.main_window_back import MainAppBack
 from utils.file_receiver import request_files, SERVER_IP, PORT, OUT_DIR
 class MainBar:
@@ -91,6 +93,7 @@ class MainBar:
                 self.save_subject_notsave()
             elif reply == QMessageBox.Cancel:
                 return
+
 
         options = QFileDialog.Options()
         filename, _ = QFileDialog.getOpenFileName(
@@ -218,6 +221,68 @@ class MainBar:
             self.main_app.current_subject_file = filename
             return self.save_subject_notsave()
         return False
+    
+
+    def save_experiment_protocol_as(self, parent):
+        if not parent.file_path:
+            print("Aucun fichier source ouvert.")
+            return
+
+        text = parent.experiment_protocol_text.toPlainText()
+        if not text:
+            return
+
+        # Boîte de dialogue pour choisir un nouveau fichier .h5
+        file_path, _ = QFileDialog.getSaveFileName(
+            parent,
+            "Enregistrer le protocole expérimental sous...",
+            "",
+            "Fichiers HDF5 (*.h5);;Tous les fichiers (*)"
+        )
+
+        if not file_path:
+            return  # L'utilisateur a annulé
+
+        try:
+            # Étape 1 : Copier tout le fichier original dans le nouveau
+            shutil.copy(parent.file_path, file_path)
+
+            # Étape 2 : Modifier ou ajouter la métadonnée 'experiment_protocol'
+            with h5py.File(file_path, 'a') as f:
+                f.attrs.modify('experiment_protocol', text)
+
+            print(f"✅ Fichier sauvegardé avec succès dans {file_path}")
+
+        except Exception as e:
+            print(f"❌ Erreur lors de la sauvegarde : {e}")
+
+
+    def save_experiment_protocol(self, parent):
+        if not parent.file_path:
+            return
+        text = parent.experiment_protocol_text.toPlainText()
+        if not text:
+            return
+        try:
+            with h5py.File(parent.file_path, 'a') as f:
+                # Ajoute ou met à jour la métadonnée à la racine
+                f.attrs.modify('experiment_protocol', text)
+        except Exception as e:
+            print(f"Erreur lors de la sauvegarde du protocole expérimental : {e}")
+
+    def load_experiment_protocol(self, parent):
+        """Charge le protocole expérimental depuis les métadonnées si présent."""
+        if not parent.file_path:
+            return
+        try:
+            with h5py.File(parent.file_path, 'r') as f:
+                if 'experiment_protocol' in f.attrs:
+                    text = f.attrs['experiment_protocol']
+                    if isinstance(text, bytes):
+                        text = text.decode('utf-8')
+                    parent.experiment_protocol_text.setPlainText(text)
+        except Exception as e:
+            print(f"Erreur lors du chargement du protocole expérimental : {e}")
 
     def show_metadata(self):
         """Display metadata of the current subject"""
@@ -394,28 +459,28 @@ class MainBar:
         self.load_existing_trial = self._create_action(
             "Load existing trial",
             lambda: self.load_existing_subject(True),
-            "Ctrl+F",
+            "Ctrl+L",
             tip="Load an existing trial"
         )
 
         self.Save_current_trial = self._create_action(
             "&Save current trial",
-            lambda: self.show_metadata(),
-            "Ctrl+M",
+            lambda: self.save_experiment_protocol(),
+            "Ctrl+T",
             tip="Save a current trial"
         )
 
         self.Save_current_trial_as = self._create_action(
             "&Save current trial as...",
-            lambda: self.show_metadata(),
-            "Ctrl+M",
+            lambda: self.save_experiment_protocol_as(),
+            "Ctrl+Shift+T",
             tip="Save current trial in a new file"
         )
 
         self.Save_current_plotas_image = self._create_action(
             "&Save current plotas image",
             lambda: self.show_metadata(),
-            "Ctrl+M",
+            "Ctrl+I",
             tip="Save current plotas image"
         )
 
@@ -581,14 +646,56 @@ class MainBar:
 
         received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
         received_files = [f for f in received_files if os.path.isfile(f)]
+        print("2c'est iciiiiiiiiiiiiiiiiiii \n")
+        if received_files:
+            latest_file = max(received_files, key=os.path.getmtime)
+            print("3c'est iciiiiiiiiiiiiiiiiiii \n")
+            print(latest_file)
+            print(self.main_app.subject_file)
+            copy_all_data_preserve_root_metadata(latest_file, f)
+            inject_metadata_to_hdf("sensor_mappings.json", f)
+
+            self.review = Review(file_path=self.main_app.subject_file,existing_load=True)
+
+            for widget in QApplication.topLevelWidgets():
+                widget.close()
+
+            self.review.show()
+        else:
+            print("[WARN] Aucun fichier reçu.")
+
+    def request_h5_file_review(self, file_path, file_dictionary):
+        from UI.review import Review
+        f = self.main_app.subject_file
+        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa55")
+        print(f)
+        if not f:
+            options = QFileDialog.Options()
+            f, _ = QFileDialog.getOpenFileName(
+                self.main_app,
+                "Open HDF5 File",
+                "",
+                "HDF5 Files (*.h5 *.hdf5);;All Files (*)",
+                options=options
+            )
+            if not f:  # User cancelled file selection
+                return
+        
+        request_files()
+
+        received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
+        received_files = [f for f in received_files if os.path.isfile(f)]
 
         if received_files:
             latest_file = max(received_files, key=os.path.getmtime)
+            print("dededededededede 4")
+            print(latest_file)
+            copy_all_data_preserve_root_metadata(latest_file, f)
+            inject_metadata_to_hdf("sensor_mappings.json", f)
 
-            copy_all_data_preserve_root_metadata(latest_file, self.main_app.subject_file)
-
-            self.review = Review(file_path=self.main_app.subject_file)
-
+            file_dictionary.append(f)
+            self.review = Review(parent=None, file_path=f, existing_load=True, trials=file_dictionary)
+            print(file_dictionary)
             for widget in QApplication.topLevelWidgets():
                 widget.close()
 
@@ -662,3 +769,54 @@ class MainBar:
         self.Save_current_trial.setEnabled(True)
         self.Save_current_trial_as.setEnabled(True)
         self.show_metadata_action.setEnabled(True)
+
+
+
+    def review_start_recording(self, parent, file_dictionary):
+        if not parent.file_path:
+            print("⚠️ Aucun fichier source (parent.file_path) défini.")
+            return
+        if file_dictionary is None:
+            file_dictionary = []
+
+        # Obtenir dossier et nom de base sans extension
+        base_dir = os.path.dirname(parent.file_path)
+        base_name = os.path.splitext(os.path.basename(parent.file_path))[0]
+
+        # Déterminer le numéro de trial
+        trial_number = len(file_dictionary) + 1
+
+        # Rechercher si _trial_{nombre} est déjà présent
+        match = re.match(r"^(.*)_trial_\d+$", base_name)
+        if match:
+            base_name_clean = match.group(1)
+        else:
+            base_name_clean = base_name
+
+        new_file_name = f"{base_name_clean}_trial_{trial_number}.h5"
+        new_file_path = os.path.join(base_dir, new_file_name)
+        
+        while os.path.exists(new_file_path):
+            base_name_clean += "_"
+            new_file_name = f"{base_name_clean}_trial_{trial_number}.h5"
+            new_file_path = os.path.join(base_dir, new_file_name)
+
+        try:
+            # Lire les métadonnées du fichier source
+            with h5py.File(parent.file_path, 'r') as source_file:
+                attrs = dict(source_file.attrs)
+
+            # Créer un nouveau fichier avec uniquement les mêmes métadonnées
+            with h5py.File(new_file_path, 'w') as new_file:
+                for key, value in attrs.items():
+                    new_file.attrs[key] = value
+
+            print(f"✅ Fichier créé avec les métadonnées : {new_file_path}")
+
+        except Exception as e:
+            print(f"❌ Erreur lors de la création du fichier : {e}")
+
+        from plots.dashboard_app import DashboardApp
+        parent.dashboard_instance = DashboardApp(new_file_path, parent, file_dictionary)
+        parent.dashboard_instance.showMaximized()
+
