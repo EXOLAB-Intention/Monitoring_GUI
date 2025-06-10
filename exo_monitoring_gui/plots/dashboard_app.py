@@ -28,13 +28,14 @@ from plots.back.dashboard_app_back import DashboardAppBack  # Utiliser un chemin
 
 
 class DashboardApp(QMainWindow):
-    def __init__(self, subject_file=None):
+    def __init__(self, subject_file=None, parent_revi=None, file_list=None):
         super().__init__()
-        # Variables d'optimisation pour les graphiques
+        # Store the subject file for later use
+        self.subject_file = subject_file
+        self.parent_revi = parent_revi
+        self.file_list = file_list if file_list is not None else None
         self._last_plot_update = 0
         self._plot_update_interval_ms = 50  # 20 FPS max au lieu de 30
-        
-        # Global application style
         self.setStyleSheet("""
             QMainWindow, QDialog {
                 background-color: #f5f5f5;
@@ -130,6 +131,15 @@ class DashboardApp(QMainWindow):
             import traceback
             traceback.print_exc()
             self.main_bar_re = None
+
+        print("Debug 56")
+        print(self.parent_revi)      
+        if self.parent_revi is not None:
+            print("[Debug 2 le s]")
+            self.main_bar_re.request_h5_file_action.disconnect()
+            self.main_bar_re.request_h5_file_action.triggered.connect(
+                lambda: self.main_bar_re.request_h5_file_review(self.subject_file, self.file_list)
+            )
 
     def init_ui(self):
         central_widget = QWidget()
