@@ -19,7 +19,6 @@ from utils.body_motion_predictor import (
     BodyMotionNetwork, 
     ImprovedBodyMotionNetwork,
     SequentialBodyMotionNetwork,
-    MLBodyPredictor
 )
 
 class MotionDataGenerator:

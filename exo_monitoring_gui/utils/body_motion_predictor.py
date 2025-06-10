@@ -3,8 +3,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import os
-import pickle
-import math
 
 class SimpleBodyPredictor:
     """Un prédicteur simple pour le mouvement du corps basé sur les parties avec des IMUs"""
@@ -164,6 +162,35 @@ class SimpleBodyPredictor:
             import traceback
             traceback.print_exc()
             return {}
+    
+    def predict_joint_movement(self, body_parts, monitored_parts, is_walking=False):
+        """
+        Prédit les mouvements des articulations non surveillées.
+        Utilise le modèle ML si disponible, sinon replie sur le simple predictor.
+        
+        Args:
+            body_parts: Dictionnaire des parties du corps avec leurs positions et rotations
+            monitored_parts: Liste des noms des parties surveillées par des capteurs
+            is_walking: Booléen indiquant si le mode marche est activé
+            
+        Returns:
+            Dictionnaire mis à jour avec les rotations prédites pour toutes les parties
+        """
+        imu_data = {k: v for k, v in body_parts.items() if k in monitored_parts}
+        predictions = self.predict_from_partial_state(imu_data)
+        
+        # Copier les données d'entrée pour ne pas les modifier directement
+        updated_body_parts = {k: {
+            'pos': v['pos'].copy(), 
+            'rot': v['rot'].copy()
+        } for k, v in body_parts.items()}
+        
+        # Mettre à jour les parties non surveillées avec les prédictions
+        for part_name, pred in predictions.items():
+            if part_name in updated_body_parts:
+                updated_body_parts[part_name]['rot'] = pred['rot']
+        
+        return updated_body_parts
 
 
 class ImprovedBodyMotionNetwork(nn.Module):
