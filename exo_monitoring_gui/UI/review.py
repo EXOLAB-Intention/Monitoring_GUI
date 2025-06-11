@@ -707,7 +707,8 @@ class Review(QMainWindow):
                             return
                         if group_upper == "LABEL":
                             return
-
+                        if group_upper == "CONTROLLER":
+                            return
                         if group_upper not in data_structure:
                             data_structure[group_upper] = []
                         data_structure[group_upper].append(dataset_upper)
