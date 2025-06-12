@@ -1653,3 +1653,102 @@ class DashboardApp(QMainWindow):
                 item = self.find_sensor_item_by_base_name(sensor_base)
                 sensor_full = item.text(0) if item else sensor_base
                 self.plot_recorded_sensor_data(sensor_full, sensor_base)
+
+    def clear_all_plots(self):
+        """Nettoie tous les graphiques existants pour préparer un nouveau trial."""
+        try:
+            # Nettoyer les graphiques individuels
+            for plot_widget in list(self.plots.values()):
+                if plot_widget:
+                    plot_widget.setParent(None)
+                    plot_widget.deleteLater()
+            self.plots.clear()
+            
+            # Nettoyer les graphiques de groupe
+            for group_plot_widget in list(self.group_plots.values()):
+                if group_plot_widget:
+                    group_plot_widget.setParent(None)
+                    group_plot_widget.deleteLater()
+            self.group_plots.clear()
+            
+            # Nettoyer les dictionnaires de courbes
+            self.curves.clear()
+            self.group_curves.clear()
+            
+            # Réinitialiser les ensembles de capteurs mis en évidence
+            if hasattr(self, 'highlighted_sensors'):
+                self.highlighted_sensors.clear()
+            
+            # Nettoyer les couleurs de mise en évidence dans l'arbre des capteurs
+            for i_clear_group in range(self.connected_systems.topLevelItemCount()):
+                group_item = self.connected_systems.topLevelItem(i_clear_group)
+                if group_item:
+                    for j_clear_sensor in range(group_item.childCount()):
+                        sensor_item = group_item.child(j_clear_sensor)
+                        if sensor_item:
+                            sensor_item.setBackground(0, QBrush(QColor("white")))
+                            
+            print("[INFO] All plots cleared successfully")
+            
+        except Exception as e:
+            print(f"[ERROR] Error in clear_all_plots: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def clear_plots_from_menu(self):
+        """Méthode appelée par le menu Edit > Clear plots."""
+        try:
+            if hasattr(self.backend, 'clear_plots_only'):
+                self.backend.clear_plots_only()
+                # Remettre le bouton Record à l'état initial
+                self.reset_record_button_for_new_trial()
+                # Message moins intrusif dans la status bar
+                if hasattr(self, 'statusBar'):
+                    self.statusBar().showMessage("Plots cleared - Ready for new trial", 5000)  # 5 secondes
+                print("[INFO] Plots cleared from menu - System ready for new trial")
+            else:
+                # Fallback si la méthode backend n'existe pas
+                print("[WARNING] backend.clear_plots_only() not found, using fallback")
+                self.clear_all_plots()
+                self.reset_record_button_for_new_trial()
+                if hasattr(self, 'statusBar'):
+                    self.statusBar().showMessage("Plots cleared - Ready for new trial", 5000)
+        except Exception as e:
+            print(f"[ERROR] Error in clear_plots_from_menu: {e}")
+            QMessageBox.warning(self, "Clear Plots Error", f"An error occurred while clearing plots: {str(e)}")
+
+    def reset_record_button_for_new_trial(self):
+        """Remet le bouton Record à l'état initial pour permettre un nouveau trial."""
+        try:
+            record_button_style = """
+            QPushButton {
+                background-color: #4caf50;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                color: white;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                min-width: 120px;
+            }
+            QPushButton:hover {
+                background-color: #43a047;
+            }
+            QPushButton:pressed {
+                background-color: #388e3c;
+            }
+            """
+            self.record_button.setStyleSheet(record_button_style)
+            self.record_button.setText("Record Start")
+            print("[INFO] Record button reset for new trial")
+        except Exception as e:
+            print(f"[ERROR] Error resetting record button: {e}")
+
+    def prepare_for_new_trial(self):
+        """Prépare l'interface pour un nouveau trial."""
+        try:
+            self.clear_all_plots()
+            print("[INFO] Interface prepared for new trial")
+        except Exception as e:
+            print(f"[ERROR] Error preparing for new trial: {e}")
