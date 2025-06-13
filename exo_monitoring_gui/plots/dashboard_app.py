@@ -1293,17 +1293,144 @@ class DashboardApp(QMainWindow):
         return None
 
     def plot_recorded_sensor_data(self, sensor_name_full, sensor_name_base):
-        """Affiche les données enregistrées pour un capteur spécifique."""
-        try:
-            # Créer ou mettre à jour le graphique selon le mode d'affichage
-            if self.group_sensor_mode.isChecked():
-                self.add_recorded_data_to_group_plot(sensor_name_full, sensor_name_base)
+        """Displays recorded data for a specific sensor."""
+        recorded_data = self.backend.recorded_data
+        
+        # Extraire l'ID du capteur
+        sensor_id_str = ''.join(filter(str.isdigit, sensor_name_base))
+        if not sensor_id_str:
+            return
+        sensor_id = int(sensor_id_str)
+        
+        # Déterminer le type de capteur et trouver l'index correct dans recorded_data
+        has_data = False
+        data_array_key = None
+        sensor_idx = -1
+        
+        if sensor_name_base.startswith("EMG"):
+            data_array_key = "EMG"
+            if self.backend.sensor_config and 'emg_ids' in self.backend.sensor_config:
+                emg_ids = self.backend.sensor_config['emg_ids']
+                if sensor_id in emg_ids:
+                    sensor_idx = emg_ids.index(sensor_id)
+                    has_data = (sensor_idx < len(recorded_data.get("EMG", [])) and 
+                               recorded_data["EMG"][sensor_idx])
+        elif sensor_name_base.startswith("pMMG"):
+            data_array_key = "pMMG"
+            if self.backend.sensor_config and 'pmmg_ids' in self.backend.sensor_config:
+                pmmg_ids = self.backend.sensor_config['pmmg_ids']
+                if sensor_id in pmmg_ids:
+                    sensor_idx = pmmg_ids.index(sensor_id)
+                    has_data = (sensor_idx < len(recorded_data.get("pMMG", [])) and 
+                               recorded_data["pMMG"][sensor_idx])
+        elif sensor_name_base.startswith("IMU"):
+            data_array_key = "IMU"
+            if self.backend.sensor_config and 'imu_ids' in self.backend.sensor_config:
+                imu_ids = self.backend.sensor_config['imu_ids']
+                if sensor_id in imu_ids:
+                    sensor_idx = imu_ids.index(sensor_id)
+                    has_data = (sensor_idx < len(recorded_data.get("IMU", [])) and 
+                               recorded_data["IMU"][sensor_idx])
+
+        if not has_data or sensor_idx == -1:
+            QMessageBox.information(self, "No data", f"No recorded data available for {sensor_name_base}.")
+            return
+
+        # Mode groupe: afficher dans les graphiques de groupe
+        if self.group_sensor_mode.isChecked():
+            sensor_group_type = data_array_key
+            
+            if sensor_group_type not in self.group_plots:
+                self.create_group_plots()
+            
+            plot_widget = self.group_plots.get(sensor_group_type)
+            if not plot_widget:
+                return
+
+            if sensor_name_base.startswith("IMU"):
+                for axis_label in ['w', 'x', 'y', 'z']:
+                    curve_name = f"{sensor_name_full}_{axis_label}"
+                    if curve_name in self.group_curves:
+                        plot_widget.removeItem(self.group_curves[curve_name])
+                        del self.group_curves[curve_name]
             else:
-                self.create_individual_plot_with_recorded_data(sensor_name_full, sensor_name_base)
+                if sensor_name_full in self.group_curves:
+                    plot_widget.removeItem(self.group_curves[sensor_name_full])
+                    del self.group_curves[sensor_name_full]
+
+            data_to_plot = recorded_data[data_array_key][sensor_idx]
+            if data_to_plot:
+                print(f"[DEBUG] Group mode - Displaying {sensor_name_base}: {len(data_to_plot)} data points")
+                if sensor_name_base.startswith("IMU"):
+                    for i_quat, axis_label in enumerate(['w', 'x', 'y', 'z']):
+                        quat_data = [q[i_quat] for q in data_to_plot]
+                        color = ['r', 'g', 'b', 'y'][i_quat]
+                        curve_name = f"{sensor_name_full}_{axis_label}"
+                        print(f"[DEBUG]   {curve_name}: {len(quat_data)} points")
+                        curve = plot_widget.plot(quat_data, pen=pg.mkPen(color, width=2), name=curve_name)
+                        self.group_curves[curve_name] = curve
+                        if "IMU" not in self.backend.group_plot_data:
+                            self.backend.group_plot_data["IMU"] = {}
+                        self.backend.group_plot_data["IMU"][curve_name] = np.zeros(100)
+                else:
+                    color_idx = sensor_idx % 8
+                    print(f"[DEBUG]   {sensor_name_full}: {len(data_to_plot)} points")
+                    curve = plot_widget.plot(data_to_plot, pen=pg.mkPen(['r', 'g', 'b', 'y', 'c', 'm', 'orange', 'w'][color_idx], width=2), name=sensor_name_full)
+                    self.group_curves[sensor_name_full] = curve
+                    if sensor_group_type not in self.backend.group_plot_data:
+                        self.backend.group_plot_data[sensor_group_type] = {}
+                    self.backend.group_plot_data[sensor_group_type][sensor_name_full] = np.zeros(100)
                 
-            self.highlight_sensor_item(sensor_name_base)
-        except Exception as e:
-            print(f"[ERROR] Error plotting recorded data for {sensor_name_base}: {e}")
+                self.highlight_sensor_item(sensor_name_base)
+                self._replot_sorted_curves_in_group_plot(sensor_group_type)
+        
+        # Mode individuel: créer un graphique individuel
+        else:
+            new_plot_key = self.get_sensor_sort_key(sensor_name_base)
+            plot_widget_to_use = None
+
+            if sensor_name_base in self.plots:
+                plot_widget_to_use = self.plots[sensor_name_base]
+                plot_widget_to_use.clear()
+                for key in list(self.curves.keys()):
+                    if key.startswith(sensor_name_base):
+                        del self.curves[key]
+            else:
+                plot_widget_to_use = pg.PlotWidget(title=sensor_name_full)
+                plot_widget_to_use.setBackground('#1e1e1e')
+                plot_widget_to_use.getAxis('left').setTextPen('white')
+                plot_widget_to_use.getAxis('bottom').setTextPen('white')
+                plot_widget_to_use.showGrid(x=True, y=True, alpha=0.3)
+                plot_widget_to_use.setTitle(sensor_name_full, color='white', size='14pt')
+                plot_widget_to_use.setProperty("sensor_base_name", sensor_name_base)
+
+                # Insérer le widget dans l'ordre
+                insert_index = 0
+                for i in range(self.middle_layout.count()):
+                    widget = self.middle_layout.itemAt(i).widget()
+                    if widget and hasattr(widget, 'property') and widget.property("sensor_base_name"):
+                        existing_widget_key = self.get_sensor_sort_key(widget.property("sensor_base_name"))
+                        if new_plot_key < existing_widget_key:
+                            break
+                    insert_index += 1
+                self.middle_layout.insertWidget(insert_index, plot_widget_to_use)
+                self.plots[sensor_name_base] = plot_widget_to_use
+
+            data_to_plot = recorded_data[data_array_key][sensor_idx]
+            if data_to_plot:
+                print(f"[DEBUG] Displaying {sensor_name_base}: {len(data_to_plot)} data points")
+                if sensor_name_base.startswith("IMU"):
+                    for i_quat, axis_label in enumerate(['w', 'x', 'y', 'z']):
+                        quat_data = [q[i_quat] for q in data_to_plot]
+                        print(f"[DEBUG]   {sensor_name_base}_{axis_label}: {len(quat_data)} points")
+                        curve = plot_widget_to_use.plot(quat_data, pen=pg.mkPen(['r', 'g', 'b', 'y'][i_quat], width=2), name=axis_label)
+                        self.curves[f"{sensor_name_base}_{axis_label}"] = curve
+                else:
+                    print(f"[DEBUG]   {sensor_name_base}: {len(data_to_plot)} points")
+                    curve = plot_widget_to_use.plot(data_to_plot, pen=pg.mkPen('b', width=2))
+                    self.curves[sensor_name_base] = curve
+                
+                self.highlight_sensor_item(sensor_name_base)
 
     def add_recorded_data_to_group_plot(self, sensor_name_full, sensor_group_type):
         """Ajoute les données enregistrées au graphique de groupe."""
