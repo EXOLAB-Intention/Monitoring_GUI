@@ -756,32 +756,41 @@ class MainBar:
 
     def edit_Boleen(self, boleen):
         """Active ou désactive les actions du menu Edit (Clear Plot et Request H5 File seulement)."""
-        # Seules les actions qui doivent être activées après l'arrêt de l'enregistrement
-        actions_to_toggle = [
-            ('clear_plot_action', 'clear_plot_action'),  
-            ('request_h5_file_action', 'request_h5_file_action')
-        ]
-        
-        for attr_name, action_name in actions_to_toggle:
-            if hasattr(self, attr_name):
-                action = getattr(self, attr_name)
-                if action is not None:
-                    action.setEnabled(boleen)
+        try:
+            # Seules les actions qui doivent être activées après l'arrêt de l'enregistrement
+            actions_to_toggle = [
+                ('clear_plot_action', 'clear_plot_action'),  
+                ('request_h5_file_action', 'request_h5_file_action')
+            ]
+            
+            for attr_name, action_name in actions_to_toggle:
+                if hasattr(self, attr_name):
+                    action = getattr(self, attr_name)
+                    if action is not None:
+                        action.setEnabled(boleen)
+                        print(f"[DEBUG] {action_name} enabled: {boleen}")
+                    else:
+                        print(f"[WARNING] {action_name} is None")
                 else:
-                    print(f"[WARNING] {action_name} is None")
-            else:
-                print(f"[WARNING] {attr_name} attribute not found")
+                    print(f"[WARNING] {attr_name} attribute not found")
+                    
+        except Exception as e:
+            print(f"[ERROR] Error in edit_Boleen: {e}")
 
     def set_refresh_connected_system_enabled(self, enabled):
         """Active ou désactive spécifiquement l'action Refresh Connected System."""
-        if hasattr(self, 'refresh_connected_system_action'):
-            action = getattr(self, 'refresh_connected_system_action')
-            if action is not None:
-                action.setEnabled(enabled)
+        try:
+            if hasattr(self, 'refresh_connected_system_action'):
+                action = getattr(self, 'refresh_connected_system_action')
+                if action is not None:
+                    action.setEnabled(enabled)
+                    print(f"[DEBUG] refresh_connected_system_action enabled: {enabled}")
+                else:
+                    print(f"[WARNING] refresh_connected_system_action is None")
             else:
-                print(f"[WARNING] refresh_connected_system_action is None")
-        else:
-            print(f"[WARNING] refresh_connected_system_action attribute not found")
+                print(f"[WARNING] refresh_connected_system_action attribute not found")
+        except Exception as e:
+            print(f"[ERROR] Error in set_refresh_connected_system_enabled: {e}")
     
     def review(self):
         self.Save_current_trial.setEnabled(True)
