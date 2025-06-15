@@ -135,7 +135,6 @@ class DashboardApp(QMainWindow):
         print("Debug 56")
         print(self.parent_revi)      
         if self.parent_revi is not None:
-            print("[Debug 2 le s]")
             self.main_bar_re.request_h5_file_action.disconnect()
             self.main_bar_re.request_h5_file_action.triggered.connect(
                 lambda: self.main_bar_re.request_h5_file_review(self.subject_file, self.file_list)
@@ -877,19 +876,18 @@ class DashboardApp(QMainWindow):
         
         try:
             print("[DEBUG] Opening sensor mapping dialog from dashboard...")
-            
-            # Si ce n'est pas la première fois, charger les mappages existants
             curr_maps = self.backend.get_current_mappings_for_dialog()
             print(f"[DEBUG] Current mappings retrieved: {curr_maps}")
-            
-            # Créer et afficher la boîte de dialogue
             dialog = SensorMappingDialog(self, curr_maps, available_sensors)
             dialog.mappings_updated.connect(self.backend.update_sensor_mappings)
-            
-            # ✅ SOLUTION : Utiliser exec_() pour afficher le dialogue de manière modale
+            # Ajout : rafraîchir l'arbre après update
+            def _refresh_tree_after_update(*args, **kwargs):
+                # Recharge les mappings à jour
+                new_maps = self.backend.get_current_mappings_for_dialog()
+                self.refresh_sensor_tree_with_mappings(new_maps['EMG'], new_maps['pMMG'])
+            dialog.mappings_updated.connect(_refresh_tree_after_update)
             print("[DEBUG] Showing sensor mapping dialog...")
             result = dialog.exec_()
-            
             if result == dialog.Accepted:
                 print("[DEBUG] Sensor mapping dialog accepted")
             else:
@@ -897,7 +895,6 @@ class DashboardApp(QMainWindow):
                 
         except Exception as e:
             print(f"[ERROR] Exception in open_sensor_mapping_dialog: {e}")
-            import traceback
             traceback.print_exc()
             QMessageBox.critical(
                 self,

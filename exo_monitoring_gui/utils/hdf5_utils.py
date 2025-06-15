@@ -280,6 +280,22 @@ def load_hdf5_data(file_path):
                     loaded_data[dataset_upper] = obj[:]
 
         f.visititems(visitor)
+    with h5py.File(file_path, 'r') as f:
+            root_attrs = dict(f.attrs)
+            if root_attrs:
+                print(f"Métadonnées à la racine de '{file_path}':")
+                for key, value in root_attrs.items():
+                    if key == "metadata":
+                        d = value
+    d = json.loads(d)  # <- mainenant c’est un vrai dict
+    for key_str, value in d["EMG"].items():
+        print(f"key={key}, value={value}")  # <- ajoute ça
+        key = int(key_str)
+        if key == 41:
+            data_structure["EMG"][0] = f"EMGL1 {value}"
+    print(f"Données chargées avec succès : {data_structure["EMG"][0]}")
+
+    print(data_structure) 
 
     if time_length is not None:
         time_axis = np.arange(time_length) * 0.040
@@ -374,6 +390,23 @@ def inject_metadata_to_hdf(json_relative_path, hdf_path):
 
     # Injecter dans le HDF
     with h5py.File(hdf_path, 'a') as hdf:
-        if "metadata" in hdf.attrs:
-            del hdf.attrs["metadata"]
-        hdf.attrs["metadata"] = json.dumps(metadata)
+        if "mapping" in hdf.attrs:
+            del hdf.attrs["mapping"]
+        hdf.attrs["mapping"] = json.dumps(metadata)
+
+def delet_experimental(hdf_path):
+    with h5py.File(hdf_path, 'r+') as f:  # mode lecture+écriture
+        if len(f.attrs) > 0:  # il y a des attributs à la racine
+            f.attrs["experiment_protocol"] = ""  # modifie ou crée l'attribut
+        else:
+            f.attrs["experiment_protocol"] = None  # ou supprime, mais None n'est pas forcément valide
+
+
+def load_sensor_config(file_path):
+    with h5py.File(file_path, 'r') as f:
+        root_attrs = dict(f.attrs)
+        if root_attrs:
+            print(f"Métadonnées à la racine de '{file_path}':")
+            for key, value in root_attrs.items():
+                if key == "metadata":
+                    return json.loads(value)

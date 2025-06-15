@@ -8,7 +8,7 @@ import os
 import re
 from datetime import datetime
 from UI.informations import InformationWindow
-from utils.hdf5_utils import load_metadata, copy_only_root_metadata, copy_all_data_preserve_root_metadata, inject_metadata_to_hdf
+from utils.hdf5_utils import load_metadata, copy_only_root_metadata, copy_all_data_preserve_root_metadata, inject_metadata_to_hdf, load_sensor_config
 from UI.back.main_window_back import MainAppBack
 from utils.file_receiver import request_files, SERVER_IP, PORT, OUT_DIR
 class MainBar:
@@ -265,7 +265,6 @@ class MainBar:
             return
         try:
             with h5py.File(parent.file_path, 'a') as f:
-                # Ajoute ou met à jour la métadonnée à la racine
                 f.attrs.modify('experiment_protocol', text)
         except Exception as e:
             print(f"Erreur lors de la sauvegarde du protocole expérimental : {e}")
@@ -296,7 +295,7 @@ class MainBar:
 
         try:
             data, image_path = load_metadata(file_path)     
-
+            sensor = load_sensor_config(file_path)
             if not data:
                 QMessageBox.information(self.main_app, "No Metadata", "No metadata available for this subject.")
                 return
@@ -332,7 +331,28 @@ class MainBar:
                 metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>Last modification</b></td>"
                 metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data['last_modified']}</td></tr>"
 
-            metadata_text += "</table>"
+            if sensor:
+                if "EMG" in sensor:
+                    # Mapping des IDs EMG vers noms personnalisés
+                    emg_name_map = {
+                        "41": "EMGL1",
+                        "42": "EMGL2",
+                        "43": "EMGL3",
+                        "44": "EMGL4",
+                        "45": "EMGR1",
+                        "46": "EMGR2",
+                        "47": "EMGR3",
+                        "48": "EMGR4",
+                    }
+
+                    metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Sensor Configuration</th></tr>"
+                    for key, value in sensor["EMG"].items():
+                        display_key = emg_name_map.get(key, key)  # Si clé inconnue, on garde la clé brute
+                        metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{display_key}</b></td>"
+                        metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{value}</td></tr>"
+
+
+            print("data",data)
 
             # Description if it exists
             if "participant_description" in data and data["participant_description"]:
@@ -653,7 +673,6 @@ class MainBar:
             print(latest_file)
             print(self.main_app.subject_file)
             copy_all_data_preserve_root_metadata(latest_file, f)
-            inject_metadata_to_hdf("sensor_mappings.json", f)
 
             self.review = Review(file_path=self.main_app.subject_file,existing_load=True)
 
@@ -691,7 +710,6 @@ class MainBar:
             print("dededededededede 4")
             print(latest_file)
             copy_all_data_preserve_root_metadata(latest_file, f)
-            inject_metadata_to_hdf("sensor_mappings.json", f)
 
             file_dictionary.append(f)
             self.review = Review(parent=None, file_path=f, existing_load=True, trials=file_dictionary)

@@ -1,7 +1,7 @@
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data, load_metadata
+from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data, load_metadata, inject_metadata_to_hdf, delet_experimental
 
 import numpy as np
 import h5py
@@ -237,6 +237,8 @@ class Review(QMainWindow):
             self.record_button.setEnabled(False)
         else:
             self.record_button.setEnabled(True)
+            inject_metadata_to_hdf("sensor_mappings.json", self.file_path)
+            delet_experimental(self.file_path)
 
     def build_header(self, layout):
         header = QHBoxLayout()
@@ -678,7 +680,7 @@ class Review(QMainWindow):
                 if name.startswith(dataset_name):
                     emgL_data[name] = emg_group[name][:]
         return emgL_data
-
+            
     def load_hdf5_and_populate_tree(self, file_path):
         self.connected_systems.clear()
 
@@ -734,7 +736,7 @@ class Review(QMainWindow):
 
             for dataset_name in dataset_list:
                 sensor_item = QTreeWidgetItem([dataset_name])
-                if dataset_name in self.loaded_data:
+                if dataset_name.split()[0] in self.loaded_data:
                     sensor_item.setForeground(0, QBrush(QColor("green")))
                     sensor_item.setFlags(sensor_item.flags() | Qt.ItemIsEnabled)
                 else:
@@ -746,7 +748,7 @@ class Review(QMainWindow):
                 group_item.addChild(sensor_item)
 
             group_item.setExpanded(True)
-        
+
         self.main_bar.load_experiment_protocol(self)
 
     def closeEvent(self, event):

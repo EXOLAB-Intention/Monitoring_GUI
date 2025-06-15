@@ -93,7 +93,7 @@ def show_root_metadata(hdf5_file_path):
     except Exception as e:
         print(f"Erreur lors de la lecture du fichier HDF5 : {e}")
 
-show_root_metadata("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\1.h5")
+show_root_metadata("C:\\Users\\samio\\Documents\\BUT\\BUT2\\stage\\travail\\Monitoring_GUI\\algerie.h5")
 
 # import h5py
 

@@ -262,6 +262,25 @@ class DashboardAppBack:
         self.client_init_thread.start()
         self.ui.connect_button.setText("Initializing...")
 
+    def ensure_sensor_ids_in_mappings(self):
+        import os, json
+        filepath = os.path.join(os.path.dirname(__file__), '../sensor_mappings.json')
+        # Charger l'existant ou créer une structure vide
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                mappings = json.load(f)
+        else:
+            mappings = {"EMG": {}, "IMU": {}, "pMMG": {}}
+        # Ajouter les IDs présents si absents
+        for typ in ["EMG", "IMU", "pMMG"]:
+            ids = self.sensor_config.get(f"{typ.lower()}_ids", [])
+            for sid in ids:
+                if str(sid) not in mappings.get(typ, {}):
+                    mappings.setdefault(typ, {})[str(sid)] = ""
+        # Sauvegarder
+        with open(filepath, 'w') as f:
+            json.dump(mappings, f, indent=2)
+
     def on_client_init_success(self, sensor_config, packet_size):
         self.sensor_config = sensor_config
         
@@ -303,6 +322,7 @@ class DashboardAppBack:
             min-width: 120px;
         }"""
         self.ui.record_button.setStyleSheet(record_button_style)
+        self.ensure_sensor_ids_in_mappings()
 
     def on_client_init_error(self, error_msg):
         print(f"[ERROR] {error_msg}")
@@ -591,21 +611,15 @@ class DashboardAppBack:
         """) # Le style complet est dans l'UI
         self.ui.record_button.setEnabled(False)
         self.ui.show_recorded_data_on_plots(self.recorded_data) # L'UI gère l'affichage
-        
         #Activer "Clear Plot" et "Request H5 File" après l'arrêt de l'enregistrement
         if hasattr(self.ui, 'main_bar_re') and self.ui.main_bar_re is not None:
             if hasattr(self.ui.main_bar_re, 'edit_Boleen'):
-                try:
-                    self.ui.main_bar_re.edit_Boleen(True)  # Active Clear Plot et Request H5 File
-                except Exception as e:
-                    print(f"[ERROR] Error calling edit_Boleen: {e}")
-            
+                self.ui.main_bar_re.edit_Boleen(True)
             # Réactiver "Refresh Connected System" si les capteurs sont encore connectés
             if self.sensor_config and hasattr(self.ui.main_bar_re, 'set_refresh_connected_system_enabled'):
-                try:
-                    self.ui.main_bar_re.set_refresh_connected_system_enabled(True)
-                except Exception as e:
-                    print(f"[ERROR] Error re-enabling refresh_connected_system after recording: {e}")
+                self.ui.main_bar_re.set_refresh_connected_system_enabled(True)
+        # Sauvegarder le sensor mapping à l'arrêt de l'enregistrement
+        self.save_mappings()
 
     def clear_plots_only(self):
         """Nettoie seulement les graphiques et données d'enregistrement, maintient tous les settings."""
@@ -714,33 +728,18 @@ class DashboardAppBack:
         return False
 
     def update_sensor_mappings(self, emg_mappings, imu_mappings, pmmg_mappings):
-        """Met à jour les mappings des capteurs dans le backend et l'interface 3D."""
         try:
             # Stocker les mappings dans le backend
             self.emg_mappings = emg_mappings
             self.pmmg_mappings = pmmg_mappings
-            
             # Appliquer les mappings IMU au modèle 3D
             if hasattr(self.ui, 'model_3d_widget') and self.ui.model_3d_widget:
-                # Nettoyer les anciens mappings
-                self.ui.model_3d_widget.model_viewer.imu_mapping.clear()
-                
-                # Appliquer les nouveaux mappings IMU
-                for imu_id, body_part in imu_mappings.items():
-                    success = self.ui.model_3d_widget.model_viewer.map_imu_to_body_part(int(imu_id), body_part)
-                    if success:
-                        print(f"[BACKEND] Successfully mapped IMU {imu_id} to {body_part}")
-                    else:
-                        print(f"[BACKEND] Failed to map IMU {imu_id} to {body_part}")
-                
-                # Stocker les mappings EMG et pMMG directement (pas de méthode set_emg_mapping)
-                self.ui.model_3d_widget.model_viewer.emg_mapping = emg_mappings.copy()
-                self.ui.model_3d_widget.model_viewer.pmmg_mapping = pmmg_mappings.copy()
-            
+                self.ui.model_3d_widget.set_current_mappings(imu_mappings)
             # Rafraîchir l'affichage de l'arbre des capteurs
             if hasattr(self.ui, 'refresh_sensor_tree_with_mappings'):
-                self.ui.refresh_sensor_tree_with_mappings(emg_mappings, pmmg_mappings)
-                
+                self.ui.refresh_sensor_tree_with_mappings()
+            # Sauvegarder immédiatement après modification
+            self.save_mappings()
         except Exception as e:
             print(f"[ERROR] Error updating sensor mappings: {e}")
             import traceback
