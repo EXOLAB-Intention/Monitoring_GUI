@@ -26,12 +26,11 @@ def load_metadata(subject_file):
         with h5py.File(subject_file, 'r') as f:
             root_attrs = dict(f.attrs)
             for key, value in root_attrs.items():
-                if key.startswith("participant_"):
-                    # Stocker directement la clé telle quelle, par exemple "participant_name"
-                    data[key] = value 
-                    # Si la clé est spécifiquement "participant_image_path", on la retient aussi pour image_path
-                    if key == "participant_image_path":
-                        image_path = value
+                # Stocker directement la clé telle quelle, par exemple "participant_name"
+                data[key] = value 
+                # Si la clé est spécifiquement "participant_image_path", on la retient aussi pour image_path
+                if key == "participant_image_path":
+                    image_path = value
                 # Gérer aussi le cas où "image_path" est à la racine et n'est pas encore défini par "participant_image_path"
                 elif key == "image_path" and image_path is None:
                     image_path = value

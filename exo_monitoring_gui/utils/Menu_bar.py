@@ -285,6 +285,8 @@ class MainBar:
 
     def show_metadata(self):
         """Display metadata of the current subject"""
+        if hasattr(self.main_app, 'subject_fil'):
+            file_path = self.main_app.subject_file
         if hasattr(self.main_app, 'current_subject_file'):
             file_path = self.main_app.current_subject_file
         elif hasattr(self.main_app, 'file_path'):
@@ -307,14 +309,17 @@ class MainBar:
             # Personal information section
             metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Personal Information</th></tr>"
 
+            
             # Add personal info fields if they exist
             for field in ["participant_name", "participant_last_name", "participant_age", "participant_weight_kg", "participant_height_cm"]:
                 if field in data:
                     metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{field}</b></td>"
                     metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data[field]}</td></tr>"
-
+            if "experimenter_name" in data:
+                metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>Experimenter Name</b></td>"
+                metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{data['experimenter_name']}</td></tr>"
             metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Anthropometric Measurements</th></tr>"
-
+    
             for field in ["participant_thigh_length_cm", "participant_shank_length_cm", "participant_upperarm_length_cm", "participant_forearm_length_cm"]:
                 if field in data:
                     metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{field}</b></td>"
@@ -348,6 +353,17 @@ class MainBar:
                     metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Sensor Configuration</th></tr>"
                     for key, value in sensor["EMG"].items():
                         display_key = emg_name_map.get(key, key)  # Si clé inconnue, on garde la clé brute
+                        metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{display_key}</b></td>"
+                        metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{value}</td></tr>"
+                if "IMU" in sensor:
+                    imu_name_map = {
+                        "1": "IMU1",
+                        "2": "IMU2",
+                        "3": "IMU3",
+                        "4": "IMU4",
+                    }
+                    for key, value in sensor["IMU"].items():
+                        display_key = imu_name_map.get(key, key)
                         metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{display_key}</b></td>"
                         metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{value}</td></tr>"
 

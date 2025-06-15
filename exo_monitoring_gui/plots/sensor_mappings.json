@@ -1,14 +1,5 @@
 {
-  "EMG": {
-    "41": "left_foot",
-    "42": "hip",
-    "43": "forearm_r",
-    "44": "pectorals_r",
-    "45": "dorsalis_major_l",
-    "46": "forearm_l",
-    "47": "deltoid_l",
-    "48": "quadriceps_l"
-  },
+  "EMG": {},
   "IMU": {},
   "pMMG": {}
 }

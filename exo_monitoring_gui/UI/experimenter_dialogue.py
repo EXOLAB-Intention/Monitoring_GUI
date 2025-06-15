@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QWidget, QMessageBox
 from PyQt5.QtCore import pyqtSignal
+import h5py
 
 
 class ExperimenterDialog(QDialog):
@@ -13,7 +14,8 @@ class ExperimenterDialog(QDialog):
         self.setWindowTitle("Experimenter Information")
         self.setModal(True)
         self.setMinimumWidth(400)
-
+        self.subject_file = parent.subject_file if parent else None
+        self.hasName = False
         # Main layout
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(15)
@@ -30,8 +32,16 @@ class ExperimenterDialog(QDialog):
         main_layout.addWidget(self.instruction_label)
 
         # Name input field
-        self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Full name")
+        with h5py.File(self.subject_file, 'r+') as f:
+            root_attrs = dict(f.attrs)
+            if "experimenter_name" in root_attrs:
+                d = f.attrs["experimenter_name"]
+                self.name_input = QLineEdit()
+                self.name_input.setText(d)
+                self.hasName = True
+            else:
+                self.name_input = QLineEdit()
+                self.name_input.setPlaceholderText("Full name")
         self.name_input.setStyleSheet("font-size: 14px; padding: 5px;")
         main_layout.addWidget(self.name_input)
         
@@ -62,7 +72,10 @@ class ExperimenterDialog(QDialog):
                 color: #a0a0a0;
             }
         """)
-        self.continue_button.setEnabled(False)  # Initially disabled
+        if self.hasName:
+            self.continue_button.setEnabled(True)  # Initially disabled
+        else:
+            self.continue_button.setEnabled(False)
         main_layout.addWidget(self.continue_button)
         
         # Connect signals
@@ -76,8 +89,21 @@ class ExperimenterDialog(QDialog):
     def _submit_name(self):
         """Submit the experimenter's name and redirect to dashboard"""
         name = self.name_input.text().strip()
+        print(f"Experimenter's name submitted: {name}")
         if name:
-            # Emit the signal with the name
+            # Ouvrir le fichier HDF5 en mode lecture/écriture
+            with h5py.File(self.subject_file, 'r+') as f:
+                root_attrs = dict(f.attrs)
+
+                # Afficher les métadonnées existantes
+                if root_attrs:
+                    print(f"Métadonnées à la racine de '{self.subject_file}':")
+                    for key, value in root_attrs.items():
+                        print(f"  {key}: {value}")
+
+                # Remplacer ou créer l'attribut 'experimenter_name'
+                f.attrs["experimenter_name"] = name
+                print(f"L'attribut 'experimenter_name' a été mis à jour avec : {name}")
             self.experimenter_name_submitted.emit(name)
             self.accept()
         else:
