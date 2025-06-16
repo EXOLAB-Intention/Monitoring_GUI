@@ -1289,7 +1289,7 @@ class DashboardApp(QMainWindow):
                     return sensor_item
         return None
 
-     def plot_recorded_sensor_data(self, sensor_name_full, sensor_name_base):
+    def plot_recorded_sensor_data(self, sensor_name_full, sensor_name_base):
         """Affiche les données enregistrées pour un capteur spécifique."""
         try:
             # Créer ou mettre à jour le graphique selon le mode d'affichage
