@@ -1,17 +1,5 @@
 {
-  "EMG": {
-    "41": "deltoid_r",
-    "42": "deltoid_r",
-    "43": "torso",
-    "44": "forearm_l",
-    "46": "torso",
-    "45": "torso",
-    "47": "pectorals_l",
-    "48": "deltoid_l"
-  },
-  "IMU": {
-    "1": "deltoid_l",
-    "5": "neck"
-  },
+  "EMG": {},
+  "IMU": {},
   "pMMG": {}
 }

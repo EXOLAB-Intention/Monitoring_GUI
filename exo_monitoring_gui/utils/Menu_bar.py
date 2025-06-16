@@ -6,6 +6,7 @@ from PyQt5.QtGui import QPixmap
 import h5py
 import os
 import re
+import shutil
 from datetime import datetime
 from UI.informations import InformationWindow
 from utils.hdf5_utils import load_metadata, copy_only_root_metadata, copy_all_data_preserve_root_metadata, inject_metadata_to_hdf, load_sensor_config
@@ -228,33 +229,19 @@ class MainBar:
             print("Aucun fichier source ouvert.")
             return
 
-        text = parent.experiment_protocol_text.toPlainText()
-        if not text:
-            return
-
-        # Boîte de dialogue pour choisir un nouveau fichier .h5
-        file_path, _ = QFileDialog.getSaveFileName(
-            parent,
-            "Enregistrer le protocole expérimental sous...",
-            "",
-            "Fichiers HDF5 (*.h5);;Tous les fichiers (*)"
+        new_file_path, _ = QFileDialog.getSaveFileName(
+            parent, "Enregistrer le protocole sous...", "", "Fichiers HDF5 (*.h5 *.hdf5)"
         )
 
-        if not file_path:
+        if not new_file_path:
             return  # L'utilisateur a annulé
 
         try:
-            # Étape 1 : Copier tout le fichier original dans le nouveau
-            shutil.copy(parent.file_path, file_path)
-
-            # Étape 2 : Modifier ou ajouter la métadonnée 'experiment_protocol'
-            with h5py.File(file_path, 'a') as f:
-                f.attrs.modify('experiment_protocol', text)
-
-            print(f"✅ Fichier sauvegardé avec succès dans {file_path}")
-
+            shutil.copy2(parent.file_path, new_file_path)
+            print(f"Fichier copié avec succès dans : {new_file_path}")
         except Exception as e:
-            print(f"❌ Erreur lors de la sauvegarde : {e}")
+            print(f"Erreur lors de la copie : {e}")
+
 
 
     def save_experiment_protocol(self, parent):
@@ -523,7 +510,7 @@ class MainBar:
 
         self.exit_action = self._create_action(
             "E&xit",
-            lambda: self.main_app.close(),
+            lambda: self.main_app.close,
             "Alt+F4",
             tip="Exit the application"
         )
