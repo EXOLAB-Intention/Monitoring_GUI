@@ -237,8 +237,9 @@ class Review(QMainWindow):
             self.record_button.setEnabled(False)
         else:
             self.record_button.setEnabled(True)
-
-        inject_metadata_to_hdf("sensor_mappings.json", self.file_path)
+            inject_metadata_to_hdf("sensor_mappings.json", self.file_path)
+            delet_experimental(self.file_path)
+            
     def build_header(self, layout):
         header = QHBoxLayout()
         header.addWidget(QLabel("Connected Systems"), stretch=1)
