@@ -1,17 +1,5 @@
 {
-  "EMG": {
-    "41": "dorsalis_major_l",
-    "42": "pectorals_l",
-    "43": "dorsalis_major_r",
-    "44": "hip",
-    "45": "quadriceps_l",
-    "47": "forearm_r",
-    "46": "deltoid_r",
-    "48": "deltoid_l"
-  },
-  "IMU": {
-    "1": "deltoid_l",
-    "5": "pectorals_l"
-  },
+  "EMG": {},
+  "IMU": {},
   "pMMG": {}
 }

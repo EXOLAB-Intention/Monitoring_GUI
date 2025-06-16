@@ -26,14 +26,13 @@ def load_metadata(subject_file):
         with h5py.File(subject_file, 'r') as f:
             root_attrs = dict(f.attrs)
             for key, value in root_attrs.items():
-                if key.startswith("participant_"):
-                    # Stocker directement la clé telle quelle, par exemple "participant_name"
-                    data[key] = value 
-                    # Si la clé est spécifiquement "participant_image_path", on la retient aussi pour image_path
-                    if key == "participant_image_path":
-                        image_path = value
-                # Gérer aussi le cas où "image_path" est à la racine et n'est pas encore défini par "participant_image_path"
-                elif key == "image_path" and image_path is None:
+                # Stocker directement la clé telle quelle, par exemple "participant_name"
+                data[key] = value 
+                # Si la clé est spécifiquement "participant_image_path", on la retient aussi pour image_path
+                if key == "participant_image_path":
+                    image_path = value
+            # Gérer aussi le cas où "image_path" est à la racine et n'est pas encore défini par "participant_image_path"
+                if key == "image_path" and image_path is None:
                     image_path = value
             
             # Après avoir parcouru tous les attributs, si image_path a été trouvé (soit par "image_path", soit par "participant_image_path"),
@@ -377,7 +376,7 @@ def inject_metadata_to_hdf(json_relative_path, hdf_path):
         if "metadata" in hdf.attrs:
             del hdf.attrs["metadata"]
         hdf.attrs["metadata"] = json.dumps(metadata)
-        
+
 def delet_experimental(hdf_path):
     with h5py.File(hdf_path, 'r+') as f:  # mode lecture+écriture
         if len(f.attrs) > 0:  # il y a des attributs à la racine
