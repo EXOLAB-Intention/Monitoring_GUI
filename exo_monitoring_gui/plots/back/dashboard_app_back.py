@@ -659,6 +659,7 @@ class DashboardAppBack:
 
     def toggle_recording(self):
         if self.recording:
+            self.save_mappings()  # Sauvegarder les mappings avant d'arrêter
             self.stop_recording()
         else:
             if not self.client_socket and not self.is_server_running:

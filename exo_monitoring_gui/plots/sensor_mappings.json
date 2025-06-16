@@ -1,16 +1,17 @@
 {
   "EMG": {
-    "41": "calves_l",
-    "42": "left_foot",
-    "43": "hip",
-    "44": "forearm_r",
-    "45": "right_hand",
-    "47": "left_hand",
-    "48": "biceps_r"
+    "41": "dorsalis_major_l",
+    "42": "pectorals_l",
+    "43": "dorsalis_major_r",
+    "44": "hip",
+    "45": "quadriceps_l",
+    "47": "forearm_r",
+    "46": "deltoid_r",
+    "48": "deltoid_l"
   },
   "IMU": {
     "1": "deltoid_l",
-    "5": "deltoid_l"
+    "5": "pectorals_l"
   },
   "pMMG": {}
 }

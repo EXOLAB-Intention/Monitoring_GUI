@@ -1,7 +1,7 @@
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data, load_metadata, inject_metadata_to_hdf
+from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data, load_metadata, inject_metadata_to_hdf, delet_experimental
 
 import numpy as np
 import h5py
