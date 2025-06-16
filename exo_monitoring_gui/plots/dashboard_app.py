@@ -1293,17 +1293,69 @@ class DashboardApp(QMainWindow):
         return None
 
     def plot_recorded_sensor_data(self, sensor_name_full, sensor_name_base):
-        """Affiche les données enregistrées pour un capteur spécifique."""
-        try:
-            # Créer ou mettre à jour le graphique selon le mode d'affichage
-            if self.group_sensor_mode.isChecked():
-                self.add_recorded_data_to_group_plot(sensor_name_full, sensor_name_base)
+        """Plots recorded data for a sensor."""
+        # Extract sensor type and ID
+        sensor_type = None
+        sensor_id = -1
+        
+        if sensor_name_base.startswith("EMG"):
+            sensor_type = "EMG"
+            sensor_id = int(sensor_name_base[3:])
+        elif sensor_name_base.startswith("IMU"):
+            sensor_type = "IMU"
+            sensor_id = int(sensor_name_base[3:])
+        elif sensor_name_base.startswith("pMMG"):
+            sensor_type = "pMMG"
+            sensor_id = int(sensor_name_base[4:])
+        else:
+            print(f"Unknown sensor type for {sensor_name_base}")
+            return
+            
+        # Get the recorded data
+        rec_data = self.backend.recorded_data
+        
+        # Create or get the plot
+        if self.single_sensor_mode.isChecked():
+            if sensor_name_base not in self.plots:
+                self.create_individual_plot(sensor_name_full, sensor_name_base)
+            plot_widget = self.plots[sensor_name_base]
+            plot_widget.clear()
+            
+            # IMU data (quaternions) require special handling
+            if sensor_type == "IMU":
+                # Find array index for this IMU ID
+                imu_ids = self.backend.sensor_config.get('imu_ids', [])
+                if sensor_id in imu_ids:
+                    idx = imu_ids.index(sensor_id)
+                    if idx < len(rec_data[sensor_type]) and rec_data[sensor_type][idx]:
+                        # For IMU, plot the 4 quaternion components
+                        components = ['w', 'x', 'y', 'z']
+                        colors = [(255, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 255)]
+                        
+                        # Create time axis
+                        x_values = list(range(len(rec_data[sensor_type][idx])))
+                        
+                        # Plot each component
+                        for i in range(4):
+                            y_values = [q[i] for q in rec_data[sensor_type][idx]]
+                            pen = pg.mkPen(color=colors[i], width=2)
+                            plot_widget.plot(x_values, y_values, pen=pen, name=f"{components[i]}")
             else:
-                self.create_individual_plot_with_recorded_data(sensor_name_full, sensor_name_base)
-                
-            self.highlight_sensor_item(sensor_name_base)
-        except Exception as e:
-            print(f"[ERROR] Error plotting recorded data for {sensor_name_base}: {e}")
+                # For EMG and pMMG
+                sensor_ids = self.backend.sensor_config.get(f'{sensor_type.lower()}_ids', [])
+                if sensor_id in sensor_ids:
+                    idx = sensor_ids.index(sensor_id)
+                    if idx < len(rec_data[sensor_type]) and rec_data[sensor_type][idx]:
+                        # Plot the signal
+                        x_values = list(range(len(rec_data[sensor_type][idx])))
+                        y_values = rec_data[sensor_type][idx]
+                        pen = pg.mkPen(color=(0, 255, 255), width=2)
+                        plot_widget.plot(x_values, y_values, pen=pen)
+        elif self.group_sensor_mode.isChecked():
+            # Group mode plotting
+            if sensor_type in self.group_plots:
+                # Add to existing group plot
+                self.add_sensor_curve_to_group_plot(sensor_name_full, sensor_type)
 
     def add_recorded_data_to_group_plot(self, sensor_name_full, sensor_group_type):
         """Ajoute les données enregistrées au graphique de groupe."""
