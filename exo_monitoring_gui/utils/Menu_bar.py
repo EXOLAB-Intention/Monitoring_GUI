@@ -510,7 +510,7 @@ class MainBar:
 
         self.exit_action = self._create_action(
             "E&xit",
-            lambda: self.main_app.close,
+            lambda: self.closeall(),
             "Alt+F4",
             tip="Exit the application"
         )
@@ -583,6 +583,10 @@ class MainBar:
             self.main_app.clear_all_plots()
         else:
             print("[WARNING] clear plots method not found in main_app")
+    
+    def closeall(self):
+        self.main_app.close()
+
 
     def refresh_the_connected_system(self):
         """Refresh the connected system and allow modification of sensor mappings."""

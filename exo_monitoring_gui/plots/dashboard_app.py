@@ -133,6 +133,7 @@ class DashboardApp(QMainWindow):
             self.main_bar_re = None
 
         print("Debug 56")
+        self.main_bar_re.exit_action.setEnabled(True)
         print(self.parent_revi)      
         if self.parent_revi is not None:
             print("[Debug 2 le s]")
