@@ -1,7 +1,7 @@
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data, load_metadata
+from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data, load_metadata, inject_metadata_to_hdf
 
 import numpy as np
 import h5py
@@ -238,6 +238,7 @@ class Review(QMainWindow):
         else:
             self.record_button.setEnabled(True)
 
+        inject_metadata_to_hdf("sensor_mappings.json", self.file_path)
     def build_header(self, layout):
         header = QHBoxLayout()
         header.addWidget(QLabel("Connected Systems"), stretch=1)

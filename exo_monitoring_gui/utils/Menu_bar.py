@@ -653,7 +653,6 @@ class MainBar:
             print(latest_file)
             print(self.main_app.subject_file)
             copy_all_data_preserve_root_metadata(latest_file, f)
-            inject_metadata_to_hdf("sensor_mappings.json", f)
 
             self.review = Review(file_path=self.main_app.subject_file,existing_load=True)
 
@@ -691,7 +690,7 @@ class MainBar:
             print("dededededededede 4")
             print(latest_file)
             copy_all_data_preserve_root_metadata(latest_file, f)
-            inject_metadata_to_hdf("sensor_mappings.json", f)
+            
 
             file_dictionary.append(f)
             self.review = Review(parent=None, file_path=f, existing_load=True, trials=file_dictionary)

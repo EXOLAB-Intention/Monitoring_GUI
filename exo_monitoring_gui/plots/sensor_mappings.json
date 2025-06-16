@@ -1,5 +1,16 @@
 {
-  "EMG": {},
-  "IMU": {},
+  "EMG": {
+    "41": "calves_l",
+    "42": "left_foot",
+    "43": "hip",
+    "44": "forearm_r",
+    "45": "right_hand",
+    "47": "left_hand",
+    "48": "biceps_r"
+  },
+  "IMU": {
+    "1": "deltoid_l",
+    "5": "deltoid_l"
+  },
   "pMMG": {}
 }
