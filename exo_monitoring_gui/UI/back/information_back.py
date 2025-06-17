@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (
-    QDialog, QLabel, QLineEdit, QTextEdit, QPushButton, QMessageBox, QFileDialog, QApplication, QWidget
+    QDialog, QLineEdit, QTextEdit, QMessageBox, QApplication, QWidget
 )
 from datetime import datetime
 from UI.review import Review

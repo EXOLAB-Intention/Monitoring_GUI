@@ -1,7 +1,6 @@
 from PyQt5.QtWidgets import QLabel, QFileDialog, QMessageBox
 from PyQt5.QtGui import QPixmap, QDragEnterEvent, QDropEvent
 from PyQt5.QtCore import Qt
-import os
 
 class ImageDropArea(QLabel):
     """Area allowing to drop or select an image"""

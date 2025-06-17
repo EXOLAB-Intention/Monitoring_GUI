@@ -1,14 +1,11 @@
 import sys
 import os
 import time
-import numpy as np
 import json
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal
-import pyqtgraph as pg
 import socket
 import struct
-import threading
 import pandas as pd
 from utils.json_request import reset_json_file
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH

@@ -8,11 +8,8 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import os
-import math
-import pickle
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
-from datetime import datetime
 
 # Importer les classes du prédicteur
 from utils.body_motion_predictor import (

@@ -1,11 +1,11 @@
 import sys
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QPushButton,
-    QLabel, QComboBox, QGroupBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QWidget, QSplitter, QGridLayout, QScrollArea, QSizePolicy
+    QLabel, QComboBox, QGroupBox,
+    QMessageBox, QWidget, QSplitter, QGridLayout, QScrollArea, QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QBrush, QFont
+from PyQt5.QtGui import QFont
 import json
 import os
 

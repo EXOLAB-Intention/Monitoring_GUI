@@ -2,10 +2,10 @@ import sys
 import os
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QApplication, QFrame, QProgressBar
+    QApplication, QFrame
 )
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPixmap, QFont, QIcon
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
 
 class CalibrationGuideDialog(QDialog):
     """Dialog to guide users through the T-pose calibration process."""

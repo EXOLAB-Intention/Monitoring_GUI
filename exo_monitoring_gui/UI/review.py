@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QTreeWidget, QTreeWidgetItem, QScrollArea, QGraphicsItem, QTextEdit, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QColorDialog
 )
-from PyQt5.QtCore import Qt, QRectF, QPointF, QTimer
+from PyQt5.QtCore import Qt, QRectF, QTimer
 from PyQt5.QtGui import QColor, QBrush, QPen, QPainter, QWheelEvent, QTextCharFormat, QFont
 
 

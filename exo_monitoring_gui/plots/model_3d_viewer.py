@@ -1,7 +1,7 @@
 import sys
 import os
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from PyQt5.QtCore import Qt, QTimer, QElapsedTimer
 from PyQt5.QtOpenGL import QGLWidget, QGLFormat
 from PyQt5.QtGui import QFont, QPainter, QColor  # Added QColor import
