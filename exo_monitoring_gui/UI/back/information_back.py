@@ -42,7 +42,7 @@ class InformationBack(QWidget):
             data_from_file, image_file_path = load_metadata(self.parent.subject_file)
 
             if not data_from_file:
-                print(f"Avertissement : Aucune métadonnée de participant n'a été chargée depuis {self.parent.subject_file}")
+                print(f"Warning: No participant metadata loaded from {self.parent.subject_file}")
 
             for field_display_key, widget in self.parent.input_fields.items():
                 normalized_participant_key = f"participant_{field_display_key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
@@ -60,8 +60,8 @@ class InformationBack(QWidget):
             self._check_required_fields()
         except Exception as e:
             import traceback
-            error_message = f"Erreur lors du chargement des données dans le formulaire : {str(e)}\n\n{traceback.format_exc()}"
-            QMessageBox.critical(self.parent, "Erreur de chargement", error_message)
+            error_message = f"Error loading data into form: {str(e)}\n\n{traceback.format_exc()}"
+            QMessageBox.critical(self.parent, "Loading Error", error_message)
             print(error_message)
 
     def _get_form_data(self):
@@ -80,8 +80,6 @@ class InformationBack(QWidget):
             data["image_path"] = image_path
 
         data["collection_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print("C'est bon !")
-        print(data)
         return data, True
 
     def _collect_data(self):
@@ -97,17 +95,17 @@ class InformationBack(QWidget):
             QMessageBox.information(self.parent, "Saved", "Information saved successfully.")
             self.parent.info_submitted.emit(data)
             if self.parent.review_mode:
-                # Fermer tous les widgets de niveau supérieur sauf le parent
+                # Close all top-level widgets except the parent
                 for widget in QApplication.topLevelWidgets():
                     if widget is not self.parent:
                         widget.setParent(None)
                         widget.deleteLater()
 
-                # Fermer le parent de manière sécurisée
+                # Safely close the parent
                 self.parent.setParent(None)
                 self.parent.deleteLater()
 
-                # Créer et afficher la nouvelle fenêtre de révision
+                # Create and show the new review window
                 review = Review(file_path=self.parent.subject_file)
                 review.show()
                 return

@@ -341,8 +341,8 @@ class Review(QMainWindow):
                         pass
 
                 widget.setParent(None)
-                QApplication.processEvents()  # ✅ Laisser Qt finir les événements graphiques
-                QTimer.singleShot(200, widget.deleteLater)  # ✅ suppression différée
+                QApplication.processEvents()  # ✅ Let Qt finish graphic events
+                QTimer.singleShot(200, widget.deleteLater)  # ✅ delayed deletion
 
         finally:
             self._is_cleaning = False
@@ -601,7 +601,7 @@ class Review(QMainWindow):
         self.metadata = load_metadata(path)
         self.data = load_hdf5_data(path)
         self.load_hdf5_and_populate_tree(path)
-        # Mettre à jour la zone de texte du protocole expérimental selon la métadonnée
+        # Update the experimental protocol text area from metadata
         protocol_text = ""
         try:
             with h5py.File(path, 'r') as f:
@@ -610,7 +610,7 @@ class Review(QMainWindow):
                     if isinstance(protocol_text, bytes):
                         protocol_text = protocol_text.decode('utf-8')
         except Exception as e:
-            print(f"Erreur lecture experiment_protocol: {e}")
+            print(f"Error reading experiment_protocol: {e}")
         self.experiment_protocol_text.setPlainText(protocol_text)
 
     def set_protocol_bold(self):

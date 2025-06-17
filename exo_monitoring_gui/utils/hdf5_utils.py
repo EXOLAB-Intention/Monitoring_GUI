@@ -16,7 +16,7 @@ def load_metadata(subject_file):
     Falls back to reading attributes from /metadata group for backward compatibility.
     """
     data = {}
-    image_path = None # Initialisation de image_path
+    image_path = None # Initialize image_path
 
     if not os.path.exists(subject_file):
         print(f"File not found: {subject_file}")
@@ -26,19 +26,19 @@ def load_metadata(subject_file):
         with h5py.File(subject_file, 'r') as f:
             root_attrs = dict(f.attrs)
             for key, value in root_attrs.items():
-                # Stocker directement la clé telle quelle, par exemple "participant_name"
+                # Store the key as is, e.g. "participant_name"
                 data[key] = value 
-                # Si la clé est spécifiquement "participant_image_path", on la retient aussi pour image_path
+                # If the key is specifically "participant_image_path", keep it for image_path
                 if key == "participant_image_path":
                     image_path = value
-            # Gérer aussi le cas où "image_path" est à la racine et n'est pas encore défini par "participant_image_path"
+            # Also handle the case where "image_path" is at the root and is not yet defined by "participant_image_path"
                 if key == "image_path" and image_path is None:
                     image_path = value
             
-            # Après avoir parcouru tous les attributs, si image_path a été trouvé (soit par "image_path", soit par "participant_image_path"),
-            # s'assurer qu'il est bien dans 'data' sous la clé standard "participant_image_path".
-            # Cela est utile si "image_path" a été trouvé mais pas "participant_image_path", 
-            # ou pour s'assurer que la valeur de "participant_image_path" (si présente) est prioritaire et stockée.
+            # After going through all attributes, if image_path has been found (either by "image_path" or "participant_image_path"),
+            # make sure it is in 'data' under the standard key "participant_image_path".
+            # This is useful if "image_path" was found but not "participant_image_path", 
+            # or to ensure that the value of "participant_image_path" (if present) is prioritized and stored.
             if image_path is not None:
                 data["participant_image_path"] = image_path
 
@@ -61,11 +61,11 @@ def save_metadata(subject_file, data: dict):
 
             image_path_value = None
             if "image_path" in data:
-                image_path_value = data.pop("image_path") # Retire pour éviter double écriture par la boucle
+                image_path_value = data.pop("image_path") # Remove to avoid double writing by the loop
 
             for key, value in data.items():
-                # Standardiser les noms de clés pour les attributs des participants
-                # Si la clé est déjà préfixée (par ex. lors du chargement/modification), ne pas re-préfixer
+                # Standardize key names for participant attributes
+                # If the key is already prefixed (e.g. during loading/modification), do not re-prefix
                 if key.startswith("participant_"):
                     attr_key = key
                 else:
@@ -73,12 +73,12 @@ def save_metadata(subject_file, data: dict):
 
                 f.attrs[attr_key] = value
 
-                # Si la clé normalisée correspond à participant_image_path, on stocke sa valeur
-                # pour s'assurer qu'elle soit écrite sous "image_path" si ce n'est pas déjà fait.
+                # If the normalized key corresponds to participant_image_path, store its value
+                # to ensure it is written under "image_path" if not already done.
                 if attr_key == "participant_image_path" and image_path_value is None:
                     image_path_value = value
 
-            # Sauvegarder image_path à la racine sous la clé "image_path" s'il existe
+            # Save image_path at the root under the key "image_path" if it exists
             if image_path_value is not None:
                 f.attrs["image_path"] = image_path_value
 
@@ -111,29 +111,29 @@ def save_to_default(data: dict, custom_filename: str = None):
                 f"recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.h5"
             )
         
-        with h5py.File(output_filename, 'w') as f: # 'w' pour créer un nouveau fichier
-            # Attributs de base à la racine
+        with h5py.File(output_filename, 'w') as f: # 'w' to create a new file
+            # Basic attributes at the root
             f.attrs['file_creation_date'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.attrs['subject_created'] = True # Réactivé pour compatibilité avec load_existing_subject
+            f.attrs['subject_created'] = True # Re-enabled for compatibility with load_existing_subject
 
-            # Sauvegarder les informations du participant (data) comme attributs à la racine
+            # Save participant information (data) as attributes at the root
             image_path_value = None
             if "image_path" in data:
-                image_path_value = data.pop("image_path") # Retire pour éviter double écriture
+                image_path_value = data.pop("image_path") # Remove to avoid double writing
 
             for key, value in data.items():
-                # Standardiser les noms de clés pour les attributs des participants
+                # Standardize key names for participant attributes
                 attr_key = f"participant_{key.lower().replace(' ', '_').replace('(', '').replace(')', '')}"
                 f.attrs[attr_key] = value
-                # Si la clé normalisée correspond à participant_image_path et que image_path_value n'a pas été défini par data["image_path"]
+                # If the normalized key corresponds to participant_image_path and image_path_value has not been set by data["image_path"]
                 if attr_key == "participant_image_path" and image_path_value is None:
                     image_path_value = value
             
-            # Sauvegarder image_path à la racine sous la clé "image_path" s'il a été trouvé
+            # Save image_path at the root under the key "image_path" if it was found
             if image_path_value is not None:
                 f.attrs["image_path"] = image_path_value
             
-            # Créer la structure de groupes pour les données de capteurs
+            # Create the group structure for sensor data
             sensor_group = f.create_group('Sensor')
             sensor_group.create_group('EMG')
             sensor_group.create_group('IMU')
@@ -149,38 +149,38 @@ def save_to_default(data: dict, custom_filename: str = None):
 
 def extract_group_data(file_path, group_name):
     """
-    Retourne un dictionnaire avec les données du sous-groupe spécifié (par exemple : 'EMG', 'Time', etc.)
-    Exclut les datasets vides.
+    Returns a dictionary with data from the specified subgroup (e.g.: 'EMG', 'Time', etc.)
+    Excludes empty datasets.
     """
     def read_group(group):
         result = {}
         for key, item in group.items():
             if isinstance(item, h5py.Dataset):
                 if 0 in item.shape:
-                    continue  # Ignorer les datasets vides
+                    continue  # Skip empty datasets
                 try:
                     result[key] = item[()]
                 except Exception as e:
-                    result[key] = f"Erreur de lecture : {e}"
+                    result[key] = f"Read error: {e}"
             elif isinstance(item, h5py.Group):
                 child_data = read_group(item)
-                if child_data:  # Ignorer les groupes vides
+                if child_data:  # Skip empty groups
                     result[key] = child_data
         return result
 
     with h5py.File(file_path, "r") as f:
         sensor_group = f.get("Sensor")
         if sensor_group is None:
-            raise ValueError("Le groupe 'Sensor' est introuvable dans le fichier.")
+            raise ValueError("The 'Sensor' group is not found in the file.")
 
         target_group = sensor_group.get(group_name)
         if target_group is None:
-            raise ValueError(f"Le groupe '{group_name}' est introuvable dans 'Sensor'.")
+            raise ValueError(f"The '{group_name}' group is not found in 'Sensor'.")
 
         return read_group(target_group)
     
 def plot_sensor_data(self, sensor_name, data_array):
-    """Trace les données d'un capteur sur un graphique."""
+    """Plots sensor data on a graph."""
     plot_widget = pg.PlotWidget()
     plot_widget.setBackground('w')
     plot_widget.setTitle(sensor_name, color='k', size='14pt')
@@ -192,9 +192,9 @@ def plot_sensor_data(self, sensor_name, data_array):
 
 
 def load_hdf5_and_populate_tree(self, file_path):
-    """Charge un fichier HDF5, met à jour le QTreeWidget, et trace automatiquement les capteurs disponibles."""
+    """Loads an HDF5 file, updates the QTreeWidget, and automatically plots available sensors."""
     self.connected_systems.clear()
-    self.middle_layout.setParent(None)  # Efface les anciens graphes
+    self.middle_layout.setParent(None)  # Clears old graphs
     self.middle_layout = QVBoxLayout()
     self.middle_placeholder.setLayout(self.middle_layout)
 
@@ -225,7 +225,7 @@ def load_hdf5_and_populate_tree(self, file_path):
 
         f.visititems(visitor)
 
-    # Génère X à partir de time_length et 40 ms entre chaque échantillon
+    # Generates X from time_length and 40 ms between each sample
     if time_length is not None:
         self.time_axis = np.arange(time_length) * 0.040
     else:
@@ -298,98 +298,98 @@ def load_hdf5_data(file_path):
 
 
 def copy_all_data_preserve_root_metadata(source_path, dest_path):
-    # Vérifier si le fichier source existe
+    # Check if the source file exists
     if not os.path.exists(source_path):
-        print(f"Erreur : Le fichier source {source_path} n'existe pas.")
+        print(f"Error: The source file {source_path} does not exist.")
         return False
 
-    # Vérifier si le fichier source est un fichier HDF5 valide
+    # Check if the source file is a valid HDF5 file
     try:
         with h5py.File(source_path, 'r') as test_file:
             test_file.attrs.keys()
     except (OSError, h5py.errors.HDF5Error) as e:
-        print(f"Erreur : Le fichier source {source_path} est corrompu ou invalide : {e}")
+        print(f"Error: The source file {source_path} is corrupted or invalid: {e}")
         return False
 
-    # Créer le fichier destination s'il n'existe pas
+    # Create the destination file if it doesn't exist
     if not os.path.exists(dest_path):
         with h5py.File(dest_path, 'w') as _:
             pass
 
     try:
         with h5py.File(source_path, 'r') as src_file, h5py.File(dest_path, 'a') as dst_file:
-            # Copier les datasets/groupes
+            # Copy datasets/groups
             for name in src_file:
                 if name in dst_file:
-                    print(f"⚠️  '{name}' existe déjà dans le fichier destination, il ne sera pas écrasé.")
+                    print(f"⚠️  '{name}' already exists in the destination file, it will not be overwritten.")
                     continue
                 src_file.copy(name, dst_file)
 
-            # Copier les attributs de la racine
+            # Copy root attributes
             for key, value in src_file.attrs.items():
                 dst_file.attrs[key] = value
 
         return True
     except Exception as e:
-        print(f"Erreur lors de la copie des données : {e}")
+        print(f"Error while copying data: {e}")
         return False
 
 
 
 def copy_only_root_metadata(source_path, dest_path):
-    # Vérifier si le fichier source existe
+    # Check if the source file exists
     if not os.path.exists(source_path):
-        print(f"Erreur : Le fichier source {source_path} n'existe pas.")
+        print(f"Error: The source file {source_path} does not exist.")
         return False
 
-    # Vérifier si le fichier source est un fichier HDF5 valide
+    # Check if the source file is a valid HDF5 file
     try:
         with h5py.File(source_path, 'r') as test_file:
             test_file.attrs.keys()
     except (OSError, h5py.errors.HDF5Error) as e:
-        print(f"Erreur : Le fichier source {source_path} est corrompu ou invalide : {e}")
+        print(f"Error: The source file {source_path} is corrupted or invalid: {e}")
         return False
 
     try:
-        # Créer ou ouvrir le fichier destination
+        # Create or open the destination file
         with h5py.File(source_path, 'r') as src_file, h5py.File(dest_path, 'w') as dst_file:
-            # Copier uniquement les attributs de la racine
+            # Copy only the root attributes
             for key, value in src_file.attrs.items():
                 dst_file.attrs[key] = value
-            print(f"✅ Métadonnées de la racine copiées avec succès vers {dest_path}.")
+            print(f"✅ Root metadata successfully copied to {dest_path}.")
         return True
     except Exception as e:
-        print(f"Erreur lors de la copie des métadonnées : {e}")
+        print(f"Error while copying metadata: {e}")
         return False
 
 def inject_metadata_to_hdf(json_relative_path, hdf_path):
-    base_dir = os.path.dirname(__file__)  # répertoire de ici.py
+    base_dir = os.path.dirname(__file__)  # directory of here.py
     json_full_path = os.path.join(base_dir, '..', 'plots', json_relative_path)
     json_full_path = os.path.abspath(json_full_path)
 
-    # Charger le JSON
+    # Load the JSON
     with open(json_full_path, 'r') as f:
         metadata = json.load(f)
 
-    # Injecter dans le HDF
+    # Inject into the HDF
     with h5py.File(hdf_path, 'a') as hdf:
         if "metadata" in hdf.attrs:
             del hdf.attrs["metadata"]
         hdf.attrs["metadata"] = json.dumps(metadata)
 
 def delet_experimental(hdf_path):
-    with h5py.File(hdf_path, 'r+') as f:  # mode lecture+écriture
-        if len(f.attrs) > 0:  # il y a des attributs à la racine
-            f.attrs["experiment_protocol"] = ""  # modifie ou crée l'attribut
+    with h5py.File(hdf_path, 'r+') as f:  # read+write mode
+        if len(f.attrs) > 0:  # there are attributes at the root
+            f.attrs["experiment_protocol"] = ""  # modifies or creates the attribute
         else:
-            f.attrs["experiment_protocol"] = None  # ou supprime, mais None n'est pas forcément valide
+            f.attrs["experiment_protocol"] = None  # or deletes, but None is not necessarily valid
 
 
 def load_sensor_config(file_path):
     with h5py.File(file_path, 'r') as f:
         root_attrs = dict(f.attrs)
         if root_attrs:
-            print(f"Métadonnées à la racine de '{file_path}':")
+            print(f"Metadata at the root of '{file_path}':")
             for key, value in root_attrs.items():
                 if key == "metadata":
                     return json.loads(value)

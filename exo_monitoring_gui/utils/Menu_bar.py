@@ -226,21 +226,21 @@ class MainBar:
 
     def save_experiment_protocol_as(self, parent):
         if not parent.file_path:
-            print("Aucun fichier source ouvert.")
+            print("No source file opened.")
             return
 
         new_file_path, _ = QFileDialog.getSaveFileName(
-            parent, "Enregistrer le protocole sous...", "", "Fichiers HDF5 (*.h5 *.hdf5)"
+            parent, "Save Protocol As...", "", "HDF5 Files (*.h5 *.hdf5)"
         )
 
         if not new_file_path:
-            return  # L'utilisateur a annulé
+            return  # User cancelled
 
         try:
             shutil.copy2(parent.file_path, new_file_path)
-            print(f"Fichier copié avec succès dans : {new_file_path}")
+            print(f"File successfully copied to: {new_file_path}")
         except Exception as e:
-            print(f"Erreur lors de la copie : {e}")
+            print(f"Error during copy: {e}")
 
 
 
@@ -252,13 +252,13 @@ class MainBar:
             return
         try:
             with h5py.File(parent.file_path, 'a') as f:
-                # Ajoute ou met à jour la métadonnée à la racine
+                # Add or update metadata at the root
                 f.attrs.modify('experiment_protocol', text)
         except Exception as e:
-            print(f"Erreur lors de la sauvegarde du protocole expérimental : {e}")
+            print(f"Error saving experimental protocol: {e}")
 
     def load_experiment_protocol(self, parent):
-        """Charge le protocole expérimental depuis les métadonnées si présent."""
+        """Load the experimental protocol from metadata if present."""
         if not parent.file_path:
             return
         try:
@@ -269,7 +269,7 @@ class MainBar:
                         text = text.decode('utf-8')
                     parent.experiment_protocol_text.setPlainText(text)
         except Exception as e:
-            print(f"Erreur lors du chargement du protocole expérimental : {e}")
+            print(f"Error loading experimental protocol: {e}")
 
     def show_metadata(self):
         """Display metadata of the current subject"""
@@ -326,7 +326,7 @@ class MainBar:
 
             if sensor:
                 if "EMG" in sensor:
-                    # Mapping des IDs EMG vers noms personnalisés
+                    # Mapping EMG IDs to custom names
                     emg_name_map = {
                         "41": "EMGL1",
                         "42": "EMGL2",
@@ -340,7 +340,7 @@ class MainBar:
 
                     metadata_text += "<tr><th colspan='2' style='background-color: #f0f0f0; padding: 8px; text-align: left; border-bottom: 1px solid #ddd;'>Sensor Configuration</th></tr>"
                     for key, value in sensor["EMG"].items():
-                        display_key = emg_name_map.get(key, key)  # Si clé inconnue, on garde la clé brute
+                        display_key = emg_name_map.get(key, key)  # If unknown key, keep the raw key
                         metadata_text += f"<tr><td style='padding: 8px; border-bottom: 1px solid #ddd;'><b>{display_key}</b></td>"
                         metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{value}</td></tr>"
                 if "IMU" in sensor:
@@ -356,7 +356,6 @@ class MainBar:
                         metadata_text += f"<td style='padding: 8px; border-bottom: 1px solid #ddd;'>{value}</td></tr>"
 
 
-            print("data",data)
 
             # Description if it exists
             if "participant_description" in data and data["participant_description"]:
@@ -592,12 +591,10 @@ class MainBar:
         """Refresh the connected system and allow modification of sensor mappings."""
         from PyQt5.QtWidgets import QMessageBox
         
-        # Vérifier si on a accès à l'interface principale pour ouvrir le dialogue de mapping
+        # Check if we have access to the main interface to open the mapping dialog
         if hasattr(self.main_app, 'backend') and hasattr(self.main_app.backend, 'sensor_config') and self.main_app.backend.sensor_config:
-            try:
-                print("[DEBUG] Opening sensor mapping dialog...")
-                
-                # Vérifier que le backend a les méthodes nécessaires
+            try:                
+                # Check that the backend has the necessary methods
                 if not hasattr(self.main_app.backend, 'get_current_mappings_for_dialog'):
                     QMessageBox.warning(
                         self.main_app,
@@ -606,28 +603,21 @@ class MainBar:
                     )
                     return
                 
-                # Obtenir les mappings actuels
-                curr_maps = self.main_app.backend.get_current_mappings_for_dialog()
-                print(f"[DEBUG] Current mappings: {curr_maps}")
-                
-                # Importer et créer le dialogue directement
+                # Get current mappings
+                curr_maps = self.main_app.backend.get_current_mappings_for_dialog()                
+                # Import and create the dialog directly
                 from plots.sensor_dialogue import SensorMappingDialog
                 
-                # Créer le dialogue avec des paramètres explicites
+                # Create the dialog with explicit parameters
                 dialog = SensorMappingDialog(self.main_app, curr_maps, None)
                 
-                # Connecter le signal
+                # Connect the signal
                 if hasattr(self.main_app.backend, 'update_sensor_mappings'):
                     dialog.mappings_updated.connect(self.main_app.backend.update_sensor_mappings)
                 
-                # ✅ SOLUTION : Utiliser exec_() pour afficher le dialogue de manière modale
-                print("[DEBUG] Showing dialog...")
+                # ✅ SOLUTION : Use exec_() to display the dialog modally
                 result = dialog.exec_()
                 
-                if result == dialog.Accepted:
-                    print("[DEBUG] Dialog accepted")
-                else:
-                    print("[DEBUG] Dialog cancelled")
                     
             except ImportError as e:
                 QMessageBox.critical(
@@ -656,8 +646,6 @@ class MainBar:
         from UI.review import Review
         # Get current file or ask user to select one
         f = self.main_app.subject_file
-        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        print(f)
         if not f:
             options = QFileDialog.Options()
             f, _ = QFileDialog.getOpenFileName(
@@ -674,12 +662,8 @@ class MainBar:
 
         received_files = [os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR)]
         received_files = [f for f in received_files if os.path.isfile(f)]
-        print("2c'est iciiiiiiiiiiiiiiiiiii \n")
         if received_files:
             latest_file = max(received_files, key=os.path.getmtime)
-            print("3c'est iciiiiiiiiiiiiiiiiiii \n")
-            print(latest_file)
-            print(self.main_app.subject_file)
             copy_all_data_preserve_root_metadata(latest_file, f)
 
             self.review = Review(file_path=self.main_app.subject_file,existing_load=True)
@@ -689,13 +673,11 @@ class MainBar:
 
             self.review.show()
         else:
-            print("[WARN] Aucun fichier reçu.")
+            print("[WARN] No file received.")
 
     def request_h5_file_review(self, file_path, file_dictionary):
         from UI.review import Review
         f = self.main_app.subject_file
-        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa55")
-        print(f)
         if not f:
             options = QFileDialog.Options()
             f, _ = QFileDialog.getOpenFileName(
@@ -715,20 +697,17 @@ class MainBar:
 
         if received_files:
             latest_file = max(received_files, key=os.path.getmtime)
-            print("dededededededede 4")
-            print(latest_file)
             copy_all_data_preserve_root_metadata(latest_file, f)
             
 
             file_dictionary.append(f)
             self.review = Review(parent=None, file_path=f, existing_load=True, trials=file_dictionary)
-            print(file_dictionary)
             for widget in QApplication.topLevelWidgets():
                 widget.close()
 
             self.review.show()
         else:
-            print("[WARN] Aucun fichier reçu.")
+            print("[WARN] No file received.")
 
     def edit_creation_date(self):
         # Edit menu
@@ -764,9 +743,9 @@ class MainBar:
         edit_menu.addAction(self.request_h5_file_action)
 
     def edit_Boleen(self, boleen):
-        """Active ou désactive les actions du menu Edit (Clear Plot et Request H5 File seulement)."""
+        """Enable or disable Edit menu actions (Clear Plot and Request H5 File only)."""
         try:
-            # Seules les actions qui doivent être activées après l'arrêt de l'enregistrement
+            # Only the actions that should be enabled after stopping the recording
             actions_to_toggle = [
                 ('clear_plot_action', 'clear_plot_action'),  
                 ('request_h5_file_action', 'request_h5_file_action')
@@ -777,7 +756,6 @@ class MainBar:
                     action = getattr(self, attr_name)
                     if action is not None:
                         action.setEnabled(boleen)
-                        print(f"[DEBUG] {action_name} enabled: {boleen}")
                     else:
                         print(f"[WARNING] {action_name} is None")
                 else:
@@ -787,13 +765,12 @@ class MainBar:
             print(f"[ERROR] Error in edit_Boleen: {e}")
 
     def set_refresh_connected_system_enabled(self, enabled):
-        """Active ou désactive spécifiquement l'action Refresh Connected System."""
+        """Enable or disable the Refresh Connected System action."""
         try:
             if hasattr(self, 'refresh_connected_system_action'):
                 action = getattr(self, 'refresh_connected_system_action')
                 if action is not None:
                     action.setEnabled(enabled)
-                    print(f"[DEBUG] refresh_connected_system_action enabled: {enabled}")
                 else:
                     print(f"[WARNING] refresh_connected_system_action is None")
             else:
@@ -810,19 +787,19 @@ class MainBar:
 
     def review_start_recording(self, parent, file_dictionary):
         if not parent.file_path:
-            print("⚠️ Aucun fichier source (parent.file_path) défini.")
+            print("⚠️ No source file (parent.file_path) defined.")
             return
         if file_dictionary is None:
             file_dictionary = []
 
-        # Obtenir dossier et nom de base sans extension
+        # Get folder and base name without extension
         base_dir = os.path.dirname(parent.file_path)
         base_name = os.path.splitext(os.path.basename(parent.file_path))[0]
 
-        # Déterminer le numéro de trial
+        # Determine trial number
         trial_number = len(file_dictionary) + 1
 
-        # Rechercher si _trial_{nombre} est déjà présent
+        # Search if _trial_{number} is already present
         match = re.match(r"^(.*)_trial_\d+$", base_name)
         if match:
             base_name_clean = match.group(1)
@@ -838,19 +815,16 @@ class MainBar:
             new_file_path = os.path.join(base_dir, new_file_name)
 
         try:
-            # Lire les métadonnées du fichier source
+            # Read metadata from source file
             with h5py.File(parent.file_path, 'r') as source_file:
                 attrs = dict(source_file.attrs)
 
-            # Créer un nouveau fichier avec uniquement les mêmes métadonnées
+            # Create a new file with only the same metadata
             with h5py.File(new_file_path, 'w') as new_file:
                 for key, value in attrs.items():
                     new_file.attrs[key] = value
-
-            print(f"✅ Fichier créé avec les métadonnées : {new_file_path}")
-
         except Exception as e:
-            print(f"❌ Erreur lors de la création du fichier : {e}")
+            print(f"❌ Error creating file : {e}")
 
         from plots.dashboard_app import DashboardApp
         parent.dashboard_instance = DashboardApp(new_file_path, parent, file_dictionary)

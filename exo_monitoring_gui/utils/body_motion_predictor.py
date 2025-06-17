@@ -5,98 +5,98 @@ import torch.optim as optim
 import os
 
 class SimpleBodyPredictor:
-    """Un prédicteur simple pour le mouvement du corps basé sur les parties avec des IMUs"""
+    """A simple predictor for body movement based on parts with IMUs."""
     
     def __init__(self, model_path=None):
         self.model_path = model_path
-        # Définir les relations entre les parties du corps
+        # Define relationships between body parts
         self.body_relations = {
-            # La tête suit le cou
+            # The head follows the neck
             'head': ['neck'],
-            # Les mains suivent les avant-bras
+            # Hands follow the forearms
             'left_hand': ['forearm_l'],
             'right_hand': ['forearm_r'],
-            # Les avant-bras suivent les biceps
+            # Forearms follow the biceps
             'forearm_l': ['biceps_l'],
             'forearm_r': ['biceps_r'],
-            # Les biceps suivent les deltoïdes
+            # Biceps follow the deltoids
             'biceps_l': ['deltoid_l', 'torso'],
             'biceps_r': ['deltoid_r', 'torso'],
-            # Les deltoïdes suivent le torse
+            # Deltoids follow the torso
             'deltoid_l': ['torso'],
             'deltoid_r': ['torso'],
-            # Les muscles du dos et de la poitrine suivent le torse
+            # Back and chest muscles follow the torso
             'dorsalis_major_l': ['torso'],
             'dorsalis_major_r': ['torso'],
             'pectorals_l': ['torso'],
             'pectorals_r': ['torso'],
-            # Le cou suit le torse
+            # The neck follows the torso
             'neck': ['torso'],
-            # Les jambes suivent les hanches
+            # Legs follow the hips
             'quadriceps_l': ['hip'],
             'quadriceps_r': ['hip'],
             'ishcio_hamstrings_l': ['hip'],
             'ishcio_hamstrings_r': ['hip'],
             'glutes_l': ['hip'],
             'glutes_r': ['hip'],
-            # Les mollets suivent les jambes
+            # Calves follow the legs
             'calves_l': ['quadriceps_l', 'ishcio_hamstrings_l'],
             'calves_r': ['quadriceps_r', 'ishcio_hamstrings_r'],
-            # Les pieds suivent les mollets
+            # Feet follow the calves
             'left_foot': ['calves_l'],
             'right_foot': ['calves_r'],
-            # Les hanches suivent le torse
+            # Hips follow the torso
             'hip': ['torso']
         }
         
-        # Chargement d'un modèle ML si disponible
+        # Load an ML model if available
         self.ml_model = None
         if model_path and os.path.exists(model_path):
             try:
                 self.ml_model = torch.load(model_path)
                 self.ml_model.eval()
-                print(f"[INFO] Modèle de prédiction chargé: {model_path}")
+                print(f"[INFO] Prediction model loaded: {model_path}")
             except Exception as e:
-                print(f"[WARNING] Impossible de charger le modèle ML: {e}")
+                print(f"[WARNING] Unable to load ML model: {e}")
     
     def predict_from_partial_state(self, imu_data):
         """
-        Prédit les positions des parties du corps sans IMU à partir des parties avec IMU.
+        Predicts the positions of body parts without IMUs from those with IMUs.
         
         Args:
-            imu_data: Dictionnaire {part_name: {'pos': np.array, 'rot': np.array}}
-                pour les parties avec des IMUs
+            imu_data: Dictionary {part_name: {'pos': np.array, 'rot': np.array}}
+                for parts with IMUs
                 
         Returns:
-            Dictionnaire des positions/rotations prédites pour les parties sans IMU
+            Dictionary of predicted positions/rotations for parts without IMUs
         """
-        # Si aucune donnée IMU n'est disponible, retourner un dict vide
+        # If no IMU data is available, return an empty dict
         if not imu_data:
             return {}
             
-        # Essayer d'abord le modèle ML si disponible
+        # Try the ML model first if available
         if self.ml_model:
             try:
                 ml_predictions = self._predict_with_ml(imu_data)
                 if ml_predictions:
                     return ml_predictions
             except Exception as e:
-                print(f"[WARNING] Erreur de prédiction ML: {e}, utilisation du fallback")
+                print(f"[WARNING] ML prediction error: {e}, using fallback")
         
-        # Fallback: Utiliser l'algorithme de propagation simple
+        # Fallback: Use the simple propagation algorithm
         predictions = {}
         
-        # Pour chaque partie du corps dans les relations
+        # For each body part in the relations
         for part_name, related_parts in self.body_relations.items():
-            # Si la partie a déjà un IMU, on l'ignore
+            # If the part already has an IMU, skip it
             if part_name in imu_data:
                 continue
                 
-            # Chercher des parties liées qui ont des IMUs
+            # Look for related parts that have IMUs
             available_related = [p for p in related_parts if p in imu_data]
             
             if available_related:
-                # Moyenne des rotations des parties liées
+                # Average the rotations of the related parts
                 rot_sum = np.zeros(4)
                 for rel_part in available_related:
                     rot_sum += imu_data[rel_part]['rot']
@@ -107,85 +107,85 @@ class SimpleBodyPredictor:
         return predictions
     
     def _predict_with_ml(self, imu_data):
-        """Utilise le modèle ML pour prédire les mouvements."""
+        """Uses the ML model to predict movements."""
         if not self.ml_model:
             return {}
             
         try:
-            # Préparation des données d'entrée
+            # Prepare input data
             input_features = []
             
-            # Parties du corps que nous attendons en entrée du modèle
+            # Body parts expected as input to the model
             expected_parts = ['torso', 'head', 'left_hand', 'right_hand', 
                               'left_foot', 'right_foot']
             
-            # Convertir les données IMU en vecteurs de caractéristiques
+            # Convert IMU data to feature vectors
             for part in expected_parts:
                 if part in imu_data:
-                    # Ajouter la rotation quaternion [w,x,y,z]
+                    # Add quaternion rotation [w,x,y,z]
                     input_features.extend(imu_data[part]['rot'])
                 else:
-                    # Si pas de données, ajouter des zéros
+                    # If no data, add zeros
                     input_features.extend([0.0, 0.0, 0.0, 0.0])
             
-            # Convertir en tenseur PyTorch
+            # Convert to PyTorch tensor
             input_tensor = torch.tensor(input_features, dtype=torch.float32).unsqueeze(0)
             
-            # Prédiction
+            # Prediction
             with torch.no_grad():
                 output = self.ml_model(input_tensor)
             
-            # Traiter les résultats
+            # Process results
             predictions = {}
             output = output.squeeze(0).numpy()
             
-            # Mapper les sorties aux parties du corps
-            # Le format de sortie dépend de l'architecture du modèle
+            # Map outputs to body parts
+            # Output format depends on model architecture
             idx = 0
             all_parts = list(self.body_relations.keys())
             
             for part_name in all_parts:
-                if part_name not in imu_data:  # Uniquement les parties sans IMU
-                    # Chaque partie a une rotation quaternion [w,x,y,z]
+                if part_name not in imu_data:  # Only parts without IMUs
+                    # Each part has a quaternion rotation [w,x,y,z]
                     if idx + 4 <= len(output):
                         rot = output[idx:idx+4]
-                        # Normaliser le quaternion
+                        # Normalize quaternion
                         norm = np.linalg.norm(rot)
-                        if norm > 1e-6:  # Éviter division par zéro
+                        if norm > 1e-6:  # Avoid division by zero
                             rot = rot / norm
                         predictions[part_name] = {'rot': rot}
                         idx += 4
             
             return predictions
         except Exception as e:
-            print(f"[ERROR] Erreur lors de la prédiction ML: {e}")
+            print(f"[ERROR] Error during ML prediction: {e}")
             import traceback
             traceback.print_exc()
             return {}
     
     def predict_joint_movement(self, body_parts, monitored_parts, is_walking=False):
         """
-        Prédit les mouvements des articulations non surveillées.
-        Utilise le modèle ML si disponible, sinon replie sur le simple predictor.
+        Predicts the movements of unmonitored joints.
+        Uses the ML model if available, otherwise falls back to the simple predictor.
         
         Args:
-            body_parts: Dictionnaire des parties du corps avec leurs positions et rotations
-            monitored_parts: Liste des noms des parties surveillées par des capteurs
-            is_walking: Booléen indiquant si le mode marche est activé
+            body_parts: Dictionary of body parts with their positions and rotations
+            monitored_parts: List of names of parts monitored by sensors
+            is_walking: Boolean indicating if walking mode is enabled
             
         Returns:
-            Dictionnaire mis à jour avec les rotations prédites pour toutes les parties
+            Updated dictionary with predicted rotations for all parts
         """
         imu_data = {k: v for k, v in body_parts.items() if k in monitored_parts}
         predictions = self.predict_from_partial_state(imu_data)
         
-        # Copier les données d'entrée pour ne pas les modifier directement
+        # Copy input data to avoid modifying directly
         updated_body_parts = {k: {
             'pos': v['pos'].copy(), 
             'rot': v['rot'].copy()
         } for k, v in body_parts.items()}
         
-        # Mettre à jour les parties non surveillées avec les prédictions
+        # Update unmonitored parts with predictions
         for part_name, pred in predictions.items():
             if part_name in updated_body_parts:
                 updated_body_parts[part_name]['rot'] = pred['rot']
@@ -194,10 +194,10 @@ class SimpleBodyPredictor:
 
 
 class ImprovedBodyMotionNetwork(nn.Module):
-    """Version améliorée du réseau pour de meilleures prédictions."""
+    """Improved version of the network for better predictions."""
     def __init__(self, input_size, hidden_size, output_size):
         super(ImprovedBodyMotionNetwork, self).__init__()
-        # Architecture plus profonde
+        # Deeper architecture
         self.layer1 = nn.Linear(input_size, hidden_size)
         self.bn1 = nn.BatchNorm1d(hidden_size)
         self.layer2 = nn.Linear(hidden_size, hidden_size*2)
@@ -206,12 +206,12 @@ class ImprovedBodyMotionNetwork(nn.Module):
         self.bn3 = nn.BatchNorm1d(hidden_size)
         self.layer4 = nn.Linear(hidden_size, output_size)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.3)  # Augmenter légèrement le dropout
+        self.dropout = nn.Dropout(0.3)  # Slightly increased dropout
         
     def forward(self, x):
-        # Flux amélioré avec normalisation par lots
+        # Improved flow with batch normalization
         x = self.layer1(x)
-        if x.shape[0] > 1:  # BatchNorm1d nécessite plus d'un exemple
+        if x.shape[0] > 1:  # BatchNorm1d requires more than one example
             x = self.bn1(x)
         x = self.relu(x)
         x = self.dropout(x)
@@ -232,7 +232,7 @@ class ImprovedBodyMotionNetwork(nn.Module):
 
 
 class SequentialBodyMotionNetwork(nn.Module):
-    """Réseau LSTM pour modéliser les séquences temporelles de mouvements."""
+    """LSTM network to model temporal movement sequences."""
     def __init__(self, input_size, hidden_size, output_size, num_layers=2):
         super(SequentialBodyMotionNetwork, self).__init__()
         self.lstm = nn.LSTM(
@@ -247,15 +247,15 @@ class SequentialBodyMotionNetwork(nn.Module):
     def forward(self, x):
         # x shape: [batch_size, sequence_length, input_size]
         lstm_out, _ = self.lstm(x)
-        # Prendre seulement la dernière sortie de la séquence
+        # Take only the last output of the sequence
         output = self.fc(lstm_out[:, -1, :])
         return output
 
 
 class BodyMotionNetwork(nn.Module):
     """
-    Réseau de neurones pour prédire les mouvements corporels à partir
-    d'un nombre limité de capteurs IMU.
+    Neural network to predict body movements from
+    a limited number of IMU sensors.
     """
     def __init__(self, input_size, hidden_size, output_size):
         super(BodyMotionNetwork, self).__init__()
@@ -275,34 +275,32 @@ class BodyMotionNetwork(nn.Module):
 
 class MLBodyPredictor:
     """
-    Prédicteur de mouvement basé sur un modèle de réseau de neurones.
-    Cette classe nécessite un entraînement préalable ou un modèle pré-entraîné.
+    Movement predictor based on a neural network model.
+    This class requires prior training or a pre-trained model.
     """
     def __init__(self, model_path=None):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Configuration du modèle
+        # Model configuration
         self.input_size = 24  # 6 IMUs x 4 (quaternion WXYZ)
         self.hidden_size = 128
-        self.output_size = 80  # 20 articulations x 4 (quaternion WXYZ)
+        self.output_size = 80  # 20 joints x 4 (quaternion WXYZ)
         
-        # Initialiser le modèle
+        # Initialize the model
         self.model = BodyMotionNetwork(self.input_size, self.hidden_size, self.output_size).to(self.device)
         
-        # Tenter de charger un modèle pré-entraîné
+        # Try to load a pre-trained model
         if model_path and os.path.exists(model_path):
             self.model.load_state_dict(torch.load(model_path, map_location=self.device))
             self.model.eval()
             self.model_loaded = True
-            print(f"Modèle chargé depuis {model_path}")
         else:
             self.model_loaded = False
-            print("Aucun modèle pré-entraîné trouvé. Utilisant la prédiction par règles.")
-        
-        # Fallback au prédicteur simple si pas de modèle ML
+            print("No pre-trained model found. Using rule-based prediction.")
+        # Fallback to simple predictor if no ML model
         self.simple_predictor = SimpleBodyPredictor()
         
-        # Mapper les noms des parties du corps aux indices du tenseur de sortie
+        # Map body part names to output tensor indices
         self.body_part_indices = {
             'head': 0,
             'neck': 1,
@@ -328,50 +326,50 @@ class MLBodyPredictor:
     
     def predict_joint_movement(self, body_parts, monitored_parts, is_walking=False):
         """
-        Prédit les mouvements des articulations non surveillées.
-        Utilise le modèle ML si disponible, sinon replie sur le simple predictor.
+        Predicts the movements of unmonitored joints.
+        Uses the ML model if available, otherwise falls back to the simple predictor.
         
         Args:
-            body_parts: Dictionnaire des parties du corps avec leurs positions et rotations
-            monitored_parts: Liste des noms des parties surveillées par des capteurs
-            is_walking: Booléen indiquant si le mode marche est activé
+            body_parts: Dictionary of body parts with their positions and rotations
+            monitored_parts: List of names of parts monitored by sensors
+            is_walking: Boolean indicating if walking mode is enabled
             
         Returns:
-            Dictionnaire mis à jour avec les rotations prédites pour toutes les parties
+            Updated dictionary with predicted rotations for all parts
         """
         if is_walking or not self.model_loaded:
-            # Si l'animation de marche est active ou si aucun modèle n'est chargé,
-            # utiliser le prédicteur simple
+            # If walking animation is active or no model is loaded,
+            # use the simple predictor
             return self.simple_predictor.predict_joint_movement(body_parts, monitored_parts, is_walking)
         
-        # Préparer les données d'entrée pour le modèle
+        # Prepare input data for the model
         input_data = torch.zeros(self.input_size, dtype=torch.float32, device=self.device)
         
-        # Remplir le tenseur d'entrée avec les données des capteurs disponibles
+        # Fill the input tensor with available sensor data
         imu_count = 0
         for part_name in monitored_parts:
-            if part_name in body_parts and imu_count < 6:  # Limité à 6 IMUs
+            if part_name in body_parts and imu_count < 6:  # Limited to 6 IMUs
                 quat = body_parts[part_name]['rot']
-                input_idx = imu_count * 4  # 4 valeurs quaternion par IMU
+                input_idx = imu_count * 4  # 4 quaternion values per IMU
                 input_data[input_idx:input_idx+4] = torch.tensor(quat, dtype=torch.float32, device=self.device)
                 imu_count += 1
         
-        # Prédire avec le modèle ML
+        # Predict with the ML model
         with torch.no_grad():
             output = self.model(input_data.unsqueeze(0)).squeeze(0)
         
-        # Copier les données d'entrée pour ne pas les modifier directement
+        # Copy input data to avoid modifying directly
         updated_body_parts = {k: {
             'pos': v['pos'].copy(), 
             'rot': v['rot'].copy()
         } for k, v in body_parts.items()}
         
-        # Mettre à jour les parties non surveillées avec les prédictions
+        # Update unmonitored parts with predictions
         for part_name, idx in self.body_part_indices.items():
             if part_name not in monitored_parts:
-                output_idx = idx * 4  # 4 valeurs quaternion par partie
+                output_idx = idx * 4  # 4 quaternion values per part
                 quat = output[output_idx:output_idx+4].cpu().numpy()
-                # Normaliser le quaternion prédit
+                # Normalize the predicted quaternion
                 quat_norm = np.linalg.norm(quat)
                 if quat_norm > 0:
                     quat = quat / quat_norm
@@ -381,16 +379,16 @@ class MLBodyPredictor:
     
     def train_model(self, training_data, epochs=100, batch_size=32, learning_rate=0.001):
         """
-        Entraîne le modèle avec des données de mouvement.
+        Trains the model with movement data.
         
         Args:
-            training_data: Tuple (inputs, targets) pour l'entraînement
-            epochs: Nombre d'époques d'entraînement
-            batch_size: Taille des batchs d'entraînement
-            learning_rate: Taux d'apprentissage
+            training_data: Tuple (inputs, targets) for training
+            epochs: Number of training epochs
+            batch_size: Training batch size
+            learning_rate: Learning rate
             
         Returns:
-            Historique des pertes d'entraînement
+            Training loss history
         """
         inputs, targets = training_data
         dataset = torch.utils.data.TensorDataset(inputs, targets)
@@ -418,34 +416,34 @@ class MLBodyPredictor:
             
             avg_loss = epoch_loss / len(dataloader)
             losses.append(avg_loss)
-            print(f"Époque {epoch+1}/{epochs}, Perte: {avg_loss:.6f}")
+            print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.6f}")
         
-        # Marquer le modèle comme étant chargé
+        # Mark the model as loaded
         self.model_loaded = True
-        return True  # Retourne True pour indiquer que l'entraînement s'est bien déroulé
+        return True  # Return True to indicate training was successful
     
     def save_model(self, path):
-        """Sauvegarde le modèle entraîné sur disque."""
+        """Saves the trained model to disk."""
         torch.save(self.model.state_dict(), path)
-        print(f"Modèle sauvegardé à {path}")
+        print(f"Model saved to {path}")
         return True
 
 
 class MotionPredictorFactory:
     """
-    Factory pour créer et gérer les différents types de prédicteurs de mouvement.
+    Factory to create and manage different types of motion predictors.
     """
     @staticmethod
     def create_predictor(predictor_type="simple", model_path=None):
         """
-        Crée une instance du prédicteur spécifié.
+        Creates an instance of the specified predictor.
         
         Args:
-            predictor_type: Type de prédicteur ("simple" ou "ml")
-            model_path: Chemin vers un modèle pré-entraîné (pour "ml")
+            predictor_type: Type of predictor ("simple" or "ml")
+            model_path: Path to a pre-trained model (for "ml")
             
         Returns:
-            Une instance du prédicteur demandé
+            An instance of the requested predictor
         """
         if predictor_type.lower() == "ml":
             return MLBodyPredictor(model_path)

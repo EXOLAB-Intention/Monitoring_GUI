@@ -4,58 +4,58 @@ import shutil
 from datetime import datetime
 
 def backup_and_clean(backup=True, delete=False):
-    """Sauvegarde et/ou supprime les fichiers d'entraînement."""
+    """Backup and/or delete training files."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     csv_dir = os.path.join(base_dir, 'machinelearning')
     json_dir = os.path.join(base_dir, 'data', 'recordings')
     
-    # Créer un dossier d'archive si nécessaire
+    # Create an archive folder if necessary
     if backup:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_dir = os.path.join(base_dir, 'data', 'archives', f'backup_{timestamp}')
         os.makedirs(backup_dir, exist_ok=True)
-        print(f"Création du dossier d'archive: {backup_dir}")
+        print(f"Creating archive folder: {backup_dir}")
         
-        # Copier les CSV
+        # Copy CSV files
         if os.path.exists(csv_dir):
             csv_backup = os.path.join(backup_dir, 'csv')
             os.makedirs(csv_backup, exist_ok=True)
             for f in os.listdir(csv_dir):
                 if f.endswith('.csv'):
                     shutil.copy2(os.path.join(csv_dir, f), os.path.join(csv_backup, f))
-                    print(f"  Sauvegardé: {f}")
+                    print(f"  Backed up: {f}")
         
-        # Copier les JSON
+        # Copy JSON files
         if os.path.exists(json_dir):
             json_backup = os.path.join(backup_dir, 'json')
             os.makedirs(json_backup, exist_ok=True)
             for f in os.listdir(json_dir):
                 if f.endswith('.json'):
                     shutil.copy2(os.path.join(json_dir, f), os.path.join(json_backup, f))
-                    print(f"  Sauvegardé: {f}")
+                    print(f"  Backed up: {f}")
     
-    # Supprimer les fichiers
+    # Delete files
     if delete:
-        print("\nSuppression des fichiers d'entraînement:")
+        print("\nDeleting training files:")
         
-        # Supprimer les CSV
+        # Delete CSV files
         if os.path.exists(csv_dir):
             for f in os.listdir(csv_dir):
                 if f.endswith('.csv'):
                     os.remove(os.path.join(csv_dir, f))
-                    print(f"  Supprimé: {os.path.join(csv_dir, f)}")
+                    print(f"  Deleted: {os.path.join(csv_dir, f)}")
         
-        # Supprimer les JSON
+        # Delete JSON files
         if os.path.exists(json_dir):
             for f in os.listdir(json_dir):
                 if f.endswith('.json'):
                     os.remove(os.path.join(json_dir, f))
-                    print(f"  Supprimé: {os.path.join(json_dir, f)}")
+                    print(f"  Deleted: {os.path.join(json_dir, f)}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Nettoie les fichiers d'entraînement")
-    parser.add_argument('--no-backup', action='store_true', help="Ne pas sauvegarder les fichiers")
-    parser.add_argument('--delete', action='store_true', help="Supprimer les fichiers")
+    parser = argparse.ArgumentParser(description="Cleans up training files")
+    parser.add_argument('--no-backup', action='store_true', help="Do not backup files")
+    parser.add_argument('--delete', action='store_true', help="Delete files")
     
     args = parser.parse_args()
     
