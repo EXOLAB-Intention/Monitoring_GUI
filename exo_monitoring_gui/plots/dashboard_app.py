@@ -127,16 +127,16 @@ class DashboardApp(QMainWindow):
             if hasattr(self.main_bar_re, 'set_refresh_connected_system_enabled'):
                 self.main_bar_re.set_refresh_connected_system_enabled(False)
         except Exception as e:
-            print(f"[ERROR] Error initializing MainBar: {e}")
+            # print(f"[ERROR] Error initializing MainBar: {e}")
             import traceback
             traceback.print_exc()
             self.main_bar_re = None
 
-        print("Debug 56")
+        # print("Debug 56")
         self.main_bar_re.exit_action.setEnabled(True)
-        print(self.parent_revi)      
+        # print(self.parent_revi)      
         if self.parent_revi is not None:
-            print("[Debug 2 le s]")
+            # print("[Debug 2 le s]")
             self.main_bar_re.request_h5_file_action.disconnect()
             self.main_bar_re.request_h5_file_action.triggered.connect(
                 lambda: self.main_bar_re.request_h5_file_review(self.subject_file, self.file_list)
@@ -217,7 +217,7 @@ class DashboardApp(QMainWindow):
         model_3d_layout.setSpacing(0)
 
         self.model_3d_widget = Model3DWidget()
-        print(f"Created 3D model widget: {self.model_3d_widget}")
+        # print(f"Created 3D model widget: {self.model_3d_widget}")
 
         # Forcer des dimensions visibles pour le widget 3D
         self.model_3d_widget.setMinimumSize(300, 300)
@@ -1238,7 +1238,7 @@ class DashboardApp(QMainWindow):
         
         # Vérifier si on a une configuration de capteurs
         if not self.backend.sensor_config:
-            print("[WARNING] No sensor configuration available")
+            # print("[WARNING] No sensor configuration available")
             return
         
         # Parcourir les données EMG - trier par ordre croissant d'ID
