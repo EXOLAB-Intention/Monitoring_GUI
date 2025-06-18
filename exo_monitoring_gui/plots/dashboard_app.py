@@ -136,7 +136,6 @@ class DashboardApp(QMainWindow):
         self.main_bar_re.exit_action.setEnabled(True)
         # print(self.parent_revi)      
         if self.parent_revi is not None:
-            # print("[Debug 2 le s]")
             self.main_bar_re.request_h5_file_action.disconnect()
             self.main_bar_re.request_h5_file_action.triggered.connect(
                 lambda: self.main_bar_re.request_h5_file_review(self.subject_file, self.file_list)

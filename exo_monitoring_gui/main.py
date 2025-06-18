@@ -1,6 +1,38 @@
 import traceback
 import sys
 import os
+import subprocess
+import importlib.util
+
+def check_and_install_packages():
+    """Check if required packages are installed and install them if needed."""
+    required_packages = [
+        'PyQt5',
+        'pyqtgraph',
+        'numpy',
+        'h5py',
+        'matplotlib',
+        'pandas',
+        'torch',
+        'pyserial',  # 'serial' package is actually called 'pyserial'
+    ]
+    
+    missing_packages = []
+    
+    for package in required_packages:
+        if importlib.util.find_spec(package.replace('pyserial', 'serial')) is None:
+            missing_packages.append(package)
+    
+    if missing_packages:
+        print("Installing missing packages:", missing_packages)
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_packages)
+            print("All required packages have been installed successfully!")
+        except subprocess.CalledProcessError as e:
+            print(f"Error installing packages: {e}")
+            sys.exit(1)
+    else:
+        print("All required packages are already installed.")
 
 # Assurez-vous que le répertoire principal est dans le chemin Python
 script_dir = os.path.abspath(os.path.dirname(__file__))
@@ -13,6 +45,9 @@ if project_root_dir not in sys.path:
 
 def main():
     try:
+        print("Checking required packages...")
+        check_and_install_packages()
+        
         print("Starting application...")
         
         # Améliorer la gestion des erreurs OpenGL
@@ -62,15 +97,6 @@ def main():
         surface_format.setSamples(4)  # Antialiasing (peut être réduit pour plus de performance)
         surface_format.setSwapBehavior(QSurfaceFormat.DoubleBuffer)
         QSurfaceFormat.setDefaultFormat(surface_format)
-        
-        # Ajouter une vérification des dépendances essentielles
-        required_packages = ['PyQt5', 'numpy', 'OpenGL', 'pyqtgraph']
-        for package in required_packages:
-            try:
-                __import__(package)
-            except ImportError:
-                print(f"ERROR: Required package '{package}' is not installed.")
-                return
         
         from exo_monitoring_gui.app import launch # Changed from 'from app import launch'
         print("Imported launch function")
