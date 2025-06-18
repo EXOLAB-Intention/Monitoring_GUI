@@ -187,7 +187,7 @@ class ClientInitThread(QThread):
 
 class DashboardAppBack:
     def __init__(self, ui):
-        self.ui = ui  # Référence à l'interface utilisateur (DashboardApp)
+        self.ui = ui  # Référence à DashboardApp
         self.server_thread = None
         self.client_socket = None
         self.sensor_config = None
@@ -720,18 +720,9 @@ class DashboardAppBack:
             
             # Appliquer les mappings IMU au modèle 3D
             if hasattr(self.ui, 'model_3d_widget') and self.ui.model_3d_widget:
-                # Nettoyer les anciens mappings
                 self.ui.model_3d_widget.model_viewer.imu_mapping.clear()
-                
-                # Appliquer les nouveaux mappings IMU
                 for imu_id, body_part in imu_mappings.items():
-                    success = self.ui.model_3d_widget.model_viewer.map_imu_to_body_part(int(imu_id), body_part)
-                    if success:
-                        print(f"[BACKEND] Successfully mapped IMU {imu_id} to {body_part}")
-                    else:
-                        print(f"[BACKEND] Failed to map IMU {imu_id} to {body_part}")
-                
-                # Stocker les mappings EMG et pMMG directement (pas de méthode set_emg_mapping)
+                    self.ui.model_3d_widget.model_viewer.map_imu_to_body_part(int(imu_id), body_part)
                 self.ui.model_3d_widget.model_viewer.emg_mapping = emg_mappings.copy()
                 self.ui.model_3d_widget.model_viewer.pmmg_mapping = pmmg_mappings.copy()
             
