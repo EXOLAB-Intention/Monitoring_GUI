@@ -292,7 +292,13 @@ def load_hdf5_data(file_path):
         key = int(key_str)
         if key == 41:
             data_structure["EMG"][0] = f"EMGL1 {value}"
-    print(f"Données chargées avec succès : {data_structure["EMG"][0]}")
+    # Afficher un échantillon des données chargées pour vérification
+    if "EMG" in data_structure and data_structure["EMG"]:
+        print(f"Données chargées avec succès : {data_structure['EMG'][0]}")
+    elif "IMU" in data_structure and data_structure["IMU"]:
+        print(f"Données chargées avec succès : {data_structure['IMU'][0]}")
+    else:
+        print("Aucune donnée EMG ou IMU trouvée dans le fichier.")
 
     print(data_structure) 
 
