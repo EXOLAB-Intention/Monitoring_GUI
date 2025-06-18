@@ -1,0 +1,8 @@
+PyQt5
+pyqtgraph
+numpy
+h5py
+matplotlib
+pandas
+torch
+serial
