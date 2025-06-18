@@ -568,21 +568,8 @@ class Review(QMainWindow):
             label = QLabel("")
             received_data_layout.addWidget(label)
 
-        # --- Experimental Protocol as a word-like editor ---
+        # --- Experimental Protocol as a plain QTextEdit ---
         protocol_layout = QVBoxLayout()
-        toolbar_layout = QHBoxLayout()
-
-        self.bold_button = QPushButton("Bold")
-        self.bold_button.setCheckable(True)
-        self.bold_button.clicked.connect(self.set_protocol_bold)
-        toolbar_layout.addWidget(self.bold_button)
-
-        self.color_button = QPushButton("Color")
-        self.color_button.clicked.connect(self.set_protocol_color)
-        toolbar_layout.addWidget(self.color_button)
-
-        toolbar_layout.addStretch()
-        protocol_layout.addLayout(toolbar_layout)
 
         self.experiment_protocol_text = QTextEdit()
         self.experiment_protocol_text.setPlaceholderText("Experimental Protocol")
@@ -612,31 +599,6 @@ class Review(QMainWindow):
         except Exception as e:
             print(f"Error reading experiment_protocol: {e}")
         self.experiment_protocol_text.setPlainText(protocol_text)
-
-    def set_protocol_bold(self):
-        cursor = self.experiment_protocol_text.textCursor()
-        if cursor.hasSelection():
-            fmt = QTextCharFormat()
-            current_weight = cursor.charFormat().fontWeight()
-            new_weight = QFont.Bold if current_weight != QFont.Bold else QFont.Normal
-            fmt.setFontWeight(new_weight)
-            cursor.mergeCharFormat(fmt)
-        else:
-            # Toggle bold for future typing
-            is_bold = self.bold_button.isChecked()
-            self.experiment_protocol_text.setFontWeight(QFont.Bold if is_bold else QFont.Normal)
-        # Keep button checked state in sync with current format
-        self.bold_button.setChecked(self.experiment_protocol_text.fontWeight() == QFont.Bold)
-
-    def set_protocol_color(self):
-        color = QColorDialog.getColor(parent=self)
-        if color.isValid():
-            cursor = self.experiment_protocol_text.textCursor()
-            if not cursor.hasSelection():
-                return
-            fmt = QTextCharFormat()
-            fmt.setForeground(color)
-            cursor.mergeCharFormat(fmt)
 
     def reorganize_plots(self):
         """Reorganize the graphs after a deletion"""

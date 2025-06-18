@@ -1,5 +1,13 @@
 {
-  "EMG": {},
+  "EMG": {
+    "41": "forearm_l",
+    "42": "calves_l",
+    "43": "right_foot",
+    "44": "left_hand",
+    "45": "head",
+    "46": "forearm_r",
+    "47": "left_hand"
+  },
   "IMU": {},
   "pMMG": {}
 }
