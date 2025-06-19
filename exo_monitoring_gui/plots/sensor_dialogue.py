@@ -1,11 +1,12 @@
 import sys
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QPushButton,
-    QLabel, QComboBox, QGroupBox,
-    QMessageBox, QWidget, QSplitter, QGridLayout, QScrollArea, QSizePolicy
+    QLabel, QComboBox, QGroupBox, QTableWidget, QTableWidgetItem,
+    QHeaderView, QMessageBox, QWidget, QSplitter, QGridLayout, QScrollArea, QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QColor, QBrush, QFont
+import re
 import json
 import os
 
@@ -17,23 +18,6 @@ if __name__ == '__main__':
         sys.path.insert(0, parent_dir)
 
 from plots.model_3d_viewer import Model3DWidget
-
-# Centraliser les mappings de noms de parties du corps et les couleurs de capteurs
-BODY_PART_UI_TO_MODEL = {
-    'Head': 'head', 'Neck': 'neck', 'Torso': 'torso',
-    'Left Deltoid': 'deltoid_l', 'Left Biceps': 'biceps_l', 'Left Forearm': 'forearm_l',
-    'Left Latissimus Dorsi': 'dorsalis_major_l', 'Left Pectorals': 'pectorals_l',
-    'Left Hand': 'left_hand', 'Right Deltoid': 'deltoid_r', 'Right Biceps': 'biceps_r',
-    'Right Forearm': 'forearm_r', 'Right Latissimus Dorsi': 'dorsalis_major_r',
-    'Right Pectorals': 'pectorals_r', 'Right Hand': 'right_hand', 'Hip': 'hip',
-    'Left Quadriceps': 'quadriceps_l', 'Right Quadriceps': 'quadriceps_r',
-    'Left Hamstrings': 'ishcio_hamstrings_l', 'Right Hamstrings': 'ishcio_hamstrings_r',
-    'Left Calves': 'calves_l', 'Right Calves': 'calves_r',
-    'Left Gluteus': 'glutes_l', 'Right Gluteus': 'glutes_r',
-    'Left Foot': 'left_foot', 'Right Foot': 'right_foot'
-}
-BODY_PART_MODEL_TO_UI = {v: k for k, v in BODY_PART_UI_TO_MODEL.items()}
-SENSOR_TYPE_COLORS = {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}
 
 class MappingBadgesWidget(QWidget):
     def __init__(self, mappings, parent=None):
@@ -137,14 +121,20 @@ class MappingBadgesWidget(QWidget):
         layout.addStretch(1)
 
     def _color(self, typ):
-        return SENSOR_TYPE_COLORS.get(typ, "#888")
+        return {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}.get(typ, "#888")
 
 class SimplifiedMappingDialog(QDialog):
     mappings_updated = pyqtSignal(dict, dict, dict)
-
+    
     def __init__(self, parent=None, current_mappings=None, available_sensors=None):
         super().__init__(parent)
-        self.setWindowTitle("Configuration des capteurs sur le modèle 3D")
+        self.setWindowTitle("Configure Sensors on 3D Model")
+        self.current_mappings = current_mappings if current_mappings is not None else {}
+        self.available_sensors = available_sensors if available_sensors is not None else {'EMG': [], 'IMU': [], 'pMMG': []}
+        # Initialize sensor_combos to avoid attribute error in load_current_mappings
+        self.sensor_combos = {}
+        # Initialize general_model as None by default
+        self.general_model = None
         # Increased initial and minimum height
         self.resize(1200, 960) 
         self.setMinimumSize(1100, 920)
@@ -171,113 +161,119 @@ class SimplifiedMappingDialog(QDialog):
         self.setup_ui()
 
     def setup_ui(self):
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(18, 18, 18, 18)
-        main_layout.setSpacing(14)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
 
         title = QLabel("Sensor Mapping Configuration")
         title.setFont(QFont("Arial", 24, QFont.Bold)) # Increased font size from 20 to 24
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: #333; margin: 10px 0; padding: 5px; border-bottom: 2px solid #4CAF50;")
-        main_layout.addWidget(title)
+        layout.addWidget(title)
 
-        if any(self.available_sensors.values()):
-            available_msg = QLabel("New sensors detected! Please match them with the correct body parts.")
-            available_msg.setStyleSheet("background-color: #e3f2fd; color: #0d47a1; padding: 10px; border-radius: 5px; font-weight: bold; margin: 5px 0;")
-            main_layout.addWidget(available_msg)
+        # Check if any sensors are available
+        if not any(self.available_sensors.values()):
+            no_sensor_label = QLabel("No sensors available")
+            no_sensor_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(no_sensor_label)
+        else:
+            if any(self.available_sensors.values()):
+                available_msg = QLabel("New sensors detected! Please match them with the correct body parts.")
+                available_msg.setStyleSheet("background-color: #e3f2fd; color: #0d47a1; padding: 10px; border-radius: 5px; font-weight: bold; margin: 5px 0;")
+                layout.addWidget(available_msg)
 
-            if self.available_sensors.get('EMG'):
-                emg_msg = QLabel(f"EMG: {', '.join([f'EMG{id}' for id in self.available_sensors['EMG']])}")
-                emg_msg.setStyleSheet("color: #CC3300; font-weight: bold;")
-                main_layout.addWidget(emg_msg)
+                if self.available_sensors.get('EMG'):
+                    emg_msg = QLabel(f"EMG: {', '.join([f'EMG{id}' for id in self.available_sensors['EMG']])}")
+                    emg_msg.setStyleSheet("color: #CC3300; font-weight: bold;")
+                    layout.addWidget(emg_msg)
 
-            if self.available_sensors.get('IMU'):
-                imu_msg = QLabel(f"IMU: {', '.join([f'IMU{id}' for id in self.available_sensors['IMU']])}")
-                imu_msg.setStyleSheet("color: #00CC33; font-weight: bold;")
-                main_layout.addWidget(imu_msg)
+                if self.available_sensors.get('IMU'):
+                    imu_msg = QLabel(f"IMU: {', '.join([f'IMU{id}' for id in self.available_sensors['IMU']])}")
+                    imu_msg.setStyleSheet("color: #00CC33; font-weight: bold;")
+                    layout.addWidget(imu_msg)
 
-            if self.available_sensors.get('pMMG'):
-                pmmg_msg = QLabel(f"pMMG: {', '.join([f'pMMG{id}' for id in self.available_sensors['pMMG']])}")
-                pmmg_msg.setStyleSheet("color: #0033CC; font-weight: bold;")
-                main_layout.addWidget(pmmg_msg)
+                if self.available_sensors.get('pMMG'):
+                    pmmg_msg = QLabel(f"pMMG: {', '.join([f'pMMG{id}' for id in self.available_sensors['pMMG']])}")
+                    pmmg_msg.setStyleSheet("color: #0033CC; font-weight: bold;")
+                    layout.addWidget(pmmg_msg)
 
-        self.tab_widget = QTabWidget()
-        # Ensure the tab widget has a good minimum height and can expand vertically
-        self.tab_widget.setMinimumHeight(450) 
-        self.tab_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #d0d0d0; border-radius: 4px; background: white; padding: 10px; }
-            QTabBar::tab { background: #e0e0e0; border: 1px solid #c0c0c0; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; padding: 10px 20px; margin-right: 4px; font-weight: bold; font-size: 14px; color: #555555; min-width: 100px; text-align: center; }
-            QTabBar::tab:selected { background: #4CAF50; color: white; border: 1px solid #388E3C; border-bottom: none; }
-            QTabBar::tab:hover:!selected { background: #f0f0f0; border-color: #b0b0b0; }
-        """)
+            self.tab_widget = QTabWidget()
+            # Ensure the tab widget has a good minimum height and can expand vertically
+            self.tab_widget.setMinimumHeight(450) 
+            self.tab_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            self.tab_widget.setStyleSheet("""
+                QTabWidget::pane { border: 1px solid #d0d0d0; border-radius: 4px; background: white; padding: 10px; }
+                QTabBar::tab { background: #e0e0e0; border: 1px solid #c0c0c0; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; padding: 10px 20px; margin-right: 4px; font-weight: bold; font-size: 14px; color: #555555; min-width: 100px; text-align: center; }
+                QTabBar::tab:selected { background: #4CAF50; color: white; border: 1px solid #388E3C; border-bottom: none; }
+                QTabBar::tab:hover:!selected { background: #f0f0f0; border-color: #b0b0b0; }
+            """)
 
-        self.general_tab = self.create_general_tab()
-        self.emg_tab = self.create_specific_tab("EMG", 8)
-        self.imu_tab = self.create_specific_tab("IMU", 6)
-        self.pmmg_tab = self.create_specific_tab("pMMG", 8)
+            self.general_tab = self.create_general_tab()
+            self.emg_tab = self.create_specific_tab("EMG", 8)
+            self.imu_tab = self.create_specific_tab("IMU", 6)
+            self.pmmg_tab = self.create_specific_tab("pMMG", 8)
 
-        self.tab_widget.addTab(self.general_tab, "General View")
-        self.tab_widget.addTab(self.emg_tab, "EMG")
-        self.tab_widget.addTab(self.imu_tab, "IMU")
-        self.tab_widget.addTab(self.pmmg_tab, "pMMG")
+            self.tab_widget.addTab(self.general_tab, "General View")
+            self.tab_widget.addTab(self.emg_tab, "EMG")
+            self.tab_widget.addTab(self.imu_tab, "IMU")
+            self.tab_widget.addTab(self.pmmg_tab, "pMMG")
 
-        main_layout.addWidget(self.tab_widget, 1) # Ensure tab_widget expands (already set in previous step, confirming)
+            layout.addWidget(self.tab_widget, 1) # Ensure tab_widget expands (already set in previous step, confirming)
 
-        badges_group = QGroupBox("Assignment Summary")
-        badges_group.setStyleSheet("QGroupBox { margin-top: 20px; }")
-        badges_layout = QVBoxLayout()
-        self.scroll_badges = QScrollArea()
-        self.scroll_badges.setWidgetResizable(True)
-        self.scroll_badges.setMinimumHeight(200)
-        self.scroll_badges.setMaximumHeight(350)
+            badges_group = QGroupBox("Assignment Summary")
+            badges_group.setStyleSheet("QGroupBox { margin-top: 20px; }")
+            badges_layout = QVBoxLayout()
+            self.scroll_badges = QScrollArea()
+            self.scroll_badges.setWidgetResizable(True)
+            self.scroll_badges.setMinimumHeight(200)
+            self.scroll_badges.setMaximumHeight(350)
 
-        all_mappings = {}
-        for sensor_type, mappings in self.current_mappings.items():
-            for sensor_id, body_part in mappings.items():
-                all_mappings[f"{sensor_type}{sensor_id}"] = body_part
+            all_mappings = {}
+            for sensor_type, mappings in self.current_mappings.items():
+                for sensor_id, body_part in mappings.items():
+                    all_mappings[f"{sensor_type}{sensor_id}"] = body_part
 
-        self.badges_widget = MappingBadgesWidget(all_mappings, self)
-        self.scroll_badges.setWidget(self.badges_widget)
-        badges_layout.addWidget(self.scroll_badges)
-        badges_group.setLayout(badges_layout)
-        main_layout.addWidget(badges_group)
+            self.badges_widget = MappingBadgesWidget(all_mappings, self)
+            self.scroll_badges.setWidget(self.badges_widget)
+            badges_layout.addWidget(self.scroll_badges)
+            badges_group.setLayout(badges_layout)
+            layout.addWidget(badges_group)
 
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(18)
-        button_layout.setContentsMargins(0, 10, 0, 0)
+            button_layout = QHBoxLayout()
+            button_layout.setSpacing(18)
+            button_layout.setContentsMargins(0, 10, 0, 0)
 
-        self.reset_button = QPushButton("Reset to Default Values")
-        self.reset_button.setStyleSheet("""
-            QPushButton { background-color: #f0f0f0; border: none; border-radius: 6px; padding: 10px 20px; color: #555; font-size: 14px; font-weight: 500; }
-            QPushButton:hover { background-color: #e0e0e0; }
-            QPushButton:pressed { background-color: #d0d0d0; }
-        """)
-        self.reset_button.clicked.connect(self.reset_to_default)
+            self.reset_button = QPushButton("Reset to Default Values")
+            self.reset_button.setStyleSheet("""
+                QPushButton { background-color: #f0f0f0; border: none; border-radius: 6px; padding: 10px 20px; color: #555; font-size: 14px; font-weight: 500; }
+                QPushButton:hover { background-color: #e0e0e0; }
+                QPushButton:pressed { background-color: #d0d0d0; }
+            """)
+            self.reset_button.clicked.connect(self.reset_to_default)
 
-        self.confirm_button = QPushButton("Confirm")
-        self.confirm_button.setStyleSheet("""
-            QPushButton { background-color: #4CAF50; border: none; border-radius: 6px; padding: 10px 20px; color: white; font-size: 14px; font-weight: 500; }
-            QPushButton:hover { background-color: #43A047; }
-            QPushButton:pressed { background-color: #388E3C; }
-        """)
-        self.confirm_button.clicked.connect(self.confirm_mapping)
+            self.confirm_button = QPushButton("Confirm")
+            self.confirm_button.setStyleSheet("""
+                QPushButton { background-color: #4CAF50; border: none; border-radius: 6px; padding: 10px 20px; color: white; font-size: 14px; font-weight: 500; }
+                QPushButton:hover { background-color: #43A047; }
+                QPushButton:pressed { background-color: #388E3C; }
+            """)
+            self.confirm_button.clicked.connect(self.confirm_mapping)
 
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.setStyleSheet("""
-            QPushButton { background-color: #f44336; border: none; border-radius: 6px; padding: 10px 20px; color: white; font-size: 14px; font-weight: 500; }
-            QPushButton:hover { background-color: #e53935; }
-            QPushButton:pressed { background-color: #d32f2f; }
-        """)
-        self.cancel_button.clicked.connect(self.reject)
+            self.cancel_button = QPushButton("Cancel")
+            self.cancel_button.setStyleSheet("""
+                QPushButton { background-color: #f44336; border: none; border-radius: 6px; padding: 10px 20px; color: white; font-size: 14px; font-weight: 500; }
+                QPushButton:hover { background-color: #e53935; }
+                QPushButton:pressed { background-color: #d32f2f; }
+            """)
+            self.cancel_button.clicked.connect(self.reject)
 
-        button_layout.addWidget(self.reset_button)
-        button_layout.addStretch()
-        button_layout.addWidget(self.cancel_button)
-        button_layout.addWidget(self.confirm_button)
+            button_layout.addWidget(self.reset_button)
+            button_layout.addStretch()
+            button_layout.addWidget(self.cancel_button)
+            button_layout.addWidget(self.confirm_button)
 
-        main_layout.addLayout(button_layout)
-        self.setLayout(main_layout)
+            layout.addLayout(button_layout)
+        self.setLayout(layout)
 
         self.load_current_mappings()
         self.styleAllComboBoxes()
@@ -740,7 +736,7 @@ class SimplifiedMappingDialog(QDialog):
             )
 
     def _get_color_for_type(self, typ):
-        return SENSOR_TYPE_COLORS.get(typ, "#888")
+        return {"IMU": "#00CC33", "EMG": "#CC3300", "pMMG": "#0033CC"}.get(typ, "#888")
 
     def load_current_mappings(self):
         for sensor_type, mappings in self.current_mappings.items():
@@ -755,8 +751,10 @@ class SimplifiedMappingDialog(QDialog):
                     if index >= 0:
                         combo.setCurrentIndex(index)
 
-        for sensor_id, body_part in self.current_mappings["IMU"].items():
-            self.general_model.map_imu_to_body_part(sensor_id, body_part)
+        # Only try to map IMU to body parts if general_model exists
+        if hasattr(self, 'general_model') and self.general_model:
+            for sensor_id, body_part in self.current_mappings["IMU"].items():
+                self.general_model.map_imu_to_body_part(sensor_id, body_part)
 
     def on_combo_changed(self, sensor_type, sensor_id, body_part_ui):
         if body_part_ui == "-- Not assigned --":
@@ -903,9 +901,34 @@ class SimplifiedMappingDialog(QDialog):
         QMessageBox.information(self, "Reset", "All mappings have been reset to system default values.")
 
     def _convert_model_part_to_ui(self, model_part):
-        return BODY_PART_MODEL_TO_UI.get(model_part, model_part.capitalize())
+        mapping = {
+            'head': 'Head', 'neck': 'Neck', 'torso': 'Torso',
+            'deltoid_l': 'Left Deltoid', 'biceps_l': 'Left Biceps', 'forearm_l': 'Left Forearm',
+            'dorsalis_major_l': 'Left Latissimus Dorsi', 'pectorals_l': 'Left Pectorals',
+            'left_hand': 'Left Hand', 'deltoid_r': 'Right Deltoid', 'biceps_r': 'Right Biceps',
+            'forearm_r': 'Right Forearm', 'dorsalis_major_r': 'Right Latissimus Dorsi',
+            'pectorals_r': 'Right Pectorals', 'right_hand': 'Right Hand', 'hip': 'Hip',
+            'glutes_l': 'Left Gluteus', 'quadriceps_l': 'Left Quadriceps',
+            'ishcio_hamstrings_l': 'Left Hamstrings', 'calves_l': 'Left Calf', 'left_foot': 'Left Foot',
+            'glutes_r': 'Right Gluteus', 'quadriceps_r': 'Right Quadriceps',
+            'ishcio_hamstrings_r': 'Right Hamstrings', 'calves_r': 'Right Calf', 'right_foot': 'Right Foot'
+        }
+        return mapping.get(model_part, model_part.capitalize())
 
     def _convert_ui_to_model_part(self, ui_name):
-        return BODY_PART_UI_TO_MODEL.get(ui_name, ui_name.lower().replace(' ', '_'))
+        mapping = {
+            'Head': 'head', 'Neck': 'neck', 'Torso': 'torso',
+            'Left Deltoid': 'deltoid_l', 'Left Biceps': 'biceps_l', 'Left Forearm': 'forearm_l',
+            'Left Latissimus Dorsi': 'dorsalis_major_l', 'Left Pectorals': 'pectorals_l',
+            'Left Hand': 'left_hand', 'Right Deltoid': 'deltoid_r', 'Right Biceps': 'biceps_r',
+            'Right Forearm': 'forearm_r', 'Right Latissimus Dorsi': 'dorsalis_major_r',
+            'Right Pectorals': 'pectorals_r', 'Right Hand': 'right_hand', 'Hip': 'hip',
+            'Left Quadriceps': 'quadriceps_l', 'Right Quadriceps': 'quadriceps_r',
+            'Left Hamstrings': 'ishcio_hamstrings_l', 'Right Hamstrings': 'ishcio_hamstrings_r',
+            'Left Calves': 'calves_l', 'Right Calves': 'calves_r',
+            'Left Gluteus': 'glutes_l', 'Right Gluteus': 'glutes_r',
+            'Left Foot': 'left_foot', 'Right Foot': 'right_foot'
+        }
+        return mapping.get(ui_name, ui_name.lower().replace(' ', '_'))
 
 SensorMappingDialog = SimplifiedMappingDialog
