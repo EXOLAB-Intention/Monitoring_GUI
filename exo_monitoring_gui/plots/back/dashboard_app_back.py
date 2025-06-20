@@ -759,6 +759,8 @@ class DashboardAppBack:
             if hasattr(self.ui, 'refresh_sensor_tree_with_mappings'):
                 self.ui.refresh_sensor_tree_with_mappings(emg_mappings, pmmg_mappings)
                 
+            # Ajout : sauvegarder automatiquement les mappings dans le fichier JSON
+            self.save_mappings()
         except Exception as e:
             print(f"[ERROR] Error updating sensor mappings: {e}")
             import traceback

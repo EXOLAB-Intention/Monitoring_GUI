@@ -1,5 +1,8 @@
 {
-  "EMG": {},
+  "EMG": {
+    "41": "hip",
+    "42": "pectorals_r"
+  },
   "IMU": {},
   "pMMG": {}
 }

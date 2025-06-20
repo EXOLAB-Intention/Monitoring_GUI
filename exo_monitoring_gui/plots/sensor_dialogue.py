@@ -845,7 +845,6 @@ class SimplifiedMappingDialog(QDialog):
 
         summary = self.generate_mapping_summary(self.current_mappings)
         QMessageBox.information(self, "Mapping Confirmed", summary)
-
         self.accept()
 
     def generate_mapping_summary(self, mappings):
