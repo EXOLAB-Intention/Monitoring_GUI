@@ -2,6 +2,7 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from exo_monitoring_gui.utils.hdf5_utils import load_hdf5_data, load_metadata, inject_metadata_to_hdf, delet_experimental
+from exo_monitoring_gui.plots.model_3d_viewer import Model3DWidget
 
 import numpy as np
 import h5py
@@ -512,18 +513,29 @@ class Review(QMainWindow):
         label.setStyleSheet("font-size: 14px; font-weight: bold;")
         layout.addWidget(label)
 
-        self.model_3d_widget = QLabel("3D Model Placeholder")
-        self.model_3d_widget.setAlignment(Qt.AlignCenter)
-        self.model_3d_widget.setStyleSheet("background-color: #e0e0e0; border: 1px solid #ccc;")
+        # Replace placeholder with actual 3D model viewer
+        self.model_3d_widget = Model3DWidget()
         layout.addWidget(self.model_3d_widget, stretch=3)
 
         self.animate_button = QPushButton("Start Animation")
+        self.animate_button.clicked.connect(self.toggle_animation)
         layout.addWidget(self.animate_button)
 
         self.reset_view_button = QPushButton("Reset View")
+        self.reset_view_button.clicked.connect(self.reset_3d_view)
         layout.addWidget(self.reset_view_button)
 
         return layout
+
+    def toggle_animation(self):
+        """Toggle the 3D model animation state"""
+        is_animating = self.model_3d_widget.toggle_animation()
+        self.animate_button.setText("Stop Animation" if is_animating else "Start Animation")
+
+    def reset_3d_view(self):
+        """Reset the 3D model view to default position"""
+        self.model_3d_widget.reset_view()
+        print("3D view reset")
 
     def build_footer(self, layout):
         footer = QHBoxLayout()
