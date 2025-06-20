@@ -349,6 +349,8 @@ class MainBar:
                         "5": "IMU2",
                         "9": "IMU3",
                         "13": "IMU4",
+                        "17": "IMU5",
+                        "21": "IMU6"
                     }
                     for key, value in sensor["IMU"].items():
                         display_key = imu_name_map.get(key, key)
