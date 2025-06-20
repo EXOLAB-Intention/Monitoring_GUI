@@ -1,11 +1,14 @@
 import sys
 import os
 import time
+import numpy as np
 import json
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal
+import pyqtgraph as pg
 import socket
 import struct
+import threading
 import pandas as pd
 from utils.json_request import reset_json_file
 # Ajouter le chemin du répertoire parent de data_generator au PYTHONPATH
@@ -187,7 +190,7 @@ class ClientInitThread(QThread):
 
 class DashboardAppBack:
     def __init__(self, ui):
-        self.ui = ui  # Référence à DashboardApp
+        self.ui = ui  # Référence à l'interface utilisateur (DashboardApp)
         self.server_thread = None
         self.client_socket = None
         self.sensor_config = None
@@ -249,7 +252,7 @@ class DashboardAppBack:
         
         # Ajouter un timeout pour le socket client
         try:
-            client_socket.settimeout(60.0)  # 5 secondes de timeout
+            client_socket.settimeout(60.0)  
         except Exception as e:
             print(f"[WARNING] Failed to set socket timeout: {e}")
         
@@ -362,9 +365,26 @@ class DashboardAppBack:
                 # Receive data with timeout handling
                 try:
                     self.client_socket.settimeout(0.01)  # Réduire le timeout à 10ms
-                    data = recv_all(self.client_socket, self.packet_size)
-                    if not data:
+                    
+                    # MOD: Check for trial end marker first
+                    first_byte = recv_all(self.client_socket, 1)
+                    if not first_byte:
+                        return # Should not happen with recv_all but good practice
+
+                    if first_byte == TRIAL_END_MARKER:
+                        print("[INFO] Trial end marker received. Stopping recording.")
+                        self.stop_recording()
+                        # After stopping, we just exit. The timer is stopped in stop_recording.
                         return
+
+                    # If not a marker, read the rest of the packet
+                    remaining_data = recv_all(self.client_socket, self.packet_size - 1)
+                    if not remaining_data:
+                        print("[ERROR] Incomplete packet received after initial byte.")
+                        return
+                    
+                    data = first_byte + remaining_data
+
                 except socket.timeout:
                     # Ne plus imprimer les timeouts socket pour éviter le spam
                     return
@@ -605,14 +625,14 @@ class DashboardAppBack:
                     print(f"[ERROR] Error re-enabling refresh_connected_system after recording: {e}")
 
     def clear_plots_only(self):
-        """Nettoie seulement les graphiques et données d'enregistrement, maintient tous les settings."""
-        # Réinitialiser l'état pour permettre un nouveau trial
+        """clean only the plots and recorded data, keep all the settings."""
+        # reset the recording state
         self.recording_stopped = False
         
-        # Réinitialiser le compteur de paquets corrompus
+        # reset the corrupted packets counter
         self.corrupted_packets_count = 0
         
-        # Vider les données enregistrées
+        # reset the recorded data
         num_imus = self.sensor_config.get('num_imus', 0) if self.sensor_config else 1
         self.recorded_data = {
             "EMG": [[] for _ in range(8)],
@@ -620,22 +640,22 @@ class DashboardAppBack:
             "pMMG": [[] for _ in range(8)]
         }
         
-        # Vider les données de plot en temps réel
+        # reset the live plots data
         self.plot_data.clear()
         self.group_plot_data.clear()
         
-        # Demander à l'UI de nettoyer les graphiques
+        # ask the UI to clear the plots
         self.ui.clear_all_plots()
         
-        # Désactiver "Clear Plot" et "Request H5 File" après nettoyage (mais garder Refresh Connected System activé)
+        # disable "Clear Plot" and "Request H5 File" after cleaning (but keep Refresh Connected System enabled)
         if hasattr(self.ui, 'main_bar_re') and self.ui.main_bar_re is not None:
             if hasattr(self.ui.main_bar_re, 'edit_Boleen'):
                 try:
-                    self.ui.main_bar_re.edit_Boleen(False)  # Désactive Clear Plot et Request H5 File
+                    self.ui.main_bar_re.edit_Boleen(False)  # disable "Clear Plot" and "Request H5 File"
                 except Exception as e:
                     print(f"[ERROR] Error calling edit_Boleen: {e}")
         
-        # Réactiver le bouton d'enregistrement si on a une connexion
+        # re-enable the record button if there is a connection
         if self.client_socket:
             self.ui.record_button.setText("Record Start")
             self.ui.record_button.setEnabled(True)
@@ -720,9 +740,18 @@ class DashboardAppBack:
             
             # Appliquer les mappings IMU au modèle 3D
             if hasattr(self.ui, 'model_3d_widget') and self.ui.model_3d_widget:
+                # Nettoyer les anciens mappings
                 self.ui.model_3d_widget.model_viewer.imu_mapping.clear()
+                
+                # Appliquer les nouveaux mappings IMU
                 for imu_id, body_part in imu_mappings.items():
-                    self.ui.model_3d_widget.model_viewer.map_imu_to_body_part(int(imu_id), body_part)
+                    success = self.ui.model_3d_widget.model_viewer.map_imu_to_body_part(int(imu_id), body_part)
+                    if success:
+                        print(f"[BACKEND] Successfully mapped IMU {imu_id} to {body_part}")
+                    else:
+                        print(f"[BACKEND] Failed to map IMU {imu_id} to {body_part}")
+                
+                # Stocker les mappings EMG et pMMG directement (pas de méthode set_emg_mapping)
                 self.ui.model_3d_widget.model_viewer.emg_mapping = emg_mappings.copy()
                 self.ui.model_3d_widget.model_viewer.pmmg_mapping = pmmg_mappings.copy()
             
