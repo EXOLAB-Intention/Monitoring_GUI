@@ -1,12 +1,5 @@
 {
-  "EMG": {
-    "42": "forearm_l",
-    "41": "forearm_l"
-  },
-  "IMU": {
-    "1": "dorsalis_major_l",
-    "9": "dorsalis_major_l",
-    "21": "right_hand"
-  },
+  "EMG": {},
+  "IMU": {},
   "pMMG": {}
 }
