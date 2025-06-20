@@ -878,6 +878,28 @@ class DashboardApp(QMainWindow):
         try:
             print("[DEBUG] Opening sensor mapping dialog from dashboard...")
             
+            # Always populate available_sensors from current configuration to ensure it's never empty
+            available_sensors = {
+                'EMG': [],
+                'IMU': [],
+                'pMMG': []
+            }
+            
+            if self.backend.sensor_config.get('emg_ids'):
+                available_sensors['EMG'] = self.backend.sensor_config['emg_ids']
+            if self.backend.sensor_config.get('imu_ids'):
+                available_sensors['IMU'] = self.backend.sensor_config['imu_ids']
+            # Only add pMMG if present and non-empty
+            if self.backend.sensor_config.get('pmmg_ids'):
+                if len(self.backend.sensor_config['pmmg_ids']) > 0:
+                    available_sensors['pMMG'] = self.backend.sensor_config['pmmg_ids']
+                else:
+                    available_sensors['pMMG'] = []
+            else:
+                available_sensors['pMMG'] = []
+
+            print(f"[DEBUG] Available sensors for dialog: {available_sensors}")
+            
             # Si ce n'est pas la première fois, charger les mappages existants
             curr_maps = self.backend.get_current_mappings_for_dialog()
             print(f"[DEBUG] Current mappings retrieved: {curr_maps}")
@@ -905,6 +927,9 @@ class DashboardApp(QMainWindow):
                 f"Error opening sensor mapping dialog:\n{str(e)}\n\nPlease try again or restart the application."
             )
     def refresh_sensor_tree_with_mappings(self, emg_mappings, pmmg_mappings):
+        # Get the current IMU mappings from the 3D model widget
+        imu_mappings = self.model_3d_widget.get_current_mappings()
+        
         for i_rf_group in range(self.connected_systems.topLevelItemCount()):
             group_item = self.connected_systems.topLevelItem(i_rf_group)
             for j_rf_sensor in range(group_item.childCount()):
@@ -921,6 +946,11 @@ class DashboardApp(QMainWindow):
                         new_s_text = f"{s_base_rf} ({emg_mappings[s_id_rf]})"
                     elif s_base_rf.startswith("pMMG") and s_id_rf in pmmg_mappings:
                         new_s_text = f"{s_base_rf} ({pmmg_mappings[s_id_rf]})"
+                    elif s_base_rf.startswith("IMU") and s_id_rf in imu_mappings:
+                        # Convert model part names to user-friendly display names
+                        body_part = imu_mappings[s_id_rf]
+                        display_name = self._convert_model_part_to_ui(body_part)
+                        new_s_text = f"{s_base_rf} ({display_name})"
                 sensor_item.setText(0, new_s_text)
 
     def _convert_model_part_to_ui(self, model_part_name):
@@ -1237,7 +1267,7 @@ class DashboardApp(QMainWindow):
         
         # Vérifier si on a une configuration de capteurs
         if not self.backend.sensor_config:
-            # print("[WARNING] No sensor configuration available")
+            print("[WARNING] No sensor configuration available")
             return
         
         # Parcourir les données EMG - trier par ordre croissant d'ID

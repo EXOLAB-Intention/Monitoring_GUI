@@ -192,7 +192,8 @@ class SimplifiedMappingDialog(QDialog):
                     imu_msg.setStyleSheet("color: #00CC33; font-weight: bold;")
                     layout.addWidget(imu_msg)
 
-                if self.available_sensors.get('pMMG'):
+                # Only show pMMG message if there are pMMG sensors
+                if self.available_sensors.get('pMMG') and len(self.available_sensors['pMMG']) > 0:
                     pmmg_msg = QLabel(f"pMMG: {', '.join([f'pMMG{id}' for id in self.available_sensors['pMMG']])}")
                     pmmg_msg.setStyleSheet("color: #0033CC; font-weight: bold;")
                     layout.addWidget(pmmg_msg)
@@ -211,12 +212,17 @@ class SimplifiedMappingDialog(QDialog):
             self.general_tab = self.create_general_tab()
             self.emg_tab = self.create_specific_tab("EMG", 8)
             self.imu_tab = self.create_specific_tab("IMU", 6)
-            self.pmmg_tab = self.create_specific_tab("pMMG", 8)
+            # Only add pMMG tab if there are pMMG sensors
+            if self.available_sensors.get('pMMG') and len(self.available_sensors['pMMG']) > 0:
+                self.pmmg_tab = self.create_specific_tab("pMMG", 8)
+            else:
+                self.pmmg_tab = None
 
             self.tab_widget.addTab(self.general_tab, "General View")
             self.tab_widget.addTab(self.emg_tab, "EMG")
             self.tab_widget.addTab(self.imu_tab, "IMU")
-            self.tab_widget.addTab(self.pmmg_tab, "pMMG")
+            if self.pmmg_tab is not None:
+                self.tab_widget.addTab(self.pmmg_tab, "pMMG")
 
             layout.addWidget(self.tab_widget, 1) # Ensure tab_widget expands (already set in previous step, confirming)
 
