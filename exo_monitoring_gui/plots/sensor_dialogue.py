@@ -127,11 +127,6 @@ class SimplifiedMappingDialog(QDialog):
     mappings_updated = pyqtSignal(dict, dict, dict)
     
     def __init__(self, parent=None, current_mappings=None, available_sensors=None):
-        """
-        Pour que les sensors connectés apparaissent, il faut passer
-        available_sensors={'EMG': [...], 'IMU': [...], 'pMMG': [...]} lors de la création du dialogue.
-        Utiliser backend.get_available_sensors() pour obtenir cette liste.
-        """
         super().__init__(parent)
         self.setWindowTitle("Configure Sensors on 3D Model")
         self.current_mappings = current_mappings if current_mappings is not None else {}
@@ -579,10 +574,6 @@ class SimplifiedMappingDialog(QDialog):
 
         self.sensor_combos = getattr(self, "sensor_combos", {})
         self.sensor_combos[sensor_type] = {}
-        # Ajout d'un dict pour stocker les labels d'affichage des parties du corps
-        if not hasattr(self, "sensor_bodypart_labels"):
-            self.sensor_bodypart_labels = {}
-        self.sensor_bodypart_labels[sensor_type] = {}
 
         upper_body = [
             "Head", "Neck", "Torso",
@@ -632,25 +623,9 @@ class SimplifiedMappingDialog(QDialog):
                     font-size: 14px;
                 }
             """)
-            # Créer le label qui affichera la partie du corps associée
-            bodypart_label = QLabel("--")
-            bodypart_label.setMinimumWidth(120)
-            bodypart_label.setStyleSheet("font-size: 14px; color: #333;")
-            self.sensor_bodypart_labels[sensor_type][sensor_id] = bodypart_label
-
-            # Connecter le changement de combo à la mise à jour du label
-            def on_combo_change(text, s=sensor_type, id=sensor_id, lbl=bodypart_label):
-                if text == "-- Not assigned --":
-                    lbl.setText("--")
-                else:
-                    lbl.setText(text)
-                self.on_combo_changed(s, id, text)
-            combo.currentTextChanged.connect(on_combo_change)
-
+            combo.currentTextChanged.connect(lambda text, s=sensor_type, id=sensor_id: self.on_combo_changed(s, id, text))
             row.addWidget(label)
             row.addWidget(combo)
-            # Ajout du label à droite du combo
-            row.addWidget(bodypart_label)
             row.addStretch()
             self.sensor_combos[sensor_type][sensor_id] = combo
             scroll_layout.addLayout(row)
@@ -775,9 +750,7 @@ class SimplifiedMappingDialog(QDialog):
                     index = combo.findText(body_part_ui)
                     if index >= 0:
                         combo.setCurrentIndex(index)
-                    # Mettre à jour le label associé si présent
-                    if hasattr(self, "sensor_bodypart_labels") and sensor_type in self.sensor_bodypart_labels and sensor_id in self.sensor_bodypart_labels[sensor_type]:
-                        self.sensor_bodypart_labels[sensor_type][sensor_id].setText(body_part_ui)
+
         # Only try to map IMU to body parts if general_model exists
         if hasattr(self, 'general_model') and self.general_model:
             for sensor_id, body_part in self.current_mappings["IMU"].items():
