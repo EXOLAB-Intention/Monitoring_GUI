@@ -816,3 +816,13 @@ class DashboardAppBack:
         df = pd.DataFrame(rows)
         df.to_csv(filename, index=False)
         print(f"Data exported to {filename}")
+
+    def get_available_sensors(self):
+        """Retourne les IDs des sensors actuellement connectés pour chaque type."""
+        if not self.sensor_config:
+            return {'EMG': [], 'IMU': [], 'pMMG': []}
+        return {
+            'EMG': self.sensor_config.get('emg_ids', []),
+            'IMU': self.sensor_config.get('imu_ids', []),
+            'pMMG': self.sensor_config.get('pmmg_ids', [])
+        }
